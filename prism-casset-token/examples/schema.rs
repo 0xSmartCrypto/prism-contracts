@@ -2,8 +2,9 @@ use std::env::current_dir;
 use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
-use cw20_base::msg::{ExecuteMsg,QueryMsg,InstantiateMsg};
+use cw20_base::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 //use prism_casset_token::msg::{CountResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use prism_casset_token::msg::MigrateMsg;
 use prism_casset_token::state::State;
 
 fn main() {
@@ -16,4 +17,5 @@ fn main() {
     export_schema(&schema_for!(ExecuteMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(State), &out_dir);
+    export_schema(&schema_for!(MigrateMsg), &out_dir);
 }

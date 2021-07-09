@@ -1,5 +1,5 @@
-//use schemars::JsonSchema;
-//use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 /*#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -25,3 +25,6 @@ pub enum QueryMsg {
 pub struct CountResponse {
     pub count: i32,
 }*/
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MigrateMsg {}

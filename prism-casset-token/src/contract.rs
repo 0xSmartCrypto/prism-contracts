@@ -14,6 +14,8 @@ use cw20_base::enumerable::{query_all_accounts, query_all_allowances};
 use cw20_base::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use cw20_base::ContractError;
 
+use crate::msg::MigrateMsg;
+
 #[entry_point]
 pub fn instantiate(
     deps: DepsMut,
@@ -85,6 +87,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&query_all_accounts(deps, start_after, limit)?)
         }
     }
+}
+
+#[entry_point]
+pub fn migrate(_: DepsMut, _: Env, _: MigrateMsg) -> StdResult<Response> {
+    Ok(Response::default())
 }
 
 #[cfg(test)]
