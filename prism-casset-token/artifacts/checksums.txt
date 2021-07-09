@@ -1,0 +1,1 @@
+6c96b1984030d3daef43f777e285b4edc31c10d88d981177e097a2470dc6455b  prism_casset_token.wasm
