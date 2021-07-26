@@ -43,3 +43,9 @@ cd $DIR_DIR/prism-casset-token && docker run --rm -v "$(pwd)":/code \
   --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
   --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
   cosmwasm/rust-optimizer:0.11.4
+break_scr
+print "Building prism-luna/prism-luna-hub..."
+cd $DIR_DIR/prism-luna-contracts/prism-luna-hub && docker run --rm -v "$(pwd)":/code \
+  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
+  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+  cosmwasm/rust-optimizer:0.11.4

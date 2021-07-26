@@ -98,5 +98,8 @@ package-lock.json
 .terraform
 .terraform.lock.hcl
 
+#Rust
+target/
+
 #any tar files
 *.tar
