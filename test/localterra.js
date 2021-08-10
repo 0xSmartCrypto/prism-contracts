@@ -6,12 +6,6 @@ const Helper = require('./helpers/smart-contracts')
 const moment = require('moment')
 const winston = require('winston')
 //////////////////////////////////////////////////////////////////////
-// helpers
-//////////////////////////////////////////////////////////////////////
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-//////////////////////////////////////////////////////////////////////
 // logger
 //////////////////////////////////////////////////////////////////////
 const logger = winston.createLogger({
@@ -51,7 +45,7 @@ async function run() {
     const contract_ids = await Helper.upload_all_contracts(lcd, wallet)
     logger.info(JSON.stringify(contract_ids))
     logger.info('Instantiating prism_luna_hub contract...')
-    const prism_luna_hub = 
+    const prism_luna_hub =
         await Helper.instantiate_prism_luna_hub_contract(lcd, wallet, contract_ids.prism_luna_hub)
     logger.info(`prism-luna-hub contract: ${prism_luna_hub}`)
     logger.info('Instantiating prism_cluna_cw20 contract...')
@@ -65,6 +59,9 @@ async function run() {
             6,
             prism_luna_hub
         )
-    logger.info(`prism-cluna-cw20 contract: ${prism_cluna_asset}`)    
+    logger.info(`prism-cluna-cw20 contract: ${prism_cluna_asset}`)
+    logger.info(`Updating prism_luna_hub contract parameters...`)
+    const param_tx = await Helper.update_prism_luna_hub_contract(lcd, wallet, prism_luna_hub, prism_cluna_asset)
+    logger.info(`TX: ${param_tx}`)
 }
 run()

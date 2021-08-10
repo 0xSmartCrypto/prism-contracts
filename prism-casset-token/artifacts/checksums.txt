@@ -1,1 +1,1 @@
-558e150397cd6e7e8dda2ebacccd01fd70c5cb780f74855cc7eef06d4c8edef2  prism_casset_token.wasm
+34ae6f1496650b7dcbec9c02548733643054650c82c99497b33431372e46efbe  prism_casset_token.wasm

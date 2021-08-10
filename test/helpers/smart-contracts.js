@@ -3,7 +3,7 @@
 //////////////////////////////////////////////////////////////////////
 const {
     // eslint-disable-next-line no-unused-vars
-    LCDClient, MsgInstantiateContract, MsgStoreCode, Wallet
+    LCDClient, MsgInstantiateContract, MsgExecuteContract, MsgStoreCode, Wallet
 } = require('@terra-money/terra.js')
 const fs = require('fs')
 const path = require('path')
@@ -79,7 +79,7 @@ async function instantiate_prism_luna_hub_contract(lcd, wallet, code_id) {
  * @param {LCDClient} lcd
  * @param {Wallet} wallet
  */
- async function instantiate_casset_token_contract(lcd, wallet, code_id, name, symbol, decimals, minter) {
+async function instantiate_casset_token_contract(lcd, wallet, code_id, name, symbol, decimals, minter) {
     const instantiateMsg = new MsgInstantiateContract(
         wallet.key.accAddress,
         wallet.key.accAddress,
@@ -103,11 +103,33 @@ async function instantiate_prism_luna_hub_contract(lcd, wallet, code_id) {
         remap_events(instantiateResult.logs[0].events).instantiate_contract
     ).contract_address
 }
+/**
+ * @param {LCDClient} lcd
+ * @param {Wallet} wallet
+ */
+async function update_prism_luna_hub_contract(lcd, wallet, cluna_hub_addr, cluna_addr) {
+    const executeMsg = new MsgExecuteContract(
+        wallet.key.accAddress,
+        cluna_hub_addr,
+        {
+            update_parameters: {
+                token_contract: cluna_addr
+            }
+        }
+    )
+
+    const executeMsgTx = await wallet.createAndSignTx({
+        msgs: [executeMsg]
+    })
+    const executeResult = await lcd.tx.broadcast(executeMsgTx)
+    return executeResult.txhash
+}
 //////////////////////////////////////////////////////////////////////
 // exports
 //////////////////////////////////////////////////////////////////////
 module.exports = {
     upload_all_contracts,
     instantiate_prism_luna_hub_contract,
-    instantiate_casset_token_contract
+    instantiate_casset_token_contract,
+    update_prism_luna_hub_contract
 }

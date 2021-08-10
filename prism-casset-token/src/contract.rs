@@ -8,7 +8,8 @@ use cw20_base::allowances::{
 };
 use cw20_base::contract::{
     execute_burn, execute_mint, execute_send, execute_transfer, instantiate as cw20_instantiate,
-    query_balance, query_minter, query_token_info,
+    query_balance, query_minter, query_token_info, execute_upload_logo, execute_update_marketing,
+    query_marketing_info, query_download_logo
 };
 use cw20_base::enumerable::{query_all_accounts, query_all_allowances};
 use cw20_base::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -66,6 +67,12 @@ pub fn execute(
             amount,
             msg,
         } => execute_send_from(deps, env, info, owner, contract, amount, msg),
+        ExecuteMsg::UpdateMarketing {
+            project,
+            description,
+            marketing,
+        } => execute_update_marketing(deps, env, info, project, description, marketing),
+        ExecuteMsg::UploadLogo(logo) => execute_upload_logo(deps, env, info, logo),
     }
 }
 
@@ -85,7 +92,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         } => to_binary(&query_all_allowances(deps, owner, start_after, limit)?),
         QueryMsg::AllAccounts { start_after, limit } => {
             to_binary(&query_all_accounts(deps, start_after, limit)?)
-        }
+        },
+        QueryMsg::MarketingInfo {} => to_binary(&query_marketing_info(deps)?),
+        QueryMsg::DownloadLogo {} => to_binary(&query_download_logo(deps)?),
     }
 }
 

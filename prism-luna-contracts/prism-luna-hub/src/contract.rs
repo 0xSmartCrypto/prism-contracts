@@ -1,10 +1,13 @@
-use std::ops::Add;
-
-use cosmwasm_std::{Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, entry_point, to_binary, Uint128};
+use cosmwasm_std::{
+    attr, entry_point, to_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response, StakingMsg, StdError, StdResult, SubMsg, Uint128,
+};
 
 use crate::error::ContractError;
-use crate::msg::{CountResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, MyCountResponse, QueryMsg};
-use crate::state::{MY_STATE, STATE, State, MyState, PARAMETERS, Parameters};
+use crate::msg::{
+    CountResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, MyCountResponse, QueryMsg,
+};
+use crate::state::{MyState, Parameters, State, MY_STATE, PARAMETERS, STATE};
 
 #[entry_point]
 pub fn instantiate(
@@ -15,7 +18,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     let parameters = Parameters {
         owner: info.sender.clone(),
-        token_contract: None, 
+        token_contract: None,
     };
     PARAMETERS.save(deps.storage, &parameters)?;
 
@@ -30,16 +33,50 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::UpdateParameters {
-            token_contract
-        } => try_update_parameters(deps, info, token_contract),
+        ExecuteMsg::UpdateParameters { token_contract } => {
+            try_update_parameters(deps, info, token_contract)
+        }
+        ExecuteMsg::Bond { validator } => try_bond(deps, info, validator),
     }
+}
+
+pub fn try_bond(
+    deps: DepsMut,
+    info: MessageInfo,
+    validator: String,
+) -> Result<Response, ContractError> {
+    // only allow one denom to be sent to the contract
+    if info.funds.len() != 1usize {
+        return Err(ContractError::Std(StdError::generic_err(
+            "You must only send one type of coin to this contract.",
+        )));
+    }
+
+    let payment = info
+        .funds
+        .iter()
+        .find(|x| x.denom == "uluna" && x.amount > Uint128::zero())
+        .ok_or_else(|| StdError::generic_err("No uluna has been provided."))?;
+
+    let messages = vec![
+        // send the delegation message
+        CosmosMsg::Staking(StakingMsg::Delegate {
+            validator,
+            amount: payment.clone(),
+        }),
+    ];
+
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "mint"),
+        attr("from", info.sender),
+        attr("bonded", payment.amount),
+    ]))
 }
 
 pub fn try_update_parameters(
     deps: DepsMut,
     info: MessageInfo,
-    token_contract: Option<Addr>
+    token_contract: Option<Addr>,
 ) -> Result<Response, ContractError> {
     PARAMETERS.update(deps.storage, |mut params| -> Result<_, ContractError> {
         // deny if not owner
@@ -72,8 +109,14 @@ fn query_count(deps: Deps) -> StdResult<CountResponse> {
 fn my_query_count(deps: Deps, addr: Addr) -> StdResult<MyCountResponse> {
     let state = MY_STATE.load(deps.storage, addr.as_str().as_bytes());
     match state {
-        Err(_) => Ok(MyCountResponse { addr, count: Uint128::from(0u128) }),
-        Ok(r) => Ok(MyCountResponse { addr, count: r.count })
+        Err(_) => Ok(MyCountResponse {
+            addr,
+            count: Uint128::from(0u128),
+        }),
+        Ok(r) => Ok(MyCountResponse {
+            addr,
+            count: r.count,
+        }),
     }
 }
 
