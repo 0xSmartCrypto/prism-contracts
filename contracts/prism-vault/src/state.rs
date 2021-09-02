@@ -378,7 +378,7 @@ mod test {
             &mut deps.storage,
             &Config {
                 creator: deps.api.addr_canonicalize("dasd").unwrap(),
-                reward_contract: None,
+                yluna_staking: None,
                 token_contract: None,
                 airdrop_registry_contract: None,
             },

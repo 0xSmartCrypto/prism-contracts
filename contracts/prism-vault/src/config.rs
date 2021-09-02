@@ -52,7 +52,7 @@ pub fn execute_update_config(
     _env: Env,
     info: MessageInfo,
     owner: Option<String>,
-    reward_contract: Option<String>,
+    yluna_staking: Option<String>,
     token_contract: Option<String>,
     airdrop_registry_contract: Option<String>,
 ) -> StdResult<Response> {
@@ -73,11 +73,11 @@ pub fn execute_update_config(
             Ok(last_config)
         })?;
     }
-    if let Some(reward) = reward_contract {
+    if let Some(reward) = yluna_staking {
         let reward_raw = deps.api.addr_canonicalize(reward.as_str())?;
 
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.reward_contract = Some(reward_raw);
+            last_config.yluna_staking = Some(reward_raw);
             Ok(last_config)
         })?;
 

@@ -78,7 +78,11 @@ pub fn swap_to_prism(
         info: AssetInfo::NativeToken {
             denom: cfg.reward_denom.clone(),
         },
-        amount: query_balance(&deps.querier, env.contract.address.clone(), cfg.reward_denom)?,
+        amount: query_balance(
+            &deps.querier,
+            env.contract.address.clone(),
+            cfg.reward_denom,
+        )?,
     };
 
     Ok(Response::new().add_messages(vec![

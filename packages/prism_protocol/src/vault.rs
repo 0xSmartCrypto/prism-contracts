@@ -30,7 +30,7 @@ pub struct State {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub creator: CanonicalAddr,
-    pub reward_contract: Option<CanonicalAddr>,
+    pub yluna_staking: Option<CanonicalAddr>,
     pub token_contract: Option<CanonicalAddr>,
     pub airdrop_registry_contract: Option<CanonicalAddr>,
 }
@@ -56,7 +56,7 @@ pub enum ExecuteMsg {
     /// Set the owener
     UpdateConfig {
         owner: Option<String>,
-        reward_contract: Option<String>,
+        yluna_staking: Option<String>,
         token_contract: Option<String>,
         airdrop_registry_contract: Option<String>,
     },
@@ -116,9 +116,7 @@ pub enum ExecuteMsg {
     ClaimAirdrop {
         airdrop_token_contract: String, // Contract address of MIR Cw20 Token
         airdrop_contract: String,       // Contract address of MIR Airdrop
-        airdrop_swap_contract: String,  // E.g. Contract address of MIR <> UST Terraswap Pair
         claim_msg: Binary,              // Base64-encoded JSON of MIRAirdropHandleMsg::Claim
-        swap_msg: Binary,               // Base64-encoded string of JSON of PairHandleMsg::Swap
     },
 }
 
@@ -172,7 +170,7 @@ pub struct StateResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub reward_contract: Option<String>,
+    pub yluna_staking: Option<String>,
     pub token_contract: Option<String>,
     pub airdrop_registry_contract: Option<String>,
 }

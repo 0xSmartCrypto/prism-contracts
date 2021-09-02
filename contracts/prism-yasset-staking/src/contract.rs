@@ -15,7 +15,7 @@ use crate::state::{Config, CONFIG};
 
 use crate::swaps::{deposit_prism, swap_to_prism, swap_to_reward_denom};
 use cw20::Cw20ReceiveMsg;
-use terra_cosmwasm::{TerraMsgWrapper};
+use terra_cosmwasm::TerraMsgWrapper;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
