@@ -7,21 +7,17 @@ use terraswap::asset::Asset;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    pub owner: String,
+    pub vault: String,
     pub yluna_token: String,
+    pub prism_token: String,
+    pub reward_denom: String,
+    pub prism_pair: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
-
-    ////////////////////////
-    /// Owner operations ///
-    ////////////////////////
-    UpdateConfig {
-        owner: Option<String>,
-    },
     ////////////////////////
     /// User operations ///
     ////////////////////////
@@ -29,12 +25,17 @@ pub enum ExecuteMsg {
         amount: Uint128,
     },
     /// Withdraw pending rewards
-    Withdraw {
-    },
+    Withdraw {},
     /// Deposit rewards to yLuna stakers
     DepositRewards {
-        assets: Vec<Asset>
-    }
+        assets: Vec<Asset>,
+    },
+
+    SwapToRewardDenom {},
+    SwapToPrism {},
+    DepositPrism {
+        old_amount: Uint128,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

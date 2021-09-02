@@ -16,8 +16,11 @@ pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub owner: String,
+    pub vault: String,
     pub yluna_token: String,
+    pub prism_token: String,
+    pub reward_denom: String,
+    pub prism_pair: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

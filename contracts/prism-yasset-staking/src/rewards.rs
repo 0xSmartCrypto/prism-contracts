@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    attr, to_binary, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response, StdResult, Storage,
-    Uint128, WasmMsg,
+    attr, to_binary, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, Storage, Uint128, WasmMsg,
 };
 
 use crate::state::{
@@ -8,6 +8,7 @@ use crate::state::{
 };
 
 use cw20::Cw20ExecuteMsg;
+use terra_cosmwasm::TerraMsgWrapper;
 use terraswap::asset::{Asset, AssetInfo};
 
 // deposit_reward must be from reward token contract
@@ -16,12 +17,13 @@ pub fn deposit_rewards(
     env: Env,
     info: MessageInfo,
     assets: Vec<Asset>,
-) -> StdResult<Response> {
+) -> StdResult<Response<TerraMsgWrapper>> {
     let mut messages: Vec<CosmosMsg<WasmMsg>> = vec![];
     let total_bond = TOTAL_BOND_AMOUNT.load(deps.storage)?;
 
     for asset in assets {
-        if let AssetInfo::Token { contract_addr, .. } = &asset.info {
+        if env.contract.address == info.sender {
+        } else if let AssetInfo::Token { contract_addr, .. } = &asset.info {
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: contract_addr.clone(),
                 msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
@@ -32,7 +34,7 @@ pub fn deposit_rewards(
                 funds: vec![],
             }));
         } else {
-            asset.assert_sent_native_token_balance(&info)?;
+            return Err(StdError::generic_err("may not deposit native tokens"));
         }
         let mut pool_info = POOL_INFO.load(deps.storage, &asset.info.to_string().as_bytes())?;
 
@@ -53,7 +55,7 @@ pub fn deposit_rewards(
 }
 
 // withdraw all rewards or single reward depending on asset_token
-pub fn withdraw_reward(deps: DepsMut, info: MessageInfo) -> StdResult<Response> {
+pub fn withdraw_reward(deps: DepsMut, info: MessageInfo) -> StdResult<Response<TerraMsgWrapper>> {
     let mut messages = vec![];
     let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
 
@@ -64,13 +66,28 @@ pub fn withdraw_reward(deps: DepsMut, info: MessageInfo) -> StdResult<Response> 
             (info.sender.as_bytes(), asset_info.to_string().as_bytes()),
         )?;
 
-        messages.push(
-            Asset {
-                info: asset_info.clone(),
-                amount: reward_info.pending_reward,
-            }
-            .into_msg(&deps.querier, info.sender.clone())?,
-        );
+        let asset = Asset {
+            info: asset_info.clone(),
+            amount: reward_info.pending_reward,
+        };
+
+        // re-implement into_msg here because life is cruel
+        let msg = match &asset_info {
+            AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: contract_addr.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: info.sender.to_string(),
+                    amount: asset.amount,
+                })?,
+                funds: vec![],
+            }),
+            AssetInfo::NativeToken { .. } => CosmosMsg::Bank(BankMsg::Send {
+                to_address: info.sender.to_string(),
+                amount: vec![asset.deduct_tax(&deps.querier)?],
+            }),
+        };
+
+        messages.push(msg);
 
         reward_info.pending_reward = Uint128::zero();
         REWARDS.save(
@@ -79,7 +96,6 @@ pub fn withdraw_reward(deps: DepsMut, info: MessageInfo) -> StdResult<Response> 
             &reward_info,
         )?;
     }
-
     Ok(Response::new().add_messages(messages))
 }
 

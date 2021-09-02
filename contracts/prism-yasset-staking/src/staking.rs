@@ -3,8 +3,13 @@ use cosmwasm_std::{attr, to_binary, CosmosMsg, DepsMut, Response, StdResult, Uin
 use crate::rewards::pull_rewards;
 use crate::state::{BOND_AMOUNTS, CONFIG, TOTAL_BOND_AMOUNT};
 use cw20::Cw20ExecuteMsg;
+use terra_cosmwasm::TerraMsgWrapper;
 
-pub fn bond(deps: DepsMut, staker_addr: String, amount: Uint128) -> StdResult<Response> {
+pub fn bond(
+    deps: DepsMut,
+    staker_addr: String,
+    amount: Uint128,
+) -> StdResult<Response<TerraMsgWrapper>> {
     pull_rewards(deps.storage, &staker_addr)?;
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
     TOTAL_BOND_AMOUNT.save(deps.storage, &(bond_total + amount))?;
@@ -22,7 +27,11 @@ pub fn bond(deps: DepsMut, staker_addr: String, amount: Uint128) -> StdResult<Re
     ]))
 }
 
-pub fn unbond(deps: DepsMut, staker_addr: String, amount: Uint128) -> StdResult<Response> {
+pub fn unbond(
+    deps: DepsMut,
+    staker_addr: String,
+    amount: Uint128,
+) -> StdResult<Response<TerraMsgWrapper>> {
     pull_rewards(deps.storage, &staker_addr)?;
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
     TOTAL_BOND_AMOUNT.save(deps.storage, &(bond_total - amount))?;
