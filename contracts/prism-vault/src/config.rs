@@ -2,11 +2,11 @@ use crate::state::{
     read_validators, remove_white_validators, store_white_validators, Parameters, CONFIG,
     PARAMETERS,
 };
-use prism_protocol::vault::{Config, ExecuteMsg};
 use cosmwasm_std::{
     attr, to_binary, Addr, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, MessageInfo,
     Response, StakingMsg, StdError, StdResult, SubMsg, WasmMsg,
 };
+use prism_protocol::vault::{Config, ExecuteMsg};
 
 use rand::{Rng, SeedableRng, XorShiftRng};
 
@@ -24,8 +24,8 @@ pub fn execute_update_params(
 ) -> StdResult<Response> {
     // only owner can send this message.
     let config = CONFIG.load(deps.storage)?;
-    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    if sender_raw != config.creator {
+
+    if info.sender.as_str() != config.creator {
         return Err(StdError::generic_err("unauthorized"));
     }
 
@@ -37,7 +37,6 @@ pub fn execute_update_params(
         unbonding_period: unbonding_period.unwrap_or(params.unbonding_period),
         peg_recovery_fee: peg_recovery_fee.unwrap_or(params.peg_recovery_fee),
         er_threshold: er_threshold.unwrap_or(params.er_threshold),
-        reward_denom: params.reward_denom,
     };
 
     PARAMETERS.save(deps.storage, &new_params)?;
@@ -53,31 +52,29 @@ pub fn execute_update_config(
     info: MessageInfo,
     owner: Option<String>,
     yluna_staking: Option<String>,
-    token_contract: Option<String>,
+    cluna_contract: Option<String>,
+    yluna_contract: Option<String>,
+    pluna_contract: Option<String>,
     airdrop_registry_contract: Option<String>,
 ) -> StdResult<Response> {
     // only owner must be able to send this message.
     let conf = CONFIG.load(deps.storage)?;
-    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    if sender_raw != conf.creator {
+
+    if info.sender.as_str() != conf.creator {
         return Err(StdError::generic_err("unauthorized"));
     }
 
     let mut messages: Vec<SubMsg> = vec![];
 
     if let Some(o) = owner {
-        let owner_raw = deps.api.addr_canonicalize(o.as_str())?;
-
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.creator = owner_raw;
+            last_config.creator = o;
             Ok(last_config)
         })?;
     }
     if let Some(reward) = yluna_staking {
-        let reward_raw = deps.api.addr_canonicalize(reward.as_str())?;
-
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.yluna_staking = Some(reward_raw);
+            last_config.yluna_staking = Some(reward.clone());
             Ok(last_config)
         })?;
 
@@ -87,19 +84,30 @@ pub fn execute_update_config(
         )));
     }
 
-    if let Some(token) = token_contract {
-        let token_raw = deps.api.addr_canonicalize(token.as_str())?;
-
+    if let Some(token) = cluna_contract {
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.token_contract = Some(token_raw);
+            last_config.cluna_contract = Some(token);
+            Ok(last_config)
+        })?;
+    }
+
+    if let Some(token) = yluna_contract {
+        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
+            last_config.yluna_contract = Some(token);
+            Ok(last_config)
+        })?;
+    }
+
+    if let Some(token) = pluna_contract {
+        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
+            last_config.pluna_contract = Some(token);
             Ok(last_config)
         })?;
     }
 
     if let Some(airdrop) = airdrop_registry_contract {
-        let airdrop_raw = deps.api.addr_canonicalize(airdrop.as_str())?;
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.airdrop_registry_contract = Some(airdrop_raw);
+            last_config.airdrop_registry_contract = Some(airdrop);
             Ok(last_config)
         })?;
     }
@@ -119,9 +127,9 @@ pub fn execute_register_validator(
 ) -> StdResult<Response> {
     let hub_conf = CONFIG.load(deps.storage)?;
 
-    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    let contract_raw = deps.api.addr_canonicalize(env.contract.address.as_str())?;
-    if hub_conf.creator != sender_raw && contract_raw != sender_raw {
+    if hub_conf.creator != info.sender.as_str()
+        && env.contract.address.as_str() != info.sender.as_str()
+    {
         return Err(StdError::generic_err("unauthorized"));
     }
 
@@ -156,9 +164,7 @@ pub fn execute_deregister_validator(
     let token = CONFIG.load(deps.storage)?;
 
     let validator_addr = deps.api.addr_validate(validator.as_str())?;
-
-    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    if token.creator != sender_raw {
+    if token.creator != info.sender.to_string() {
         return Err(StdError::generic_err("unauthorized"));
     }
     let validators_before_remove = read_validators(deps.storage)?;

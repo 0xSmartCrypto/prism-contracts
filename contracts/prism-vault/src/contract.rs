@@ -18,8 +18,8 @@ use crate::state::{
 use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 
 use crate::bond::execute_bond;
-use cosmwasm_storage::to_length_prefixed;
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use crate::refract::{merge, split};
+use cw20::Cw20ReceiveMsg;
 use cw20_legacy::state::TokenInfo;
 use prism_protocol::vault::{
     AllHistoryResponse, Config, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
@@ -38,7 +38,6 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
     let sender = info.sender.clone();
-    let _sndr_raw = deps.api.addr_canonicalize(sender.as_str())?;
 
     let payment = info
         .funds
@@ -50,10 +49,12 @@ pub fn instantiate(
 
     // store config
     let data = Config {
-        creator: deps.api.addr_canonicalize(info.sender.as_str())?,
+        creator: sender.to_string(),
         yluna_staking: None,
-        token_contract: None,
+        cluna_contract: None,
+        yluna_contract: None,
         airdrop_registry_contract: None,
+        pluna_contract: None,
     };
     CONFIG.save(deps.storage, &data)?;
 
@@ -76,7 +77,6 @@ pub fn instantiate(
         unbonding_period: msg.unbonding_period,
         peg_recovery_fee: msg.peg_recovery_fee,
         er_threshold: msg.er_threshold,
-        reward_denom: msg.reward_denom,
     };
 
     PARAMETERS.save(deps.storage, &params)?;
@@ -146,7 +146,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::UpdateConfig {
             owner,
             yluna_staking,
-            token_contract,
+            cluna_contract,
+            yluna_contract,
+            pluna_contract,
             airdrop_registry_contract,
         } => execute_update_config(
             deps,
@@ -154,7 +156,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             info,
             owner,
             yluna_staking,
-            token_contract,
+            cluna_contract,
+            yluna_contract,
+            pluna_contract,
             airdrop_registry_contract,
         ),
         ExecuteMsg::ClaimAirdrop {
@@ -169,6 +173,8 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             airdrop_contract,
             claim_msg,
         ),
+        ExecuteMsg::Split { amount } => split(deps, info, amount),
+        ExecuteMsg::Merge { amount } => merge(deps, info, amount),
     }
 }
 
@@ -185,9 +191,9 @@ pub fn receive_cw20(
         Ok(Cw20HookMsg::Unbond {}) => {
             // only token contract can execute this message
             let conf = CONFIG.load(deps.storage)?;
-            if deps.api.addr_canonicalize(contract_addr.as_str())?
+            if contract_addr
                 != conf
-                    .token_contract
+                    .cluna_contract
                     .expect("the token contract must have been registered")
             {
                 return Err(StdError::generic_err("unauthorized"));
@@ -208,22 +214,15 @@ pub fn execute_update_global(
     let mut messages: Vec<SubMsg> = vec![];
 
     let config = CONFIG.load(deps.storage)?;
-    let yluna_staking_addr = deps
-        .api
-        .addr_humanize(
-            &config
-                .yluna_staking
-                .expect("the reward contract must have been registered"),
-        )?
-        .to_string();
+    let yluna_staking_addr = config
+        .yluna_staking
+        .expect("the reward contract must have been registered");
 
     if airdrop_hooks.is_some() {
-        let registry_addr = deps
-            .api
-            .addr_humanize(&config.airdrop_registry_contract.unwrap())?;
+        let registry_addr = config.airdrop_registry_contract.unwrap();
         for msg in airdrop_hooks.unwrap() {
             messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: registry_addr.to_string(),
+                contract_addr: registry_addr.clone(),
                 msg,
                 funds: vec![],
             })))
@@ -325,21 +324,13 @@ pub fn claim_airdrop(
     claim_msg: Binary,
 ) -> StdResult<Response> {
     let conf = CONFIG.load(deps.storage)?;
-    let yluna_staking_addr = deps
-        .api
-        .addr_humanize(
-            &conf
-                .yluna_staking
-                .expect("the reward contract must have been registered"),
-        )?
-        .to_string();
+    let yluna_staking_addr = conf
+        .yluna_staking
+        .expect("the reward contract must have been registered");
 
-    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
+    let airdrop_reg = conf.airdrop_registry_contract.unwrap();
 
-    let airdrop_reg_raw = conf.airdrop_registry_contract.unwrap();
-    let airdrop_reg = deps.api.addr_humanize(&airdrop_reg_raw)?;
-
-    if airdrop_reg_raw != sender_raw {
+    if info.sender.to_string() != airdrop_reg {
         return Err(StdError::generic_err(format!(
             "Sender must be {}",
             airdrop_reg
@@ -407,39 +398,14 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config = CONFIG.load(deps.storage)?;
-    let mut reward: Option<String> = None;
-    let mut token: Option<String> = None;
-    let mut airdrop: Option<String> = None;
-    if config.yluna_staking.is_some() {
-        reward = Some(
-            deps.api
-                .addr_humanize(&config.yluna_staking.unwrap())
-                .unwrap()
-                .to_string(),
-        );
-    }
-    if config.token_contract.is_some() {
-        token = Some(
-            deps.api
-                .addr_humanize(&config.token_contract.unwrap())
-                .unwrap()
-                .to_string(),
-        );
-    }
-    if config.airdrop_registry_contract.is_some() {
-        airdrop = Some(
-            deps.api
-                .addr_humanize(&config.airdrop_registry_contract.unwrap())
-                .unwrap()
-                .to_string(),
-        );
-    }
 
     Ok(ConfigResponse {
-        owner: deps.api.addr_humanize(&config.creator)?.to_string(),
-        yluna_staking: reward,
-        token_contract: token,
-        airdrop_registry_contract: airdrop,
+        owner: config.creator,
+        yluna_staking: config.yluna_staking,
+        cluna_contract: config.cluna_contract,
+        pluna_contract: config.pluna_contract,
+        yluna_contract: config.yluna_contract,
+        airdrop_registry_contract: config.airdrop_registry_contract,
     })
 }
 
@@ -491,18 +457,13 @@ fn query_params(deps: Deps) -> StdResult<Parameters> {
 }
 
 pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
-    let token_address = deps
-        .api
-        .addr_humanize(
-            &CONFIG
-                .load(deps.storage)?
-                .token_contract
-                .expect("token contract must have been registered"),
-        )?
-        .to_string();
+    let token_address = CONFIG
+        .load(deps.storage)?
+        .cluna_contract
+        .expect("token contract must have been registered");
     let token_info: TokenInfo = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
         contract_addr: token_address,
-        key: Binary::from("\u{0}\ntoken_info".as_bytes()),
+        key: Binary::from("token_info".as_bytes()),
     }))?;
     Ok(token_info.total_supply)
 }
@@ -526,11 +487,4 @@ fn query_unbond_requests_limitation(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())
-}
-
-#[inline]
-fn concat(namespace: &[u8], key: &[u8]) -> Vec<u8> {
-    let mut k = namespace.to_vec();
-    k.extend_from_slice(key);
-    k
 }

@@ -91,14 +91,9 @@ pub fn execute_bond(
     };
 
     let config = CONFIG.load(deps.storage)?;
-    let token_address = deps
-        .api
-        .addr_humanize(
-            &config
-                .token_contract
-                .expect("the token contract must have been registered"),
-        )?
-        .to_string();
+    let token_address = config
+                .cluna_contract
+                .expect("the cluna contract must have been registered");
 
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: token_address,

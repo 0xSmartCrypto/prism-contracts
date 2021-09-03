@@ -23,7 +23,6 @@ pub struct Parameters {
     pub unbonding_period: u64,
     pub peg_recovery_fee: Decimal,
     pub er_threshold: Decimal,
-    pub reward_denom: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -32,10 +31,10 @@ pub struct CurrentBatch {
     pub requested_with_fee: Uint128,
 }
 
-pub const CONFIG: Item<Config> = Item::new("\u{0}\u{6}config");
-pub const PARAMETERS: Item<Parameters> = Item::new("\u{0}\u{b}parameteres");
-pub const CURRENT_BATCH: Item<CurrentBatch> = Item::new("\u{0}\u{d}current_batch");
-pub const STATE: Item<State> = Item::new("\u{0}\u{5}state");
+pub const CONFIG: Item<Config> = Item::new("config");
+pub const PARAMETERS: Item<Parameters> = Item::new("parameters");
+pub const CURRENT_BATCH: Item<CurrentBatch> = Item::new("current_batch");
+pub const STATE: Item<State> = Item::new("state");
 
 /// Store undelegation wait list per each batch
 /// HashMap<user's address, <batch_id, requested_amount>
@@ -402,7 +401,6 @@ mod test {
                 unbonding_period: 1000,
                 peg_recovery_fee: Default::default(),
                 er_threshold: Default::default(),
-                reward_denom: "uusd".to_string(),
             },
         )
         .unwrap();

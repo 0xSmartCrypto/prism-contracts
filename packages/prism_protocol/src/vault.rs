@@ -1,4 +1,4 @@
-use cosmwasm_std::{Binary, CanonicalAddr, Decimal, Uint128};
+use cosmwasm_std::{Binary, Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,6 @@ pub struct InstantiateMsg {
     pub unbonding_period: u64,
     pub peg_recovery_fee: Decimal,
     pub er_threshold: Decimal,
-    pub reward_denom: String,
     pub validator: String,
 }
 
@@ -29,10 +28,12 @@ pub struct State {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub creator: CanonicalAddr,
-    pub yluna_staking: Option<CanonicalAddr>,
-    pub token_contract: Option<CanonicalAddr>,
-    pub airdrop_registry_contract: Option<CanonicalAddr>,
+    pub creator: String,
+    pub yluna_staking: Option<String>,
+    pub cluna_contract: Option<String>,
+    pub yluna_contract: Option<String>,
+    pub pluna_contract: Option<String>,
+    pub airdrop_registry_contract: Option<String>,
 }
 
 impl State {
@@ -57,7 +58,9 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<String>,
         yluna_staking: Option<String>,
-        token_contract: Option<String>,
+        cluna_contract: Option<String>,
+        yluna_contract: Option<String>,
+        pluna_contract: Option<String>,
         airdrop_registry_contract: Option<String>,
     },
 
@@ -102,13 +105,21 @@ pub enum ExecuteMsg {
     CheckSlashing {},
 
     ////////////////////
-    /// bAsset's operations
+    /// cAsset's operations
     ///////////////////
 
     /// Receive interface for send token.
     /// Unbond the underlying coin denom.
     /// Burn the received basset token.
     Receive(Cw20ReceiveMsg),
+
+    Split {
+        amount: Uint128
+    },
+
+    Merge {
+        amount: Uint128
+    },
 
     ////////////////////
     /// internal operations
@@ -171,7 +182,9 @@ pub struct StateResponse {
 pub struct ConfigResponse {
     pub owner: String,
     pub yluna_staking: Option<String>,
-    pub token_contract: Option<String>,
+    pub cluna_contract: Option<String>,
+    pub pluna_contract: Option<String>,
+    pub yluna_contract: Option<String>,
     pub airdrop_registry_contract: Option<String>,
 }
 

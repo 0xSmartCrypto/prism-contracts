@@ -3,12 +3,12 @@ use crate::state::{
     get_finished_amount, get_unbond_batches, read_unbond_history, remove_unbond_wait_list,
     store_unbond_history, store_unbond_wait_list, CONFIG, CURRENT_BATCH, PARAMETERS, STATE,
 };
-use prism_protocol::vault::{State, UnbondHistory};
 use cosmwasm_std::{
     attr, coin, coins, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
     Response, StakingMsg, StdError, StdResult, Storage, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
+use prism_protocol::vault::{State, UnbondHistory};
 use rand::{Rng, SeedableRng, XorShiftRng};
 use signed_integer::SignedInt;
 
@@ -121,17 +121,15 @@ pub(crate) fn execute_unbond(
     // Store state's new exchange rate
     STATE.save(deps.storage, &state)?;
 
-    // Send Burn message to token contract
+    // Send Burn message to cluna contract
     let config = CONFIG.load(deps.storage)?;
-    let token_address = deps.api.addr_humanize(
-        &config
-            .token_contract
-            .expect("the token contract must have been registered"),
-    )?;
+    let cluna_contract = config
+        .cluna_contract
+        .expect("the token contract must have been registered");
 
     let burn_msg = Cw20ExecuteMsg::Burn { amount };
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: token_address.to_string(),
+        contract_addr: cluna_contract.to_string(),
         msg: to_binary(&burn_msg)?,
         funds: vec![],
     })));
