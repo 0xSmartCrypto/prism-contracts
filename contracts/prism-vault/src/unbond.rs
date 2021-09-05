@@ -159,14 +159,14 @@ pub fn execute_withdraw_unbonded(
 
     let historical_time = env.block.time.seconds() - unbonding_period;
 
-    // query hub balance for process withdraw rate.
-    let hub_balance = deps
+    // query vault balance for process withdraw rate.
+    let vault_balance = deps
         .querier
         .query_balance(&env.contract.address, &*coin_denom)?
         .amount;
 
     // calculate withdraw rate for user requests
-    process_withdraw_rate(deps.storage, historical_time, hub_balance)?;
+    process_withdraw_rate(deps.storage, historical_time, vault_balance)?;
 
     let withdraw_amount = get_finished_amount(deps.storage, sender_human.to_string()).unwrap();
 
@@ -182,9 +182,9 @@ pub fn execute_withdraw_unbonded(
     remove_unbond_wait_list(deps.storage, deprecated_batches, sender_human.clone())?;
 
     // Update previous balance used for calculation in next Luna batch release
-    let prev_balance = (hub_balance.checked_sub(withdraw_amount))?;
+    let prev_balance = (vault_balance.checked_sub(withdraw_amount))?;
     STATE.update(deps.storage, |mut last_state| -> StdResult<State> {
-        last_state.prev_hub_balance = prev_balance;
+        last_state.prev_vault_balance = prev_balance;
         Ok(last_state)
     })?;
 
@@ -209,14 +209,14 @@ pub fn execute_withdraw_unbonded(
 fn process_withdraw_rate(
     storage: &mut dyn Storage,
     historical_time: u64,
-    hub_balance: Uint128,
+    vault_balance: Uint128,
 ) -> StdResult<()> {
-    // balance change of the hub contract must be checked.
+    // balance change of the vault contract must be checked.
     let mut total_unbonded_amount = Uint128::zero();
 
     let mut state = STATE.load(storage)?;
 
-    let balance_change = SignedInt::from_subtraction(hub_balance, state.prev_hub_balance);
+    let balance_change = SignedInt::from_subtraction(vault_balance, state.prev_vault_balance);
     state.actual_unbonded_amount += balance_change.0;
 
     let last_processed_batch = state.last_processed_batch;

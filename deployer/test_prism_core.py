@@ -88,7 +88,7 @@ async def test():
         prism_token=prism_token,
         yluna_token=yluna_token,
         reward_denom="uusd",
-        prism_pair=prism_pair  # placeholder for now
+        prism_pair=prism_pair
     )
 
     await prism_vault.update_config(

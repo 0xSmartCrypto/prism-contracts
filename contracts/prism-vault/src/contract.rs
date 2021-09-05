@@ -19,7 +19,7 @@ use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 
 use crate::bond::execute_bond;
 use crate::refract::{merge, split};
-use cw20::Cw20ReceiveMsg;
+use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw20_legacy::state::TokenInfo;
 use prism_protocol::vault::{
     AllHistoryResponse, Config, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
@@ -175,6 +175,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ),
         ExecuteMsg::Split { amount } => split(deps, info, amount),
         ExecuteMsg::Merge { amount } => merge(deps, info, amount),
+        ExecuteMsg::DepositAirdropReward {
+            airdrop_token_contract,
+        } => deposit_airdrop_rewards(deps, env, airdrop_token_contract),
     }
 }
 
@@ -324,9 +327,6 @@ pub fn claim_airdrop(
     claim_msg: Binary,
 ) -> StdResult<Response> {
     let conf = CONFIG.load(deps.storage)?;
-    let yluna_staking_addr = conf
-        .yluna_staking
-        .expect("the reward contract must have been registered");
 
     let airdrop_reg = conf.airdrop_registry_contract.unwrap();
 
@@ -343,27 +343,58 @@ pub fn claim_airdrop(
         funds: vec![],
     }))];
 
-    let airdrop_reward = Asset {
-        info: AssetInfo::Token {
-            contract_addr: airdrop_token_contract.clone(),
-        },
-        amount: query_token_balance(
-            &deps.querier,
-            Addr::unchecked(airdrop_token_contract),
-            env.contract.address,
-        )?,
-    };
-
-    // KINDA SUS REVISIT
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: yluna_staking_addr,
-        msg: to_binary(&StakingExecuteMsg::DepositRewards {
-            assets: vec![airdrop_reward],
+        contract_addr: env.contract.address.to_string(),
+        msg: to_binary(&ExecuteMsg::DepositAirdropReward {
+            airdrop_token_contract,
         })?,
         funds: vec![],
     })));
 
     Ok(Response::new().add_submessages(messages))
+}
+
+pub fn deposit_airdrop_rewards(
+    deps: DepsMut,
+    env: Env,
+    airdrop_token_contract: String,
+) -> StdResult<Response> {
+    let conf = CONFIG.load(deps.storage)?;
+    let yluna_staking_addr = conf
+        .yluna_staking
+        .expect("the reward contract must have been registered");
+
+    let amount = query_token_balance(
+        &deps.querier,
+        Addr::unchecked(airdrop_token_contract.clone()),
+        env.contract.address,
+    )?;
+
+    let airdrop_reward = Asset {
+        info: AssetInfo::Token {
+            contract_addr: airdrop_token_contract.clone(),
+        },
+        amount,
+    };
+
+    Ok(Response::new().add_messages(vec![
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: airdrop_token_contract.clone(),
+            msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                spender: yluna_staking_addr.clone(),
+                amount,
+                expires: None,
+            })?,
+            funds: vec![],
+        }),
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: yluna_staking_addr.clone(),
+            msg: to_binary(&StakingExecuteMsg::DepositRewards {
+                assets: vec![airdrop_reward],
+            })?,
+            funds: vec![],
+        }),
+    ]))
 }
 
 /// Handler for tracking slashing
@@ -415,7 +446,7 @@ fn query_state(deps: Deps) -> StdResult<StateResponse> {
         exchange_rate: state.exchange_rate,
         total_bond_amount: state.total_bond_amount,
         last_index_modification: state.last_index_modification,
-        prev_hub_balance: state.prev_hub_balance,
+        prev_vault_balance: state.prev_vault_balance,
         actual_unbonded_amount: state.actual_unbonded_amount,
         last_unbonded_time: state.last_unbonded_time,
         last_processed_batch: state.last_processed_batch,

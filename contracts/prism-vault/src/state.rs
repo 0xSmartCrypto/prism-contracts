@@ -338,7 +338,7 @@ mod test {
                 exchange_rate: Default::default(),
                 total_bond_amount: Default::default(),
                 last_index_modification: 0,
-                prev_hub_balance: Default::default(),
+                prev_vault_balance: Default::default(),
                 actual_unbonded_amount: Default::default(),
                 last_unbonded_time: 0,
                 last_processed_batch: 0,

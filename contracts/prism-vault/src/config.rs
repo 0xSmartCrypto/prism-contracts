@@ -125,9 +125,9 @@ pub fn execute_register_validator(
     info: MessageInfo,
     validator: String,
 ) -> StdResult<Response> {
-    let hub_conf = CONFIG.load(deps.storage)?;
+    let vault_conf = CONFIG.load(deps.storage)?;
 
-    if hub_conf.creator != info.sender.as_str()
+    if vault_conf.creator != info.sender.as_str()
         && env.contract.address.as_str() != info.sender.as_str()
     {
         return Err(StdError::generic_err("unauthorized"));

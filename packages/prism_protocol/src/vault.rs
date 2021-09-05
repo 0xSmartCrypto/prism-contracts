@@ -20,7 +20,7 @@ pub struct State {
     pub exchange_rate: Decimal,
     pub total_bond_amount: Uint128,
     pub last_index_modification: u64,
-    pub prev_hub_balance: Uint128,
+    pub prev_vault_balance: Uint128,
     pub actual_unbonded_amount: Uint128,
     pub last_unbonded_time: u64,
     pub last_processed_batch: u64,
@@ -124,6 +124,9 @@ pub enum ExecuteMsg {
     ////////////////////
     /// internal operations
     ///////////////////
+    DepositAirdropReward {
+        airdrop_token_contract: String
+    },
     ClaimAirdrop {
         airdrop_token_contract: String, // Contract address of MIR Cw20 Token
         airdrop_contract: String,       // Contract address of MIR Airdrop
@@ -172,7 +175,7 @@ pub struct StateResponse {
     pub exchange_rate: Decimal,
     pub total_bond_amount: Uint128,
     pub last_index_modification: u64,
-    pub prev_hub_balance: Uint128,
+    pub prev_vault_balance: Uint128,
     pub actual_unbonded_amount: Uint128,
     pub last_unbonded_time: u64,
     pub last_processed_batch: u64,
