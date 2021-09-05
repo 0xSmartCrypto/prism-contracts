@@ -6,6 +6,12 @@ async def test():
     account = Account()
     code_ids = await account.store_contracts()
 
+    terraswap_factory = await account.contract.create(
+        code_ids["terraswap_factory"],
+        pair_code_id=int(code_ids["terraswap_pair"]),
+        token_code_id=int(code_ids["cw20_base"]),
+    )
+
     prism_token = await account.contract.create(
         code_ids["cw20_base"],
         name="Prism Token",
@@ -15,6 +21,29 @@ async def test():
             {"address": account.acc_address, "amount": "10000000"},
         ],
         mint=None,
+    )
+
+    prism_pair = account.contract(
+        (
+            await terraswap_factory.create_pair(
+                asset_infos=[
+                    Asset.cw20_asset_info(prism_token),
+                    Asset.native_asset_info("uusd"),
+                ]
+            )
+        )
+            .logs[0]
+            .events_by_type["from_contract"]["pair_contract_addr"][0]
+    )
+
+    await prism_token.increase_allowance(amount="10000", spender=prism_pair)
+
+    await prism_pair.provide_liquidity(
+        assets=[
+            Asset.asset(prism_token, amount="10000"),
+            Asset.asset("uusd", amount="10000", native=True),
+        ],
+        _send={"uusd": "10000"},
     )
 
     prism_vault = await account.contract.create(
@@ -59,10 +88,11 @@ async def test():
         prism_token=prism_token,
         yluna_token=yluna_token,
         reward_denom="uusd",
-        prism_pair=prism_token # placeholder for now
+        prism_pair=prism_pair  # placeholder for now
     )
 
     await prism_vault.update_config(
+        yluna_staking=yluna_staking,
         cluna_contract=cluna_token,
         yluna_contract=yluna_token,
         pluna_contract=pluna_token
@@ -82,6 +112,18 @@ async def test():
     print(await yluna_token.query.balance(address=account.acc_address))
     print(await pluna_token.query.balance(address=account.acc_address))
 
+    await yluna_token.send(
+        amount="1000000",
+        contract=yluna_staking,
+        msg=yluna_staking.bond()
+    )
+    await prism_vault.update_global_index()
+
+    resp = await yluna_staking.withdraw()
+    import pprint
+    pprint.pprint(resp.logs[0].events_by_type)
+    await yluna_staking.unbond(amount="1000000")
+
     await account.chain(
         yluna_token.increase_allowance(spender=prism_vault, amount="1000000"),
         pluna_token.increase_allowance(spender=prism_vault, amount="1000000"),
@@ -89,7 +131,14 @@ async def test():
     )
 
     print(await cluna_token.query.balance(address=account.acc_address))
+    print(await prism_token.query.balance(address=account.acc_address))
 
+    # await cluna_token.send(
+    #     amount="1000000",
+    #     contract=prism_vault,
+    #     msg=prism_vault.unbond(),
+    # )
+    # await prism_vault.withdraw_unbonded()
 
 
 if __name__ == '__main__':

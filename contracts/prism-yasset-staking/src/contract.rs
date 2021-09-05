@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    from_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint128,
 };
 
 use prism_protocol::yasset_staking::{
@@ -11,11 +11,12 @@ use prism_protocol::yasset_staking::{
 
 use crate::rewards::{deposit_rewards, withdraw_reward};
 use crate::staking::{bond, unbond};
-use crate::state::{Config, CONFIG};
+use crate::state::{Config, CONFIG, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
 
 use crate::swaps::{deposit_prism, swap_to_prism, swap_to_reward_denom};
 use cw20::Cw20ReceiveMsg;
 use terra_cosmwasm::TerraMsgWrapper;
+use terraswap::asset::AssetInfo;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -29,12 +30,19 @@ pub fn instantiate(
         &Config {
             vault: msg.vault,
             yluna_token: msg.yluna_token,
-            prism_token: msg.prism_token,
+            prism_token: msg.prism_token.clone(),
             reward_denom: msg.reward_denom,
             prism_pair: msg.prism_pair,
         },
     )?;
 
+    TOTAL_BOND_AMOUNT.save(deps.storage, &Uint128::zero())?;
+    WHITELISTED_ASSETS.save(
+        deps.storage,
+        &vec![AssetInfo::Token {
+            contract_addr: msg.prism_token.clone(),
+        }],
+    )?;
     Ok(Response::default())
 }
 

@@ -14,7 +14,9 @@ pub fn bond(
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
     TOTAL_BOND_AMOUNT.save(deps.storage, &(bond_total + amount))?;
 
-    let bond_amount = BOND_AMOUNTS.load(deps.storage, staker_addr.as_bytes())?;
+    let bond_amount = BOND_AMOUNTS
+        .load(deps.storage, staker_addr.as_bytes())
+        .unwrap_or(Uint128::zero());
     BOND_AMOUNTS.save(
         deps.storage,
         staker_addr.as_bytes(),

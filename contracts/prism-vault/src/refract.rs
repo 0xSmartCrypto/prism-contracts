@@ -68,4 +68,3 @@ pub fn merge(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Res
 
     Ok(Response::new().add_messages(messages))
 }
-

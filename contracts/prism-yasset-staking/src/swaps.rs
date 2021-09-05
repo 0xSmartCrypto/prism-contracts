@@ -1,7 +1,7 @@
 use crate::state::CONFIG;
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    SubMsg, Uint128, WasmMsg,
+    attr, to_binary, Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, SubMsg, Uint128, WasmMsg,
 };
 use prism_protocol::yasset_staking::ExecuteMsg;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
@@ -64,7 +64,7 @@ pub fn swap_to_prism(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    if info.sender.as_str() != env.contract.address {
+    if info.sender.as_str() != cfg.vault {
         return Err(StdError::generic_err("unauthorized"));
     }
 
@@ -81,20 +81,28 @@ pub fn swap_to_prism(
         amount: query_balance(
             &deps.querier,
             env.contract.address.clone(),
-            cfg.reward_denom,
+            cfg.reward_denom.clone(),
         )?,
     };
 
+    let amount = (offer_asset.deduct_tax(&deps.querier)?).amount;
+
     Ok(Response::new().add_messages(vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_token,
+            contract_addr: cfg.prism_pair,
             msg: to_binary(&TerraswapExecuteMsg::Swap {
-                offer_asset,
+                offer_asset: Asset {
+                    amount,
+                    ..offer_asset
+                },
                 belief_price: None,
                 max_spread: None,
                 to: None,
             })?,
-            funds: vec![],
+            funds: vec![Coin {
+                denom: cfg.reward_denom.clone(),
+                amount,
+            }],
         }),
         CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.to_string(),

@@ -36,18 +36,23 @@ pub fn deposit_rewards(
         } else {
             return Err(StdError::generic_err("may not deposit native tokens"));
         }
-        let mut pool_info = POOL_INFO.load(deps.storage, &asset.info.to_string().as_bytes())?;
+        let mut pool_info = POOL_INFO
+            .load(deps.storage, &asset.info.to_string().as_bytes())
+            .unwrap_or(PoolInfo {
+                pending_reward: Uint128::zero(),
+                reward_index: Decimal::zero(),
+            });
 
         let mut reward_amount = asset.amount.clone();
         if total_bond.is_zero() {
             pool_info.pending_reward += reward_amount;
         } else {
             reward_amount += pool_info.pending_reward;
+            let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond);
+            pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
+            pool_info.pending_reward = Uint128::zero();
         }
 
-        let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond);
-        pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
-        pool_info.pending_reward = Uint128::zero();
         POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
     }
 
@@ -101,7 +106,9 @@ pub fn withdraw_reward(deps: DepsMut, info: MessageInfo) -> StdResult<Response<T
 
 // withdraw all rewards to pending rewards
 pub fn pull_rewards(storage: &mut dyn Storage, owner: &String) -> StdResult<()> {
-    let bound_amount = BOND_AMOUNTS.load(storage, owner.as_bytes())?;
+    let bond_amount = BOND_AMOUNTS
+        .load(storage, owner.as_bytes())
+        .unwrap_or(Uint128::zero());
 
     let whitelisted_assets = WHITELISTED_ASSETS.load(storage)?;
     for asset_info in whitelisted_assets {
@@ -120,8 +127,8 @@ pub fn pull_rewards(storage: &mut dyn Storage, owner: &String) -> StdResult<()> 
                 index: pool_info.reward_index,
                 pending_reward: Uint128::zero(),
             });
-        let pending_reward = (bound_amount * pool_info.reward_index)
-            .checked_sub(bound_amount * reward_info.index)?;
+        let pending_reward =
+            (bond_amount * pool_info.reward_index).checked_sub(bond_amount * reward_info.index)?;
         reward_info.index = pool_info.reward_index;
         reward_info.pending_reward += pending_reward;
         REWARDS.save(

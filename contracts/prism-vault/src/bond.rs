@@ -1,12 +1,12 @@
 use crate::contract::{query_total_issued, slashing};
 use crate::math::decimal_division;
 use crate::state::{is_valid_validator, CONFIG, CURRENT_BATCH, PARAMETERS, STATE};
-use prism_protocol::vault::State;
 use cosmwasm_std::{
     attr, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Response, StakingMsg, StdError,
     StdResult, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
+use prism_protocol::vault::State;
 
 pub fn execute_bond(
     mut deps: DepsMut,
@@ -92,8 +92,8 @@ pub fn execute_bond(
 
     let config = CONFIG.load(deps.storage)?;
     let token_address = config
-                .cluna_contract
-                .expect("the cluna contract must have been registered");
+        .cluna_contract
+        .expect("the cluna contract must have been registered");
 
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: token_address,

@@ -114,11 +114,11 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
 
     Split {
-        amount: Uint128
+        amount: Uint128,
     },
 
     Merge {
-        amount: Uint128
+        amount: Uint128,
     },
 
     ////////////////////
