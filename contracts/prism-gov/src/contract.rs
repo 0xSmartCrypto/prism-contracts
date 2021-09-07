@@ -3,8 +3,7 @@ use cosmwasm_std::entry_point;
 
 use crate::querier::load_token_balance;
 use crate::staking::{
-    deposit_reward, query_shares, query_staker, stake_voting_rewards, stake_voting_tokens,
-    withdraw_voting_rewards, withdraw_voting_tokens,
+    deposit_reward, query_shares, query_staker, stake_voting_tokens, withdraw_voting_tokens,
 };
 use crate::state::{
     bank_read, bank_store, config_read, config_store, poll_indexer_store, poll_read, poll_store,
@@ -18,6 +17,7 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
+use crate::xprism::redeem_xprism;
 use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, PollExecuteMsg,
@@ -44,10 +44,10 @@ pub fn instantiate(
 ) -> StdResult<Response> {
     validate_quorum(msg.quorum)?;
     validate_threshold(msg.threshold)?;
-    validate_voter_weight(msg.voter_weight)?;
 
     let config = Config {
         prism_token: deps.api.addr_canonicalize(&msg.prism_token)?,
+        xprism_token: deps.api.addr_canonicalize(&msg.xprism_token)?,
         owner: deps.api.addr_canonicalize(info.sender.as_str())?,
         quorum: msg.quorum,
         threshold: msg.threshold,
@@ -55,7 +55,6 @@ pub fn instantiate(
         effective_delay: msg.effective_delay,
         expiration_period: 0u64, // depcrecated
         proposal_deposit: msg.proposal_deposit,
-        voter_weight: msg.voter_weight,
         snapshot_period: msg.snapshot_period,
     };
 
@@ -64,7 +63,6 @@ pub fn instantiate(
         poll_count: 0,
         total_share: Uint128::zero(),
         total_deposit: Uint128::zero(),
-        pending_voting_rewards: Uint128::zero(),
     };
 
     config_store(deps.storage).save(&config)?;
@@ -84,7 +82,6 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             voting_period,
             effective_delay,
             proposal_deposit,
-            voter_weight,
             snapshot_period,
         } => update_config(
             deps,
@@ -95,14 +92,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             voting_period,
             effective_delay,
             proposal_deposit,
-            voter_weight,
             snapshot_period,
         ),
         ExecuteMsg::WithdrawVotingTokens { amount } => withdraw_voting_tokens(deps, info, amount),
-        ExecuteMsg::WithdrawVotingRewards { poll_id } => {
-            withdraw_voting_rewards(deps, info, poll_id)
-        }
-        ExecuteMsg::StakeVotingRewards { poll_id } => stake_voting_rewards(deps, info, poll_id),
         ExecuteMsg::CastVote {
             poll_id,
             vote,
@@ -122,31 +114,42 @@ pub fn receive_cw20(
 ) -> StdResult<Response> {
     // only asset contract can execute this message
     let config: Config = config_read(deps.storage).load()?;
-    if config.prism_token != deps.api.addr_canonicalize(info.sender.as_str())? {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
-    match from_binary(&cw20_msg.msg) {
-        Ok(Cw20HookMsg::StakeVotingTokens {}) => {
-            stake_voting_tokens(deps, cw20_msg.sender, cw20_msg.amount)
+    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
+    if config.xprism_token == sender_raw {
+        match from_binary(&cw20_msg.msg) {
+            Ok(Cw20HookMsg::StakeVotingTokens {}) => {
+                stake_voting_tokens(deps, cw20_msg.sender, cw20_msg.amount)
+            }
+            Ok(Cw20HookMsg::CreatePoll {
+                title,
+                description,
+                link,
+                execute_msg,
+            }) => create_poll(
+                deps,
+                env,
+                cw20_msg.sender,
+                cw20_msg.amount,
+                title,
+                description,
+                link,
+                execute_msg,
+            ),
+            Ok(Cw20HookMsg::RedeemXprism {}) => {
+                redeem_xprism(deps, env, info.sender.into_string(), cw20_msg.amount)
+            }
+            _ => Err(StdError::generic_err("invalid cw20 hook message")),
         }
-        Ok(Cw20HookMsg::CreatePoll {
-            title,
-            description,
-            link,
-            execute_msg,
-        }) => create_poll(
-            deps,
-            env,
-            cw20_msg.sender,
-            cw20_msg.amount,
-            title,
-            description,
-            link,
-            execute_msg,
-        ),
-        Ok(Cw20HookMsg::DepositReward {}) => deposit_reward(deps, cw20_msg.amount),
-        Err(_) => Err(StdError::generic_err("invalid cw20 hook message")),
+    } else if config.prism_token == sender_raw {
+        match from_binary(&cw20_msg.msg) {
+            Ok(Cw20HookMsg::DepositReward {}) => deposit_reward(deps, cw20_msg.amount),
+            Ok(Cw20HookMsg::MintXprism {}) => {
+                redeem_xprism(deps, env, info.sender.into_string(), cw20_msg.amount)
+            }
+            _ => Err(StdError::generic_err("invalid cw20 hook message")),
+        }
+    } else {
+        Err(StdError::generic_err("unauthorized"))
     }
 }
 
@@ -171,7 +174,6 @@ pub fn update_config(
     voting_period: Option<u64>,
     effective_delay: Option<u64>,
     proposal_deposit: Option<Uint128>,
-    voter_weight: Option<Decimal>,
     snapshot_period: Option<u64>,
 ) -> StdResult<Response> {
     let api = deps.api;
@@ -204,11 +206,6 @@ pub fn update_config(
 
         if let Some(proposal_deposit) = proposal_deposit {
             config.proposal_deposit = proposal_deposit;
-        }
-
-        if let Some(voter_weight) = voter_weight {
-            validate_voter_weight(voter_weight)?;
-            config.voter_weight = voter_weight;
         }
 
         if let Some(snapshot_period) = snapshot_period {
@@ -272,14 +269,6 @@ fn validate_quorum(quorum: Decimal) -> StdResult<()> {
 fn validate_threshold(threshold: Decimal) -> StdResult<()> {
     if threshold > Decimal::one() {
         Err(StdError::generic_err("threshold must be 0 to 1"))
-    } else {
-        Ok(())
-    }
-}
-
-pub fn validate_voter_weight(voter_weight: Decimal) -> StdResult<()> {
-    if voter_weight >= Decimal::one() {
-        Err(StdError::generic_err("voter_weight must be smaller than 1"))
     } else {
         Ok(())
     }
@@ -356,7 +345,6 @@ pub fn create_poll(
         execute_data: poll_execute_data,
         deposit_amount,
         total_balance_at_end_poll: None,
-        voters_reward: Uint128::zero(),
         staked_amount: None,
     };
 
@@ -415,10 +403,10 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
             staked_amount,
         )
     } else {
-        let total_locked_balance = state.total_deposit + state.pending_voting_rewards;
+        let total_locked_balance = state.total_deposit;
         let staked_weight = load_token_balance(
             &deps.querier,
-            deps.api.addr_humanize(&config.prism_token)?.to_string(),
+            deps.api.addr_humanize(&config.xprism_token)?.to_string(),
             &state.contract_addr,
         )?
         .checked_sub(total_locked_balance)?;
@@ -445,7 +433,7 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
         // Refunds deposit only when quorum is reached
         if !a_poll.deposit_amount.is_zero() {
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: deps.api.addr_humanize(&config.prism_token)?.to_string(),
+                contract_addr: deps.api.addr_humanize(&config.xprism_token)?.to_string(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: deps.api.addr_humanize(&a_poll.creator)?.to_string(),
@@ -575,10 +563,10 @@ pub fn cast_vote(
 
     // convert share to amount
     let total_share = state.total_share;
-    let total_locked_balance = state.total_deposit + state.pending_voting_rewards;
+    let total_locked_balance = state.total_deposit;
     let total_balance = load_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.prism_token)?.to_string(),
+        deps.api.addr_humanize(&config.xprism_token)?.to_string(),
         &state.contract_addr,
     )?
     .checked_sub(total_locked_balance)?;
@@ -655,10 +643,10 @@ pub fn snapshot_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Respons
     // store the current staked amount for quorum calculation
     let state: State = state_store(deps.storage).load()?;
 
-    let total_locked_balance = state.total_deposit + state.pending_voting_rewards;
+    let total_locked_balance = state.total_deposit;
     let staked_amount = load_token_balance(
         &deps.querier,
-        deps.api.addr_humanize(&config.prism_token)?.to_string(),
+        deps.api.addr_humanize(&config.xprism_token)?.to_string(),
         &state.contract_addr,
     )?
     .checked_sub(total_locked_balance)?;
@@ -706,13 +694,12 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = config_read(deps.storage).load()?;
     Ok(ConfigResponse {
         owner: deps.api.addr_humanize(&config.owner)?.to_string(),
-        prism_token: deps.api.addr_humanize(&config.prism_token)?.to_string(),
+        xprism_token: deps.api.addr_humanize(&config.xprism_token)?.to_string(),
         quorum: config.quorum,
         threshold: config.threshold,
         voting_period: config.voting_period,
         effective_delay: config.effective_delay,
         proposal_deposit: config.proposal_deposit,
-        voter_weight: config.voter_weight,
         snapshot_period: config.snapshot_period,
     })
 }
@@ -723,7 +710,6 @@ fn query_state(deps: Deps) -> StdResult<StateResponse> {
         poll_count: state.poll_count,
         total_share: state.total_share,
         total_deposit: state.total_deposit,
-        pending_voting_rewards: state.pending_voting_rewards,
     })
 }
 
@@ -754,7 +740,6 @@ fn query_poll(deps: Deps, poll_id: u64) -> StdResult<PollResponse> {
         no_votes: poll.no_votes,
         abstain_votes: poll.abstain_votes,
         total_balance_at_end_poll: poll.total_balance_at_end_poll,
-        voters_reward: poll.voters_reward,
         staked_amount: poll.staked_amount,
     })
 }
@@ -791,7 +776,6 @@ fn query_polls(
                 no_votes: poll.no_votes,
                 abstain_votes: poll.abstain_votes,
                 total_balance_at_end_poll: poll.total_balance_at_end_poll,
-                voters_reward: poll.voters_reward,
                 staked_amount: poll.staked_amount,
             })
         })

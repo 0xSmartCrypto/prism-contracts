@@ -25,13 +25,13 @@ const DEFAULT_LIMIT: u32 = 10;
 pub struct Config {
     pub owner: CanonicalAddr,
     pub prism_token: CanonicalAddr,
+    pub xprism_token: CanonicalAddr,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,
     pub effective_delay: u64,
     pub expiration_period: u64, // deprecated, to remove on next state migration
     pub proposal_deposit: Uint128,
-    pub voter_weight: Decimal,
     pub snapshot_period: u64,
 }
 
@@ -41,7 +41,6 @@ pub struct State {
     pub poll_count: u64,
     pub total_share: Uint128,
     pub total_deposit: Uint128,
-    pub pending_voting_rewards: Uint128,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -67,7 +66,6 @@ pub struct Poll {
     pub deposit_amount: Uint128,
     /// Total balance at the end poll
     pub total_balance_at_end_poll: Option<Uint128>,
-    pub voters_reward: Uint128,
     pub staked_amount: Option<Uint128>,
 }
 

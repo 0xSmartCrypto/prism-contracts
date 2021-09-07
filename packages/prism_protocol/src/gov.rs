@@ -9,12 +9,12 @@ use crate::common::OrderBy;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub prism_token: String,
+    pub xprism_token: String,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,
     pub effective_delay: u64,
     pub proposal_deposit: Uint128,
-    pub voter_weight: Decimal,
     pub snapshot_period: u64,
 }
 
@@ -29,7 +29,6 @@ pub enum ExecuteMsg {
         voting_period: Option<u64>,
         effective_delay: Option<u64>,
         proposal_deposit: Option<Uint128>,
-        voter_weight: Option<Decimal>,
         snapshot_period: Option<u64>,
     },
     CastVote {
@@ -39,12 +38,6 @@ pub enum ExecuteMsg {
     },
     WithdrawVotingTokens {
         amount: Option<Uint128>,
-    },
-    WithdrawVotingRewards {
-        poll_id: Option<u64>,
-    },
-    StakeVotingRewards {
-        poll_id: Option<u64>,
     },
     EndPoll {
         poll_id: u64,
@@ -72,6 +65,9 @@ pub enum Cw20HookMsg {
     },
     /// Deposit rewards to be distributed among stakers and voters
     DepositReward {},
+
+    MintXprism {},
+    RedeemXprism {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -118,13 +114,12 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub prism_token: String,
+    pub xprism_token: String,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,
     pub effective_delay: u64,
     pub proposal_deposit: Uint128,
-    pub voter_weight: Decimal,
     pub snapshot_period: u64,
 }
 
@@ -133,7 +128,6 @@ pub struct StateResponse {
     pub poll_count: u64,
     pub total_share: Uint128,
     pub total_deposit: Uint128,
-    pub pending_voting_rewards: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
@@ -151,7 +145,6 @@ pub struct PollResponse {
     pub no_votes: Uint128,      // balance
     pub abstain_votes: Uint128, // balance
     pub total_balance_at_end_poll: Option<Uint128>,
-    pub voters_reward: Uint128,
     pub staked_amount: Option<Uint128>,
 }
 
@@ -170,8 +163,6 @@ pub struct StakerResponse {
     pub balance: Uint128,
     pub share: Uint128,
     pub locked_balance: Vec<(u64, VoterInfo)>,
-    pub withdrawable_polls: Vec<(u64, Uint128)>,
-    pub pending_voting_rewards: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
