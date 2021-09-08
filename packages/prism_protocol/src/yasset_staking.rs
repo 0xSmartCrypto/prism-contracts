@@ -21,18 +21,27 @@ pub enum ExecuteMsg {
     ////////////////////////
     /// User operations ///
     ////////////////////////
+    /// Unbond yLUNA
     Unbond {
         amount: Uint128,
     },
     /// Withdraw pending rewards
     Withdraw {},
+
+    /// Private methods
+    /// swap validator rewards into UST
+    SwapToRewardDenom {},
+
+    /// swap UST into PRISM
+    SwapToPrism {},
+
     /// Deposit rewards to yLuna stakers
     DepositRewards {
         assets: Vec<Asset>,
     },
 
-    SwapToRewardDenom {},
-    SwapToPrism {},
+    /// Internal method -- sends correct amount PRISM to DepositRewards
+    /// after SwapToPrism
     DepositPrism {
         old_amount: Uint128,
     },
@@ -41,6 +50,7 @@ pub enum ExecuteMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
+    /// Bond yLuna to start receiving luna staking rewards
     Bond {},
 }
 

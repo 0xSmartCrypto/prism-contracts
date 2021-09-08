@@ -1,11 +1,21 @@
 import asyncio
 from terra_util import Account, Asset
+from terra_sdk.key.mnemonic import MnemonicKey
+
+BOMBAY = True
 
 
 async def test():
-    account = Account()
-    code_ids = await account.store_contracts()
+    if BOMBAY:
+        key = MnemonicKey(
+            mnemonic="lemon flavor goddess anger reflect option remove learn author learn damp often bullet ketchup cricket menu moment figure sugar donor load tongue stone tray"
+        )
+    else:
+        key = None
+    account = Account(bombay=BOMBAY, key=key)
+    print(account.acc_address)
 
+    code_ids = await account.store_contracts()
     terraswap_factory = await account.contract.create(
         code_ids["terraswap_factory"],
         pair_code_id=int(code_ids["terraswap_pair"]),
@@ -32,8 +42,8 @@ async def test():
                 ]
             )
         )
-            .logs[0]
-            .events_by_type["from_contract"]["pair_contract_addr"][0]
+        .logs[0]
+        .events_by_type["from_contract"]["pair_contract_addr"][0]
     )
 
     await prism_token.increase_allowance(amount="10000", spender=prism_pair)
@@ -53,9 +63,13 @@ async def test():
         unbonding_period=10,
         peg_recovery_fee="0.005",
         er_threshold="0.01",
-        validator="terravaloper1dcegyrekltswvyy0xy69ydgxn9x8x32zdy3ua5",
-        init_coins={"uluna": "1000000"}
+        validator="terravaloper1krj7amhhagjnyg2tkkuh6l0550y733jnjnnlzy"
+        if account.bombay
+        else "terravaloper1dcegyrekltswvyy0xy69ydgxn9x8x32zdy3ua5",
+        init_coins={"uluna": "1000000"},
     )
+
+    print(prism_vault.address)
 
     cluna_token = await account.contract.create(
         code_ids["cw20_base"],
@@ -88,50 +102,53 @@ async def test():
         prism_token=prism_token,
         yluna_token=yluna_token,
         reward_denom="uusd",
-        prism_pair=prism_pair
+        prism_pair=prism_pair,
     )
 
     await prism_vault.update_config(
         yluna_staking=yluna_staking,
         cluna_contract=cluna_token,
         yluna_contract=yluna_token,
-        pluna_contract=pluna_token
+        pluna_contract=pluna_token,
     )
 
     await prism_vault.bond(
-        validator="terravaloper1dcegyrekltswvyy0xy69ydgxn9x8x32zdy3ua5",
-        _send={"uluna": "1000000"}
+        validator="terravaloper1krj7amhhagjnyg2tkkuh6l0550y733jnjnnlzy"
+        if account.bombay
+        else "terravaloper1dcegyrekltswvyy0xy69ydgxn9x8x32zdy3ua5",
+        _send={"uluna": "1000000"},
     )
 
     print(await cluna_token.query.balance(address=account.acc_address))
 
     await account.chain(
         cluna_token.increase_allowance(spender=prism_vault, amount="1000000"),
-        prism_vault.split(amount="1000000")
+        prism_vault.split(amount="1000000"),
     )
     print(await yluna_token.query.balance(address=account.acc_address))
     print(await pluna_token.query.balance(address=account.acc_address))
 
     await yluna_token.send(
-        amount="1000000",
-        contract=yluna_staking,
-        msg=yluna_staking.bond()
+        amount="1000000", contract=yluna_staking, msg=yluna_staking.bond()
     )
-    await prism_vault.update_global_index()
-
-    resp = await yluna_staking.withdraw()
+    # await prism_vault.update_global_index()
+    #
+    # resp = await yluna_staking.withdraw()
     import pprint
-    pprint.pprint(resp.logs[0].events_by_type)
+
+    # pprint.pprint(resp.logs[0].events_by_type)
     await yluna_staking.unbond(amount="1000000")
 
     await account.chain(
         yluna_token.increase_allowance(spender=prism_vault, amount="1000000"),
         pluna_token.increase_allowance(spender=prism_vault, amount="1000000"),
-        prism_vault.merge(amount="1000000")
+        prism_vault.merge(amount="1000000"),
     )
 
     print(await cluna_token.query.balance(address=account.acc_address))
     print(await prism_token.query.balance(address=account.acc_address))
+    print(prism_vault.address)
+    print(await prism_vault.query.config())
 
     # await cluna_token.send(
     #     amount="1000000",
@@ -141,5 +158,5 @@ async def test():
     # await prism_vault.withdraw_unbonded()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.get_event_loop().run_until_complete(test())

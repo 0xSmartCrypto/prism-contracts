@@ -54,6 +54,7 @@ class Account:
     def __init__(self, bombay=False, key=None):
 
         lt = AsyncLocalTerra(gas_prices={"uusd": "0.15"})
+        self.bombay = bombay
         if bombay:
 
             gas_prices = {

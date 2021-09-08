@@ -69,7 +69,7 @@ pub enum ExecuteMsg {
         validator: String,
     },
 
-    // Remove the validator from validators whitelist
+    /// Remove the validator from validators whitelist
     DeregisterValidator {
         validator: String,
     },
@@ -113,10 +113,12 @@ pub enum ExecuteMsg {
     /// Burn the received basset token.
     Receive(Cw20ReceiveMsg),
 
+    /// Split cLuna into yLuna and pLuna
     Split {
         amount: Uint128,
     },
 
+    /// Merge yLuna and pLuna into cLuna
     Merge {
         amount: Uint128,
     },
