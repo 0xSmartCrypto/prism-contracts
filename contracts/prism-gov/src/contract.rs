@@ -17,7 +17,7 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
-use crate::xprism::redeem_xprism;
+use crate::xprism::{mint_xprism, redeem_xprism};
 use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, PollExecuteMsg,
@@ -144,7 +144,7 @@ pub fn receive_cw20(
         match from_binary(&cw20_msg.msg) {
             Ok(Cw20HookMsg::DepositReward {}) => deposit_reward(deps, cw20_msg.amount),
             Ok(Cw20HookMsg::MintXprism {}) => {
-                redeem_xprism(deps, env, info.sender.into_string(), cw20_msg.amount)
+                mint_xprism(deps, env, info.sender.into_string(), cw20_msg.amount)
             }
             _ => Err(StdError::generic_err("invalid cw20 hook message")),
         }

@@ -4,6 +4,7 @@ members = [
     "contracts/prism-yasset-staking",
     "contracts/prism-airdrop-registry",
     "contracts/prism-gov",
+    "contracts/fair-launch",
     "packages/*"
 ]
 

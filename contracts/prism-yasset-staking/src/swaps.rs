@@ -1,9 +1,11 @@
-use crate::state::CONFIG;
+use crate::state::{CONFIG, TOTAL_BOND_AMOUNT};
 use cosmwasm_std::{
     attr, to_binary, Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult, SubMsg, Uint128, WasmMsg,
 };
+use cw20::Cw20ExecuteMsg;
 use prism_protocol::yasset_staking::ExecuteMsg;
+use std::cmp::min;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
 use terraswap::asset::{Asset, AssetInfo};
 use terraswap::pair::ExecuteMsg as TerraswapExecuteMsg;
@@ -132,22 +134,47 @@ pub fn deposit_prism(
         env.contract.address.clone(),
     )?;
 
-    let to_deposit = Asset {
+    let total_to_deposit = prism_amt - old_amount;
+
+    let total_luna = query_balance(
+        &deps.querier,
+        Addr::unchecked(cfg.vault),
+        "uluna".to_owned(),
+    )?;
+
+    let yluna_staked = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+
+    // if all yluna has been staked, and there has recently been a slashing event
+    // its possible yluna_staked / total_luna > 1, hence why min needed
+    let for_stakers = min(
+        total_to_deposit,
+        total_to_deposit.multiply_ratio(yluna_staked, total_luna),
+    );
+
+    let to_deposit_stakers = Asset {
         info: AssetInfo::Token {
-            contract_addr: cfg.prism_token,
+            contract_addr: cfg.prism_token.clone(),
         },
-        amount: prism_amt - old_amount,
+        amount: for_stakers,
     };
 
-    Ok(
-        Response::new().add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+    Ok(Response::new().add_messages(vec![
+        CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.to_string(),
             msg: to_binary(&ExecuteMsg::DepositRewards {
-                assets: vec![to_deposit],
+                assets: vec![to_deposit_stakers],
             })?,
             funds: vec![],
-        })]),
-    )
+        }),
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: cfg.gov,
+                amount: total_to_deposit - for_stakers,
+            })?,
+            funds: vec![],
+        }),
+    ]))
 }
 
 pub fn query_exchange_rates(

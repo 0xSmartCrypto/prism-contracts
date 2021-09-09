@@ -8,6 +8,7 @@ use terraswap::asset::Asset;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub vault: String,
+    pub gov: String,
     pub yluna_token: String,
     pub prism_token: String,
     pub reward_denom: String,
@@ -73,17 +74,8 @@ pub enum QueryMsg {
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ConfigResponse {
-    pub owner: String,
-    pub nebula_token: String,
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolInfoResponse {
     pub asset_token: String,
-    pub staking_token: String,
-    pub total_bond_amount: Uint128,
     pub reward_index: Decimal,
     pub pending_reward: Uint128,
 }
