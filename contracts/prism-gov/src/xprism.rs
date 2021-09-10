@@ -1,7 +1,5 @@
 use crate::state::config_read;
-use cosmwasm_std::{
-    to_binary, CosmosMsg, DepsMut, Env, Response, StdResult, Uint128, WasmMsg,
-};
+use cosmwasm_std::{to_binary, CosmosMsg, DepsMut, Env, Response, StdResult, Uint128, WasmMsg};
 use cw20_base::msg::ExecuteMsg as TokenMsg;
 use terraswap::querier::query_token_balance;
 
@@ -19,7 +17,11 @@ pub fn mint_xprism(
     let xprism_amt =
         query_token_balance(&deps.querier, xprism_token.clone(), env.contract.address)?;
 
-    let xprism_to_mint = amount.multiply_ratio(xprism_amt, prism_amt);
+    let xprism_to_mint = if xprism_amt.is_zero() {
+        amount
+    } else {
+        amount.multiply_ratio(xprism_amt, prism_amt)
+    };
 
     Ok(
         Response::new().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
