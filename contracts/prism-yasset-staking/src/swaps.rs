@@ -148,7 +148,9 @@ pub fn deposit_prism(
     // its possible yluna_staked / total_luna > 1, hence why min needed
     let for_stakers = min(
         total_to_deposit,
-        total_to_deposit.multiply_ratio(yluna_staked, total_luna),
+        total_to_deposit
+            .multiply_ratio(yluna_staked, total_luna)
+            .multiply_ratio(9u128, 10u128),
     );
 
     let to_deposit_stakers = Asset {
