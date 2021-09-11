@@ -1,9 +1,9 @@
 [package]
-name = "fair-launch"
-version = "0.1.0"
+name = "prism-launch-pool"
+version = "1.0.0"
 authors = []
 edition = "2018"
-description = "fair launch for tokens"
+description = "pylon but for yluna"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -20,7 +20,9 @@ cw-storage-plus = { version = "0.8.0" }
 schemars = "0.8.1"
 terraswap = "2.4.0"
 cw20-base = { version = "0.8.0", features = ["library"] }
+cw20 = "0.8.0"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
+prism-protocol = { path = "../../packages/prism_protocol", default-features = false, version = "1.0.0"}
 hex = "0.4.2"
 lazy_static = "1.4.0"
 

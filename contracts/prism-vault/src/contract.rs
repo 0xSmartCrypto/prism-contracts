@@ -232,6 +232,12 @@ pub fn execute_update_global(
         }
     }
 
+    messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: yluna_staking_addr.clone(),
+        msg: to_binary(&StakingExecuteMsg::UpdateRewardDenomBalance {})?,
+        funds: vec![],
+    })));
+
     // Send withdraw message
     let mut withdraw_msgs = withdraw_all_rewards(&deps, env.contract.address.clone())?;
     messages.append(&mut withdraw_msgs);
@@ -239,13 +245,7 @@ pub fn execute_update_global(
     // Swap to $UST, then into $PRISM
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: yluna_staking_addr.clone(),
-        msg: to_binary(&StakingExecuteMsg::SwapToRewardDenom {}).unwrap(),
-        funds: vec![],
-    })));
-
-    messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: yluna_staking_addr.clone(),
-        msg: to_binary(&StakingExecuteMsg::SwapToPrism {}).unwrap(),
+        msg: to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap(),
         funds: vec![],
     })));
 

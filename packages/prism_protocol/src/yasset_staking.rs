@@ -30,21 +30,27 @@ pub enum ExecuteMsg {
     Withdraw {},
 
     /// Private methods
-    /// swap validator rewards into UST
-    SwapToRewardDenom {},
+    /// Before depositing delegator rewards, record the old reward denom
+    /// balance, to get an accurate picture of what was gained
+    UpdateRewardDenomBalance {
 
-    /// swap UST into PRISM
-    SwapToPrism {},
+    },
+    /// Swap delegator rewards into UST
+    /// - Some UST goes towards yLUNA stakers
+    /// - The rest is swapped into $PRISM and sent to Prism governance
+    ProcessDelegatorRewards {
+
+    },
+
+    /// Everything has been swapped into $UST
+    DepositRewardDenom {},
+
+    /// deposit all $PRISM into gov contract
+    DepositPrism {},
 
     /// Deposit rewards to yLuna stakers
     DepositRewards {
         assets: Vec<Asset>,
-    },
-
-    /// Internal method -- sends correct amount PRISM to DepositRewards
-    /// after SwapToPrism
-    DepositPrism {
-        old_amount: Uint128,
     },
 }
 
@@ -68,8 +74,10 @@ pub enum QueryMsg {
     },
     RewardInfo {
         staker_addr: String,
-        asset_token: Option<String>,
     },
+    Whitelist {
+
+    }
 }
 
 // We define a custom struct for each query response

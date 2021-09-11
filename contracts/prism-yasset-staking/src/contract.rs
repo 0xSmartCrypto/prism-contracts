@@ -10,11 +10,13 @@ use prism_protocol::yasset_staking::{
     Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, PoolInfoResponse, QueryMsg,
 };
 
-use crate::rewards::{deposit_rewards, withdraw_reward};
+use crate::rewards::{deposit_rewards, query_reward_info, withdraw_reward};
 use crate::staking::{bond, unbond};
 use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
 
-use crate::swaps::{deposit_prism, swap_to_prism, swap_to_reward_denom};
+use crate::swaps::{
+    deposit_prism, deposit_reward_denom, process_delegator_rewards, update_reward_denom_balance,
+};
 use cw20::Cw20ReceiveMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 use terraswap::asset::AssetInfo;
@@ -60,9 +62,10 @@ pub fn execute(
         ExecuteMsg::Unbond { amount } => unbond(deps, info.sender.to_string(), amount),
         ExecuteMsg::Withdraw {} => withdraw_reward(deps, info),
         ExecuteMsg::DepositRewards { assets } => deposit_rewards(deps, env, info, assets),
-        ExecuteMsg::SwapToRewardDenom {} => swap_to_reward_denom(deps, env, info),
-        ExecuteMsg::SwapToPrism {} => swap_to_prism(deps, env, info),
-        ExecuteMsg::DepositPrism { old_amount } => deposit_prism(deps, env, info, old_amount),
+        ExecuteMsg::DepositPrism {} => deposit_prism(deps, env, info),
+        ExecuteMsg::UpdateRewardDenomBalance {} => update_reward_denom_balance(deps, env, info),
+        ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
+        ExecuteMsg::DepositRewardDenom {} => deposit_reward_denom(deps, env, info),
     }
 }
 
@@ -92,12 +95,13 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::PoolInfo { asset_token } => to_binary(&query_pool_info(deps, asset_token)?),
-        // QueryMsg::RewardInfo {
-        //     staker_addr,
-        //     asset_token,
-        // } => to_binary(&query_reward_info(deps, staker_addr, asset_token)?),
-        _ => Err(StdError::generic_err("invalid query msg"))
+        QueryMsg::Whitelist {} => to_binary(&query_whitelist(deps)?),
+        QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
     }
+}
+
+pub fn query_whitelist(deps: Deps) -> StdResult<Vec<AssetInfo>> {
+    WHITELISTED_ASSETS.load(deps.storage)
 }
 
 pub fn query_config(deps: Deps) -> StdResult<Config> {
@@ -105,7 +109,7 @@ pub fn query_config(deps: Deps) -> StdResult<Config> {
 }
 
 pub fn query_pool_info(deps: Deps, asset_token: String) -> StdResult<PoolInfoResponse> {
-    let pool_info  = POOL_INFO.load(deps.storage, asset_token.as_bytes())?;
+    let pool_info = POOL_INFO.load(deps.storage, asset_token.as_bytes())?;
     Ok(PoolInfoResponse {
         asset_token,
         reward_index: pool_info.reward_index,

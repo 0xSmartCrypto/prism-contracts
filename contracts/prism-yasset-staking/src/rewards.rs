@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    attr, to_binary, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult, Storage, Uint128, WasmMsg,
+    attr, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
+    StdError, StdResult, Storage, Uint128, WasmMsg,
 };
 
 use crate::state::{
@@ -140,62 +140,38 @@ pub fn pull_rewards(storage: &mut dyn Storage, owner: &String) -> StdResult<()> 
     Ok(())
 }
 
-// pub fn query_reward_info(
-//     deps: Deps,
-//     staker_addr: String,
-//     asset_token: Option<String>,
-// ) -> StdResult<RewardInfoResponse> {
-//     let reward_infos: Vec<RewardInfoResponseItem> =
-//         _read_reward_infos(deps.storage, &staker_addr, &asset_token)?;
-//
-//     Ok(RewardInfoResponse {
-//         staker_addr,
-//         reward_infos,
-//     })
-// }
-//
-// fn _read_reward_infos(
-//     storage: &dyn Storage,
-//     staker_addr: &String,
-//     asset_token: &Option<String>,
-// ) -> StdResult<Vec<RewardInfoResponseItem>> {
-//     let rewards_bucket = rewards_read(storage, staker_addr);
-//     let reward_infos: Vec<RewardInfoResponseItem>;
-//     if let Some(asset_token) = asset_token {
-//         reward_infos = if let Some(mut reward_info) =
-//             rewards_bucket.may_load(asset_token.as_str().as_bytes())?
-//         {
-//             let pool_info = read_pool_info(storage, asset_token)?;
-//             before_share_change(&pool_info, &mut reward_info)?;
-//
-//             vec![RewardInfoResponseItem {
-//                 asset_token: asset_token.clone(),
-//                 bond_amount: reward_info.bond_amount,
-//                 pending_reward: reward_info.pending_reward,
-//             }]
-//         } else {
-//             vec![]
-//         };
-//     } else {
-//         reward_infos = rewards_bucket
-//             .range(None, None, Order::Ascending)
-//             .map(|item| {
-//                 let (k, v) = item?;
-//                 let asset_token = std::str::from_utf8(&k)
-//                     .map_err(|_| StdError::invalid_utf8("invalid asset token address"))?
-//                     .to_string();
-//                 let mut reward_info = v;
-//                 let pool_info = read_pool_info(storage, &asset_token)?;
-//                 before_share_change(&pool_info, &mut reward_info)?;
-//
-//                 Ok(RewardInfoResponseItem {
-//                     asset_token,
-//                     bond_amount: reward_info.bond_amount,
-//                     pending_reward: reward_info.pending_reward,
-//                 })
-//             })
-//             .collect::<StdResult<Vec<RewardInfoResponseItem>>>()?;
-//     }
-//
-//     Ok(reward_infos)
-// }
+pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<Vec<Asset>> {
+    let bond_amount = BOND_AMOUNTS
+        .load(deps.storage, staker_addr.as_bytes())
+        .unwrap_or(Uint128::zero());
+
+    let mut reward_infos = vec![];
+
+    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    for asset_info in whitelisted_assets {
+        let pool_info = POOL_INFO
+            .load(deps.storage, asset_info.to_string().as_bytes())
+            .unwrap_or(PoolInfo {
+                pending_reward: Uint128::zero(),
+                reward_index: Decimal::zero(),
+            });
+        let mut reward_info = REWARDS
+            .load(
+                deps.storage,
+                (staker_addr.as_bytes(), asset_info.to_string().as_bytes()),
+            )
+            .unwrap_or(RewardInfo {
+                index: pool_info.reward_index,
+                pending_reward: Uint128::zero(),
+            });
+        let pending_reward =
+            (bond_amount * pool_info.reward_index).checked_sub(bond_amount * reward_info.index)?;
+        reward_info.index = pool_info.reward_index;
+        reward_info.pending_reward += pending_reward;
+        reward_infos.push(Asset {
+            info: asset_info.clone(),
+            amount: reward_info.pending_reward,
+        });
+    }
+    Ok(reward_infos)
+}
