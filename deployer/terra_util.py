@@ -184,7 +184,6 @@ class Account:
         }
 
     async def store_contract(self, contract_name):
-
         contract_bytes = read_file_as_b64(f"{CONTRACT_DIR}/{contract_name}.wasm")
         store_code = MsgStoreCode(self.acc_address, contract_bytes)
 

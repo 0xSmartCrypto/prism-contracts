@@ -9,7 +9,7 @@ use std::cmp::min;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
 use terraswap::asset::{Asset, AssetInfo};
 use terraswap::pair::ExecuteMsg as TerraswapExecuteMsg;
-use terraswap::querier::{query_balance, query_token_balance};
+use terraswap::querier::{query_balance, query_supply, query_token_balance};
 
 /// Swap all native tokens to reward_denom
 /// Only hub_contract is allowed to execute
@@ -102,11 +102,12 @@ pub fn deposit_reward_denom(
 
     let reward_gained = new_amount - old_amount;
 
-    let total_luna = query_balance(
-        &deps.querier,
-        Addr::unchecked(cfg.vault),
-        "uluna".to_owned(),
-    )?;
+    let total_share = query_supply(&deps.querier, Addr::unchecked(cfg.yluna_token.clone()))?
+        + query_supply(&deps.querier, Addr::unchecked(cfg.cluna_token))?;
+
+    if total_share.is_zero() {
+        return Err(StdError::generic_err("no luna in vault"));
+    }
 
     let yluna_staked = TOTAL_BOND_AMOUNT.load(deps.storage)?;
 
@@ -115,7 +116,7 @@ pub fn deposit_reward_denom(
     let for_stakers = min(
         reward_gained,
         reward_gained
-            .multiply_ratio(yluna_staked, total_luna)
+            .multiply_ratio(yluna_staked, total_share)
             .multiply_ratio(9u128, 10u128),
     );
 
@@ -182,6 +183,10 @@ pub fn deposit_prism(
         Addr::unchecked(cfg.prism_token.clone()),
         env.contract.address.clone(),
     )?;
+
+    if prism_amt.is_zero() {
+        return Ok(Response::new());
+    }
 
     Ok(
         Response::new().add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {

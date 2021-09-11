@@ -2,8 +2,16 @@ import asyncio
 from terra_util import Account, Asset
 from terra_sdk.key.mnemonic import MnemonicKey
 
-BOMBAY = True
+BOMBAY = False
 
+DEFAULT_POLL_ID = 1
+DEFAULT_QUORUM = "0.3"
+DEFAULT_THRESHOLD = "0.5"
+DEFAULT_VOTING_PERIOD = 2
+DEFAULT_EFFECTIVE_DELAY = 2
+DEFAULT_PROPOSAL_DEPOSIT = "10000000000"
+DEFAULT_SNAPSHOT_PERIOD = 0
+DEFAULT_VOTER_WEIGHT = "0.1"
 
 async def test():
     if BOMBAY:
@@ -26,6 +34,17 @@ async def test():
         code_ids["cw20_base"],
         name="Prism Token",
         symbol="PRISM",
+        decimals=6,
+        initial_balances=[
+            {"address": account.acc_address, "amount": "10000000"},
+        ],
+        mint=None,
+    )
+
+    xprism_token = await account.contract.create(
+        code_ids["cw20_base"],
+        name="xPrism Token",
+        symbol="xPRISM",
         decimals=6,
         initial_balances=[
             {"address": account.acc_address, "amount": "10000000"},
@@ -96,11 +115,26 @@ async def test():
         mint={"minter": prism_vault},
     )
 
+    prism_gov = await account.contract.create(
+        code_ids["prism_gov"],
+        prism_token=prism_token,
+        xprism_token=xprism_token,
+        quorum=DEFAULT_QUORUM,
+        threshold=DEFAULT_THRESHOLD,
+        voting_period=DEFAULT_VOTING_PERIOD,
+        effective_delay=DEFAULT_EFFECTIVE_DELAY,
+        proposal_deposit=DEFAULT_PROPOSAL_DEPOSIT,
+        voter_weight=DEFAULT_VOTER_WEIGHT,
+        snapshot_period=DEFAULT_SNAPSHOT_PERIOD,
+    )
+
     yluna_staking = await account.contract.create(
         code_ids["prism_yasset_staking"],
         vault=prism_vault,
+        gov=prism_gov,
         prism_token=prism_token,
         yluna_token=yluna_token,
+        cluna_token=cluna_token,
         reward_denom="uusd",
         prism_pair=prism_pair,
     )
@@ -131,12 +165,13 @@ async def test():
     await yluna_token.send(
         amount="1000000", contract=yluna_staking, msg=yluna_staking.bond()
     )
-    # await prism_vault.update_global_index()
-    #
-    # resp = await yluna_staking.withdraw()
+
+    await prism_vault.update_global_index()
+
+    resp = await yluna_staking.withdraw()
     import pprint
 
-    # pprint.pprint(resp.logs[0].events_by_type)
+    pprint.pprint(resp.logs[0].events_by_type)
     await yluna_staking.unbond(amount="1000000")
 
     await account.chain(

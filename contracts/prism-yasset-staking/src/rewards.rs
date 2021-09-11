@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     attr, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
-    StdError, StdResult, Storage, Uint128, WasmMsg,
+    StdResult, Storage, Uint128, WasmMsg,
 };
 
 use crate::state::{
@@ -34,7 +34,7 @@ pub fn deposit_rewards(
                 funds: vec![],
             }));
         } else {
-            return Err(StdError::generic_err("may not deposit native tokens"));
+            asset.assert_sent_native_token_balance(&info)?;
         }
         let mut pool_info = POOL_INFO
             .load(deps.storage, &asset.info.to_string().as_bytes())
@@ -75,6 +75,10 @@ pub fn withdraw_reward(deps: DepsMut, info: MessageInfo) -> StdResult<Response<T
             info: asset_info.clone(),
             amount: reward_info.pending_reward,
         };
+
+        if asset.amount.is_zero() {
+            continue;
+        }
 
         // re-implement into_msg here because life is cruel
         let msg = match &asset_info {

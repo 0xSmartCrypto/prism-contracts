@@ -34,8 +34,9 @@ pub fn instantiate(
             vault: msg.vault,
             gov: msg.gov,
             yluna_token: msg.yluna_token,
+            cluna_token: msg.cluna_token,
             prism_token: msg.prism_token.clone(),
-            reward_denom: msg.reward_denom,
+            reward_denom: msg.reward_denom.clone(),
             prism_pair: msg.prism_pair,
         },
     )?;
@@ -43,8 +44,8 @@ pub fn instantiate(
     TOTAL_BOND_AMOUNT.save(deps.storage, &Uint128::zero())?;
     WHITELISTED_ASSETS.save(
         deps.storage,
-        &vec![AssetInfo::Token {
-            contract_addr: msg.prism_token.clone(),
+        &vec![AssetInfo::NativeToken {
+            denom: msg.reward_denom.clone(),
         }],
     )?;
     Ok(Response::default())

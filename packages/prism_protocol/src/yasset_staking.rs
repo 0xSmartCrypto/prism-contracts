@@ -10,6 +10,7 @@ pub struct InstantiateMsg {
     pub vault: String,
     pub gov: String,
     pub yluna_token: String,
+    pub cluna_token: String,
     pub prism_token: String,
     pub reward_denom: String,
     pub prism_pair: String,
