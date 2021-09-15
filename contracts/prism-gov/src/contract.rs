@@ -17,7 +17,7 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
-use crate::xprism::{mint_xprism, redeem_xprism};
+use crate::xprism::{claim_redeemed_prism, mint_xprism, redeem_xprism};
 use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, PollExecuteMsg,
@@ -103,6 +103,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::EndPoll { poll_id } => end_poll(deps, env, poll_id),
         ExecuteMsg::ExecutePoll { poll_id } => execute_poll(deps, env, poll_id),
         ExecuteMsg::SnapshotPoll { poll_id } => snapshot_poll(deps, env, poll_id),
+        ExecuteMsg::ClaimRedeemedXprism {} => {
+            claim_redeemed_prism(deps, env, &info.sender.to_string())
+        }
     }
 }
 
@@ -136,7 +139,7 @@ pub fn receive_cw20(
                 execute_msg,
             ),
             Ok(Cw20HookMsg::RedeemXprism {}) => {
-                redeem_xprism(deps, env, info.sender.into_string(), cw20_msg.amount)
+                redeem_xprism(deps, env, &info.sender.into_string(), cw20_msg.amount)
             }
             _ => Err(StdError::generic_err("invalid cw20 hook message")),
         }

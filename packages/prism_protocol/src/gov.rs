@@ -48,6 +48,7 @@ pub enum ExecuteMsg {
     SnapshotPoll {
         poll_id: u64,
     },
+    ClaimRedeemedXprism {}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
