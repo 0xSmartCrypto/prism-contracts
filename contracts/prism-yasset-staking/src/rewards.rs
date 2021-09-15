@@ -49,36 +49,36 @@ pub fn deposit_rewards(
                     })?,
                     funds: vec![],
                 }));
-
-                let mut pool_info = POOL_INFO
-                    .load(deps.storage, &asset.info.to_string().as_bytes())
-                    .unwrap_or(PoolInfo {
-                        pending_reward: Uint128::zero(),
-                        reward_index: Decimal::zero(),
-                    });
-
-                let mut reward_amount = asset.amount.clone().multiply_ratio(num, den);
-
-                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: contract_addr.clone(),
-                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                        recipient: cfg.collector.clone(),
-                        amount: asset.amount - reward_amount,
-                    })?,
-                    funds: vec![],
-                }));
-
-                if total_bond.is_zero() {
-                    pool_info.pending_reward += reward_amount;
-                } else {
-                    reward_amount += pool_info.pending_reward;
-                    let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond);
-                    pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
-                    pool_info.pending_reward = Uint128::zero();
-                }
-
-                POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
             }
+
+            let mut pool_info = POOL_INFO
+                .load(deps.storage, &asset.info.to_string().as_bytes())
+                .unwrap_or(PoolInfo {
+                    pending_reward: Uint128::zero(),
+                    reward_index: Decimal::zero(),
+                });
+
+            let mut reward_amount = asset.amount.clone().multiply_ratio(num, den);
+
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: contract_addr.clone(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: cfg.collector.clone(),
+                    amount: asset.amount - reward_amount,
+                })?,
+                funds: vec![],
+            }));
+
+            if total_bond.is_zero() {
+                pool_info.pending_reward += reward_amount;
+            } else {
+                reward_amount += pool_info.pending_reward;
+                let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond);
+                pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
+                pool_info.pending_reward = Uint128::zero();
+            }
+
+            POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
         } else {
             return Err(StdError::generic_err(
                 "native tokens should be transformed into yluna and pluna before deposit",

@@ -180,11 +180,14 @@ async def test():
     import pprint
     for log in resp.logs:
         pprint.pprint(log.events_by_type)
-    exit()
-    resp = await yluna_staking.withdraw()
-    import pprint
 
-    pprint.pprint(resp.logs[0].events_by_type)
+    resp = await yluna_staking.withdraw()
+    print(await yluna_token.query.balance(address=account.acc_address))
+
+    import pprint
+    for log in resp.logs:
+        pprint.pprint(log.events_by_type)
+
     await yluna_staking.unbond(amount="1000000")
 
     await account.chain(

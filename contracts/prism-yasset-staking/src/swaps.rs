@@ -74,16 +74,16 @@ pub fn process_delegator_rewards(
 pub fn luna_to_cluna(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
     let luna_amt = query_balance(&deps.querier, env.contract.address, "uluna".to_string())?;
-    Ok(
-        Response::new().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+    Ok(Response::new()
+        .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.vault,
             msg: to_binary(&VaultExecuteMsg::Bond { validator: None })?,
             funds: vec![Coin {
                 denom: "uluna".to_string(),
                 amount: luna_amt,
             }],
-        })),
-    )
+        }))
+        .add_attributes(vec![attr("action", "luna_to_cluna")]))
 }
 
 pub fn convert_and_deposit_cluna(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
@@ -93,42 +93,44 @@ pub fn convert_and_deposit_cluna(deps: DepsMut, env: Env) -> StdResult<Response<
         Addr::unchecked(cfg.cluna_token.clone()),
         env.contract.address.clone(),
     )?;
-    Ok(Response::new().add_messages(vec![
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.cluna_token.clone(),
-            msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                spender: cfg.vault.clone(),
-                amount: cluna_amt.clone(),
-                expires: None,
-            })?,
-            funds: vec![],
-        }),
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.vault,
-            msg: to_binary(&VaultExecuteMsg::Split { amount: cluna_amt })?,
-            funds: vec![],
-        }),
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: env.contract.address.clone().to_string(),
-            msg: to_binary(&ExecuteMsg::DepositRewards {
-                assets: vec![
-                    Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: cfg.yluna_token.clone(),
+    Ok(Response::new()
+        .add_messages(vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.cluna_token.clone(),
+                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: cfg.vault.clone(),
+                    amount: cluna_amt.clone(),
+                    expires: None,
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.vault,
+                msg: to_binary(&VaultExecuteMsg::Split { amount: cluna_amt })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: env.contract.address.clone().to_string(),
+                msg: to_binary(&ExecuteMsg::DepositRewards {
+                    assets: vec![
+                        Asset {
+                            info: AssetInfo::Token {
+                                contract_addr: cfg.yluna_token.clone(),
+                            },
+                            amount: cluna_amt.clone(),
                         },
-                        amount: cluna_amt.clone(),
-                    },
-                    Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: cfg.pluna_token.clone(),
+                        Asset {
+                            info: AssetInfo::Token {
+                                contract_addr: cfg.pluna_token.clone(),
+                            },
+                            amount: cluna_amt.clone(),
                         },
-                        amount: cluna_amt.clone(),
-                    },
-                ],
-            })?,
-            funds: vec![],
-        }),
-    ]))
+                    ],
+                })?,
+                funds: vec![],
+            }),
+        ])
+        .add_attributes(vec![attr("action", "convert_and_deposit_cluna")]))
 }
 
 pub fn query_exchange_rates(
