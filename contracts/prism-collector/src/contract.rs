@@ -52,7 +52,7 @@ pub fn execute(
 /// Convert
 /// Anyone can execute convert function to swap
 /// asset token => collateral token
-/// collateral token => NEB token
+/// collateral token => PRISM token
 pub fn convert(deps: DepsMut, env: Env, asset_token: String) -> StdResult<Response> {
     let config: Config = read_config(deps.storage)?;
     let terraswap_factory_raw = config.terraswap_factory;

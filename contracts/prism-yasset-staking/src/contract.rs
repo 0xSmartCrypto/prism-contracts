@@ -32,6 +32,7 @@ pub fn instantiate(
             vault: msg.vault,
             gov: msg.gov,
             collector: msg.collector,
+            // TODO -- query vault for these addresses
             cluna_token: msg.cluna_token,
             yluna_token: msg.yluna_token.clone(),
             pluna_token: msg.pluna_token.clone(),

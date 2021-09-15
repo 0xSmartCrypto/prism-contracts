@@ -48,6 +48,7 @@ pub fn instantiate(
         })?;
 
     // store config
+    // TODO -- auto create yluna, pluna, cluna token contracts from token code id
     let data = Config {
         creator: sender.to_string(),
         yluna_staking: None,
