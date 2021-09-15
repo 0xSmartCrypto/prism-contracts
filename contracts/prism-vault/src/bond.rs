@@ -1,6 +1,8 @@
 use crate::contract::{query_total_issued, slashing};
 use crate::math::decimal_division;
-use crate::state::{is_valid_validator, CONFIG, CURRENT_BATCH, PARAMETERS, STATE};
+use crate::state::{
+    is_valid_validator, read_valid_validators, CONFIG, CURRENT_BATCH, PARAMETERS, STATE,
+};
 use cosmwasm_std::{
     attr, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Response, StakingMsg, StdError,
     StdResult, SubMsg, Uint128, WasmMsg,
@@ -12,10 +14,19 @@ pub fn execute_bond(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    validator: String,
+    validator: Option<String>,
 ) -> StdResult<Response> {
     // validator must be whitelisted
-    let is_valid = is_valid_validator(deps.storage, validator.clone())?;
+
+    let unwrapped_validator = match validator {
+        Some(v) => v,
+        None => {
+            let validators = read_valid_validators(deps.storage)?;
+            let idx = env.block.time.nanos() as usize % validators.len();
+            validators[idx].clone()
+        }
+    };
+    let is_valid = is_valid_validator(deps.storage, unwrapped_validator.clone())?;
     if !is_valid {
         return Err(StdError::generic_err(
             "The chosen validator is currently not supported",
@@ -79,7 +90,7 @@ pub fn execute_bond(
     let mut messages: Vec<SubMsg> = vec![
         // send the delegate message
         SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
-            validator,
+            validator: unwrapped_validator,
             amount: payment.clone(),
         })),
     ];

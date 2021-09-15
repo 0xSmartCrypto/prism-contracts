@@ -13,6 +13,7 @@ DEFAULT_PROPOSAL_DEPOSIT = "10000000000"
 DEFAULT_SNAPSHOT_PERIOD = 0
 DEFAULT_VOTER_WEIGHT = "0.1"
 
+
 async def test():
     if BOMBAY:
         key = MnemonicKey(
@@ -128,15 +129,24 @@ async def test():
         snapshot_period=DEFAULT_SNAPSHOT_PERIOD,
     )
 
+    prism_collector = await account.contract.create(
+        code_ids["prism_collector"],
+        distribution_contract=prism_gov,
+        terraswap_factory=terraswap_factory,
+        prism_token=prism_token,
+        base_denom="uusd",
+        owner=account.acc_address,
+    )
+
     yluna_staking = await account.contract.create(
         code_ids["prism_yasset_staking"],
         vault=prism_vault,
         gov=prism_gov,
-        prism_token=prism_token,
+        collector=prism_collector,
         yluna_token=yluna_token,
+        pluna_token=pluna_token,
         cluna_token=cluna_token,
-        reward_denom="uusd",
-        prism_pair=prism_pair,
+        init_coins={"uusd": "1000"},
     )
 
     await prism_vault.update_config(
@@ -166,8 +176,11 @@ async def test():
         amount="1000000", contract=yluna_staking, msg=yluna_staking.bond()
     )
 
-    await prism_vault.update_global_index()
-
+    resp = await prism_vault.update_global_index()
+    import pprint
+    for log in resp.logs:
+        pprint.pprint(log.events_by_type)
+    exit()
     resp = await yluna_staking.withdraw()
     import pprint
 
@@ -182,6 +195,7 @@ async def test():
 
     print(await cluna_token.query.balance(address=account.acc_address))
     print(await prism_token.query.balance(address=account.acc_address))
+    print(await prism_token.query.balance(address=prism_gov))
     print(prism_vault.address)
     print(await prism_vault.query.config())
 

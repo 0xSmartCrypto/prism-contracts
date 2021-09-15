@@ -1,5 +1,5 @@
 use crate::state::LaunchConfig;
-use cosmwasm_std::{Uint128};
+use cosmwasm_std::Uint128;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

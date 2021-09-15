@@ -1,4 +1,4 @@
-use cosmwasm_std::{Uint128, Decimal};
+use cosmwasm_std::{Decimal, Uint128};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,6 @@ pub const DISTRIBUTION_STATUS: Item<DistributionStatus> = Item::new("distributio
 pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
 
 pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");
-
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DistributionStatus {
@@ -24,7 +23,7 @@ pub struct Config {
     pub prism_token: String,
     pub yluna_staking: String,
     pub yluna_token: String,
-    pub distribution_schedule: (u64, u64, Uint128)
+    pub distribution_schedule: (u64, u64, Uint128),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

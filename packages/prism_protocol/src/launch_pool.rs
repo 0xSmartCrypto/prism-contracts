@@ -13,7 +13,7 @@ pub struct InstantiateMsg {
     pub yluna_token: String,
     // start, end, amount of $PRISM to distribute
     // distribute linearly
-    pub distribution_schedule: (u64, u64, Uint128)
+    pub distribution_schedule: (u64, u64, Uint128),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -35,8 +35,8 @@ pub enum ExecuteMsg {
 
     /// Helper for AdminWithdrawRewards
     AdminSendWithdrawnRewards {
-        original_balances: Vec<Asset>
-    }
+        original_balances: Vec<Asset>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -55,9 +55,7 @@ pub struct MigrateMsg {}
 pub enum QueryMsg {
     Config {},
     DistributionStatus {},
-    RewardInfo {
-        staker_addr: String,
-    },
+    RewardInfo { staker_addr: String },
 }
 
 // We define a custom struct for each query response

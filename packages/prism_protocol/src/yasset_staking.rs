@@ -9,11 +9,10 @@ use terraswap::asset::Asset;
 pub struct InstantiateMsg {
     pub vault: String,
     pub gov: String,
-    pub yluna_token: String,
+    pub collector: String,
     pub cluna_token: String,
-    pub prism_token: String,
-    pub reward_denom: String,
-    pub prism_pair: String,
+    pub yluna_token: String,
+    pub pluna_token: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -31,23 +30,13 @@ pub enum ExecuteMsg {
     Withdraw {},
 
     /// Private methods
-    /// Before depositing delegator rewards, record the old reward denom
-    /// balance, to get an accurate picture of what was gained
-    UpdateRewardDenomBalance {
+    /// 1) Swap delegator rewards to luna
+    /// 2) LunaToCluna
+    /// 3) ConvertAndDepositCluna
+    ProcessDelegatorRewards {},
 
-    },
-    /// Swap delegator rewards into UST
-    /// - Some UST goes towards yLUNA stakers
-    /// - The rest is swapped into $PRISM and sent to Prism governance
-    ProcessDelegatorRewards {
-
-    },
-
-    /// Everything has been swapped into $UST
-    DepositRewardDenom {},
-
-    /// deposit all $PRISM into gov contract
-    DepositPrism {},
+    LunaToCluna {},
+    ConvertAndDepositCluna {},
 
     /// Deposit rewards to yLuna stakers
     DepositRewards {
@@ -70,15 +59,9 @@ pub struct MigrateMsg {}
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-    PoolInfo {
-        asset_token: String,
-    },
-    RewardInfo {
-        staker_addr: String,
-    },
-    Whitelist {
-
-    }
+    PoolInfo { asset_token: String },
+    RewardInfo { staker_addr: String },
+    Whitelist {},
 }
 
 // We define a custom struct for each query response

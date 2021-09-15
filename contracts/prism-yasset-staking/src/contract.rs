@@ -14,9 +14,7 @@ use crate::rewards::{deposit_rewards, query_reward_info, withdraw_reward};
 use crate::staking::{bond, unbond};
 use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
 
-use crate::swaps::{
-    deposit_prism, deposit_reward_denom, process_delegator_rewards, update_reward_denom_balance,
-};
+use crate::swaps::{convert_and_deposit_cluna, luna_to_cluna, process_delegator_rewards};
 use cw20::Cw20ReceiveMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 use terraswap::asset::AssetInfo;
@@ -33,20 +31,24 @@ pub fn instantiate(
         &Config {
             vault: msg.vault,
             gov: msg.gov,
-            yluna_token: msg.yluna_token,
+            collector: msg.collector,
             cluna_token: msg.cluna_token,
-            prism_token: msg.prism_token.clone(),
-            reward_denom: msg.reward_denom.clone(),
-            prism_pair: msg.prism_pair,
+            yluna_token: msg.yluna_token.clone(),
+            pluna_token: msg.pluna_token.clone(),
         },
     )?;
 
     TOTAL_BOND_AMOUNT.save(deps.storage, &Uint128::zero())?;
     WHITELISTED_ASSETS.save(
         deps.storage,
-        &vec![AssetInfo::NativeToken {
-            denom: msg.reward_denom.clone(),
-        }],
+        &vec![
+            AssetInfo::Token {
+                contract_addr: msg.pluna_token.clone(),
+            },
+            AssetInfo::Token {
+                contract_addr: msg.yluna_token.clone(),
+            },
+        ],
     )?;
     Ok(Response::default())
 }
@@ -63,10 +65,9 @@ pub fn execute(
         ExecuteMsg::Unbond { amount } => unbond(deps, info.sender.to_string(), amount),
         ExecuteMsg::Withdraw {} => withdraw_reward(deps, info),
         ExecuteMsg::DepositRewards { assets } => deposit_rewards(deps, env, info, assets),
-        ExecuteMsg::DepositPrism {} => deposit_prism(deps, env, info),
-        ExecuteMsg::UpdateRewardDenomBalance {} => update_reward_denom_balance(deps, env, info),
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
-        ExecuteMsg::DepositRewardDenom {} => deposit_reward_denom(deps, env, info),
+        ExecuteMsg::LunaToCluna {} => luna_to_cluna(deps, env),
+        ExecuteMsg::ConvertAndDepositCluna {} => convert_and_deposit_cluna(deps, env),
     }
 }
 

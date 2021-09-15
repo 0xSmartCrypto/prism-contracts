@@ -1,8 +1,7 @@
 use crate::querier::load_token_balance;
 use crate::state::{
-    bank_read, bank_store, config_read, config_store, poll_read,
-    poll_voter_store, read_bank_stakers, state_read, state_store, Config, Poll, State,
-    TokenManager,
+    bank_read, bank_store, config_read, config_store, poll_read, poll_voter_store,
+    read_bank_stakers, state_read, state_store, Config, Poll, State, TokenManager,
 };
 
 use cosmwasm_std::{
@@ -11,9 +10,7 @@ use cosmwasm_std::{
 };
 use cw20::Cw20ExecuteMsg;
 use prism_protocol::common::OrderBy;
-use prism_protocol::gov::{
-    PollStatus, SharesResponse, SharesResponseItem, StakerResponse,
-};
+use prism_protocol::gov::{PollStatus, SharesResponse, SharesResponseItem, StakerResponse};
 
 pub fn stake_voting_tokens(deps: DepsMut, sender: String, amount: Uint128) -> StdResult<Response> {
     if amount.is_zero() {
@@ -155,10 +152,10 @@ fn compute_locked_balance(
 
 pub fn deposit_reward(_deps: DepsMut, amount: Uint128) -> StdResult<Response> {
     return Ok(Response::new().add_attributes(vec![
-            attr("action", "deposit_reward"),
-            attr("amount", amount.to_string()),
-        ]));
-    }
+        attr("action", "deposit_reward"),
+        attr("amount", amount.to_string()),
+    ]));
+}
 
 fn send_tokens(
     deps: DepsMut,

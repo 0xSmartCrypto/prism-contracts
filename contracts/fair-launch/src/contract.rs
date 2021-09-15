@@ -1,8 +1,8 @@
 use crate::msg::{DepositResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{Config, LaunchConfig, CONFIG, DEPOSITS, TOTAL_DEPOSIT};
 use cosmwasm_std::{
-    entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdError, StdResult, Uint128, WasmMsg,
+    entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, Uint128, WasmMsg,
 };
 use cw20_base::msg::ExecuteMsg as TokenMsg;
 use terraswap::asset::{Asset, AssetInfo};

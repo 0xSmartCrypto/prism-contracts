@@ -65,14 +65,10 @@ pub enum ExecuteMsg {
     },
 
     /// Register receives the reward contract address
-    RegisterValidator {
-        validator: String,
-    },
+    RegisterValidator { validator: String },
 
     /// Remove the validator from validators whitelist
-    DeregisterValidator {
-        validator: String,
-    },
+    DeregisterValidator { validator: String },
 
     /// update the parameters that is needed for the contract
     UpdateParams {
@@ -89,14 +85,11 @@ pub enum ExecuteMsg {
     /// Receives `amount` in underlying coin denom from sender.
     /// Delegate `amount` to a specific `validator`.
     /// Issue `amount` / exchange_rate for the user.
-    Bond {
-        validator: String,
-    },
+    /// If validator not present, pick a pseudo-randomly generated validator
+    Bond { validator: Option<String> },
 
     /// Update global index
-    UpdateGlobalIndex {
-        airdrop_hooks: Option<Vec<Binary>>,
-    },
+    UpdateGlobalIndex { airdrop_hooks: Option<Vec<Binary>> },
 
     /// Send back unbonded coin to the user
     WithdrawUnbonded {},
@@ -114,21 +107,15 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
 
     /// Split cLuna into yLuna and pLuna
-    Split {
-        amount: Uint128,
-    },
+    Split { amount: Uint128 },
 
     /// Merge yLuna and pLuna into cLuna
-    Merge {
-        amount: Uint128,
-    },
+    Merge { amount: Uint128 },
 
     ////////////////////
     /// internal operations
     ///////////////////
-    DepositAirdropReward {
-        airdrop_token_contract: String
-    },
+    DepositAirdropReward { airdrop_token_contract: String },
     ClaimAirdrop {
         airdrop_token_contract: String, // Contract address of MIR Cw20 Token
         airdrop_contract: String,       // Contract address of MIR Airdrop

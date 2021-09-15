@@ -1,15 +1,17 @@
 use cosmwasm_std::{
-    attr, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Storage, Uint128, WasmMsg,
+    attr, to_binary, Addr, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
+    StdError, StdResult, Storage, Uint128, WasmMsg,
 };
 
 use crate::state::{
-    PoolInfo, RewardInfo, BOND_AMOUNTS, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS,
+    PoolInfo, RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT,
+    WHITELISTED_ASSETS,
 };
 
 use cw20::Cw20ExecuteMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 use terraswap::asset::{Asset, AssetInfo};
+use terraswap::querier::query_supply;
 
 // deposit_reward must be from reward token contract
 pub fn deposit_rewards(
@@ -18,45 +20,75 @@ pub fn deposit_rewards(
     info: MessageInfo,
     assets: Vec<Asset>,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let mut messages: Vec<CosmosMsg<WasmMsg>> = vec![];
-    let total_bond = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+    let cfg = CONFIG.load(deps.storage)?;
 
-    for asset in assets {
-        if env.contract.address == info.sender {
-        } else if let AssetInfo::Token { contract_addr, .. } = &asset.info {
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: contract_addr.clone(),
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: info.sender.to_string(),
-                    recipient: env.contract.address.to_string(),
-                    amount: asset.amount,
-                })?,
-                funds: vec![],
-            }));
-        } else {
-            asset.assert_sent_native_token_balance(&info)?;
-        }
-        let mut pool_info = POOL_INFO
-            .load(deps.storage, &asset.info.to_string().as_bytes())
-            .unwrap_or(PoolInfo {
-                pending_reward: Uint128::zero(),
-                reward_index: Decimal::zero(),
-            });
+    let total_share = query_supply(&deps.querier, Addr::unchecked(cfg.yluna_token.clone()))?
+        + query_supply(&deps.querier, Addr::unchecked(cfg.cluna_token))?;
 
-        let mut reward_amount = asset.amount.clone();
-        if total_bond.is_zero() {
-            pool_info.pending_reward += reward_amount;
-        } else {
-            reward_amount += pool_info.pending_reward;
-            let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond);
-            pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
-            pool_info.pending_reward = Uint128::zero();
-        }
-
-        POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
+    if total_share.is_zero() {
+        return Err(StdError::generic_err("no luna in vault"));
     }
 
-    Ok(Response::new().add_attributes(vec![attr("action", "deposit_reward")]))
+    let yluna_staked = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+    let num = yluna_staked.multiply_ratio(9u8, 1u8);
+    let den = total_share.multiply_ratio(10u8, 1u8);
+
+    let total_bond = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+
+    let mut messages = vec![];
+
+    for asset in assets {
+        if let AssetInfo::Token { contract_addr, .. } = &asset.info {
+            if env.contract.address.as_str() != info.sender.as_str() {
+                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: contract_addr.clone(),
+                    msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                        owner: info.sender.to_string(),
+                        recipient: env.contract.address.to_string(),
+                        amount: asset.amount,
+                    })?,
+                    funds: vec![],
+                }));
+
+                let mut pool_info = POOL_INFO
+                    .load(deps.storage, &asset.info.to_string().as_bytes())
+                    .unwrap_or(PoolInfo {
+                        pending_reward: Uint128::zero(),
+                        reward_index: Decimal::zero(),
+                    });
+
+                let mut reward_amount = asset.amount.clone().multiply_ratio(num, den);
+
+                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: contract_addr.clone(),
+                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                        recipient: cfg.collector.clone(),
+                        amount: asset.amount - reward_amount,
+                    })?,
+                    funds: vec![],
+                }));
+
+                if total_bond.is_zero() {
+                    pool_info.pending_reward += reward_amount;
+                } else {
+                    reward_amount += pool_info.pending_reward;
+                    let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond);
+                    pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
+                    pool_info.pending_reward = Uint128::zero();
+                }
+
+                POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
+            }
+        } else {
+            return Err(StdError::generic_err(
+                "native tokens should be transformed into yluna and pluna before deposit",
+            ));
+        }
+    }
+
+    Ok(Response::new()
+        .add_messages(messages)
+        .add_attributes(vec![attr("action", "deposit_reward")]))
 }
 
 // withdraw all rewards or single reward depending on asset_token
