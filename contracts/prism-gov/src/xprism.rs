@@ -59,7 +59,9 @@ pub fn pull_rewards(
     let address_vec = address.as_bytes().to_vec();
     let address_len = address_vec.len();
 
-    let (mut w_xprism, mut w_prism) = PENDING_WITHDRAW.load(storage, address.as_bytes())?;
+    let (mut w_xprism, mut w_prism) = PENDING_WITHDRAW
+        .load(storage, address.as_bytes())
+        .unwrap_or((Uint128::zero(), Uint128::zero()));
     let mut to_delete = vec![];
 
     for item in PRISM_RETURN.range(storage, start, None, OrderBy::Asc.into()) {
@@ -101,13 +103,17 @@ pub fn redeem_xprism(
 
     let prism_to_return = amount.multiply_ratio(prism_amt, xprism_amt);
 
+    let mut end_time = env.block.time.seconds() + REDEMPTION_TIME;
+    end_time -= end_time % TIME_UNIT;
+
+    let (orig_xprism, orig_prism) = PRISM_RETURN
+        .load(deps.storage, (sender.as_bytes(), &end_time.to_be_bytes()))
+        .unwrap_or((Uint128::zero(), Uint128::zero()));
+
     PRISM_RETURN.save(
         deps.storage,
-        (
-            sender.as_bytes(),
-            &(env.block.time.seconds() + REDEMPTION_TIME).to_be_bytes(),
-        ),
-        &(amount, prism_to_return),
+        (sender.as_bytes(), &end_time.to_be_bytes()),
+        &(orig_xprism + amount, orig_prism + prism_to_return),
     )?;
 
     Ok(Response::new().add_attributes(vec![

@@ -9,6 +9,15 @@ pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
 
 pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");
 
+pub const SCHEDULED_VEST: Map<(&[u8], &[u8]), Uint128> = Map::new("scheduled_vest");
+// address -> (xprism_amt, prism_amt)
+// upon withdraw, prism_amt is returned, xprism_amt is burned
+pub const PENDING_WITHDRAW: Map<&[u8], Uint128> = Map::new("pending_withdraw");
+
+// seconds in a day, make time discrete per day
+pub const TIME_UNIT: u64 = 60 * 60 * 24;
+pub const REDEMPTION_TIME: u64 = TIME_UNIT * 21u64;
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DistributionStatus {
     pub total_distributed: Uint128,

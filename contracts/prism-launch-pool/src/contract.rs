@@ -1,6 +1,7 @@
 use crate::state::{
     Config, DistributionStatus, RewardInfo, BOND_AMOUNTS, CONFIG, DISTRIBUTION_STATUS, REWARD_INFO,
 };
+use crate::vest::{claim_withdrawn_rewards, withdraw_rewards};
 use cosmwasm_std::{
     entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, QueryRequest, Response, StdError, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
@@ -43,6 +44,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::WithdrawRewards {} => withdraw_rewards(deps, env, info),
+        ExecuteMsg::ClaimWithdrawnRewards {} => claim_withdrawn_rewards(deps, env, info),
         ExecuteMsg::AdminWithdrawRewards {} => admin_withdraw_rewards(deps, env, info),
         ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
             admin_send_withdrawn_rewards(deps, env, info, &original_balances)
@@ -122,23 +124,6 @@ pub fn admin_send_withdrawn_rewards(
     }
 
     Ok(Response::new().add_messages(messages))
-}
-
-pub fn withdraw_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
-    update_reward_index(deps.storage, &env)?;
-    pull_pending_rewards(deps.storage, &info.sender.clone().to_string())?;
-    let cfg = CONFIG.load(deps.storage)?;
-    let mut reward_info = REWARD_INFO.load(deps.storage, info.sender.as_bytes())?;
-    let to_withdraw = Asset {
-        info: AssetInfo::Token {
-            contract_addr: cfg.prism_token,
-        },
-        amount: reward_info.pending_reward,
-    };
-    reward_info.pending_reward = Uint128::zero();
-    REWARD_INFO.save(deps.storage, info.sender.as_bytes(), &reward_info)?;
-
-    Ok(Response::new().add_message(to_withdraw.into_msg(&deps.querier, info.sender)?))
 }
 
 pub fn bond(deps: DepsMut, env: Env, sender: &String, amount: Uint128) -> StdResult<Response> {

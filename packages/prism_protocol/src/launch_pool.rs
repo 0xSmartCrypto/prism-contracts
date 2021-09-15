@@ -28,7 +28,10 @@ pub enum ExecuteMsg {
         amount: Uint128,
     },
     /// Withdraw $PRISM rewards
+    /// Starts 30 days vesting period
     WithdrawRewards {},
+
+    ClaimWithdrawnRewards {},
 
     /// Withdraw underlying rewards from yLUNA staking contract
     AdminWithdrawRewards {},
