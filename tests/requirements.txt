@@ -1,0 +1,7 @@
+# main
+terra-sdk >= 1.0.0b2
+# testing
+pytest
+pytest-asyncio
+pytest-clarity
+pytest-dependency

@@ -1,5 +1,4 @@
 import asyncio
-from terra_sdk.client.lcd import AsyncLCDClient
 from terra_sdk.client.localterra import AsyncLocalTerra
 from terra_sdk.core.wasm import (
     MsgStoreCode,
@@ -12,12 +11,10 @@ import os
 import json
 import base64
 
-
 CONTRACT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(__file__)),
     "artifacts",
 )
-
 
 class Asset:
     @staticmethod
@@ -29,11 +26,22 @@ class Asset:
         return {"native_token": {"denom": denom}}
 
     @staticmethod
+    def nft_asset_info(contract_addr, token_id):
+        return {"nft": {"contract_addr": contract_addr, "token_id": token_id}}
+
+    @staticmethod
     def asset(string, amount, native=False):
         if not native:
             return {"info": Asset.cw20_asset_info(string), "amount": amount}
         else:
             return {"info": Asset.native_asset_info(string), "amount": amount}
+
+    @staticmethod
+    def nft(contract_addr, token_id):
+        return {
+            "info": Asset.nft_asset_info(contract_addr, token_id),
+            "amount": "1",
+        }
 
 
 def custom_objs_to_json(obj):
@@ -50,44 +58,41 @@ def custom_objs_to_json(obj):
     return obj
 
 
+async def store_contracts(accounts):
+
+    contract_names = [i[:-5] for i in os.listdir(CONTRACT_DIR) if i.endswith(".wasm")]
+
+    res = {}
+
+    async def store_loop(account):
+        while contract_names:
+            name = contract_names.pop()
+            contract_id = await account.store_contract(name)
+            res[name] = contract_id
+
+    await asyncio.gather(*[store_loop(i) for i in accounts])
+    return res
+
+lt = AsyncLocalTerra(gas_prices={"uusd": "0.15"})
+
 class Account:
-    def __init__(self, bombay=False, key=None):
+    def __init__(self, lcd_client=None, key=None, ecosystem=None):
+        self.ecosystem = ecosystem
+        if lcd_client:
 
-        lt = AsyncLocalTerra(gas_prices={"uusd": "0.15"})
-        self.bombay = bombay
-        if bombay:
-
-            gas_prices = {
-                "uluna": "0.15",
-                "usdr": "0.1018",
-                "uusd": "0.15",
-                "ukrw": "178.05",
-                "umnt": "431.6259",
-                "ueur": "0.125",
-                "ucny": "0.97",
-                "ujpy": "16",
-                "ugbp": "0.11",
-                "uinr": "11",
-                "ucad": "0.19",
-                "uchf": "0.13",
-                "uaud": "0.19",
-                "usgd": "0.2",
-            }
-
-            self.terra = AsyncLCDClient(
-                "https://bombay-fcd.terra.dev", "bombay-10", gas_prices=gas_prices
-            )
-            if key is None:
-                key = lt.wallets["test1"].key
-            self.deployer = self.terra.wallet(key)
+            self.terra = lcd_client
         else:
-            if key is None:
-                key = "test1"
             self.terra = lt
-            self.deployer = lt.wallets[key]
 
+        if isinstance(key, str):
+            key = lt.wallets[key].key
+        if key is None:
+            key = lt.wallets["test1"].key
+
+        self.deployer = self.terra.wallet(key)
         self.key = self.deployer.key
-        self.acc_address = self.key.acc_address
+
+        self.address = self.acc_address = self.key.acc_address
         self.sequence = None
 
         outer_obj = self
@@ -173,19 +178,11 @@ class Account:
         self.execute = ExecuteMessage
         self.contract = Contract
 
-    async def store_contracts(self):
-
-        contract_names = [
-            i[:-5] for i in os.listdir(CONTRACT_DIR) if i.endswith(".wasm")
-        ]
-        return {
-            contract_name: await self.store_contract(contract_name)
-            for contract_name in contract_names
-        }
-
     async def store_contract(self, contract_name):
+
         contract_bytes = read_file_as_b64(f"{CONTRACT_DIR}/{contract_name}.wasm")
         store_code = MsgStoreCode(self.acc_address, contract_bytes)
+
         result = await self.sign_and_broadcast(store_code)
         code_id = get_code_id(result)
         print(f"Code id for {contract_name} is {code_id}")
@@ -193,6 +190,9 @@ class Account:
 
     async def chain(self, *messages):
         return await self.sign_and_broadcast(*[i.msg for i in messages])
+
+    def chain_id(self):
+        return self.terra.chain_id
 
     async def sign_and_broadcast(self, *msgs):
         if self.sequence is None:
@@ -213,6 +213,11 @@ class Account:
         except:
             self.sequence = await self.deployer.sequence()
             raise
+
+    def __getattr__(self, item):
+        if self.ecosystem is None:
+            raise AttributeError
+        return self.contract(self.ecosystem.contract_addrs[item])
 
     async def __aenter__(self):
         await self.terra.__aenter__()
