@@ -88,6 +88,11 @@ pub enum ExecuteMsg {
     /// If validator not present, pick a pseudo-randomly generated validator
     Bond { validator: Option<String> },
 
+    /// do bond, then split cluna into yluna and pluna
+    BondSplit {
+        validator: Option<String>
+    },
+
     /// Update global index
     UpdateGlobalIndex { airdrop_hooks: Option<Vec<Binary>> },
 

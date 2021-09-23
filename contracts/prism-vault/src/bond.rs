@@ -8,18 +8,68 @@ use cosmwasm_std::{
     StdResult, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
+use cw20_base::msg::ExecuteMsg as TokenMsg;
 use prism_protocol::vault::State;
 
-pub fn execute_bond(
-    mut deps: DepsMut,
+pub fn execute_bond_split(
+    deps: DepsMut,
     env: Env,
     info: MessageInfo,
     validator: Option<String>,
 ) -> StdResult<Response> {
+    let config = CONFIG.load(deps.storage)?;
+    let params = PARAMETERS.load(deps.storage)?;
+    let coin_denom = params.underlying_coin_denom;
+
+    let (mint_amount_with_fee, mut sub_messages) = _execute_bond(deps, &env, &info, &validator)?;
+    sub_messages.pop();
+
+    let payment = info
+        .funds
+        .iter()
+        .find(|x| x.denom == coin_denom && x.amount > Uint128::zero())
+        .ok_or_else(|| {
+            StdError::generic_err(format!("No {} assets are provided to bond", coin_denom))
+        })?;
+
+    Ok(Response::new()
+        .add_submessages(sub_messages)
+        .add_messages(vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: config.yluna_contract.unwrap(),
+                msg: to_binary(&TokenMsg::Mint {
+                    recipient: info.sender.clone().into_string(),
+                    amount: mint_amount_with_fee.clone(),
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: config.pluna_contract.unwrap(),
+                msg: to_binary(&TokenMsg::Mint {
+                    recipient: info.sender.clone().into_string(),
+                    amount: mint_amount_with_fee.clone(),
+                })?,
+                funds: vec![],
+            }),
+        ])
+        .add_attributes(vec![
+            attr("action", "bond_split"),
+            attr("from", info.sender.as_str().clone()),
+            attr("bonded", payment.amount),
+            attr("minted", mint_amount_with_fee),
+        ]))
+}
+
+pub fn _execute_bond(
+    mut deps: DepsMut,
+    env: &Env,
+    info: &MessageInfo,
+    validator: &Option<String>,
+) -> StdResult<(Uint128, Vec<SubMsg>)> {
     // validator must be whitelisted
 
     let unwrapped_validator = match validator {
-        Some(v) => v,
+        Some(v) => v.clone(),
         None => {
             let validators = read_valid_validators(deps.storage)?;
             let idx = env.block.time.nanos() as usize % validators.len();
@@ -58,10 +108,10 @@ pub fn execute_bond(
         })?;
 
     // check slashing
-    slashing(&mut deps, env)?;
+    slashing(&mut deps, env.clone())?;
 
     let state = STATE.load(deps.storage)?;
-    let sender = info.sender;
+    let sender = info.sender.clone();
 
     // get the total supply
     let mut total_supply = query_total_issued(deps.as_ref()).unwrap_or_default();
@@ -87,36 +137,55 @@ pub fn execute_bond(
         Ok(prev_state)
     })?;
 
-    let mut messages: Vec<SubMsg> = vec![
-        // send the delegate message
-        SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
-            validator: unwrapped_validator,
-            amount: payment.clone(),
-        })),
-    ];
-
-    // issue the basset token for sender
-    let mint_msg = Cw20ExecuteMsg::Mint {
-        recipient: sender.to_string(),
-        amount: mint_amount_with_fee,
-    };
-
     let config = CONFIG.load(deps.storage)?;
     let token_address = config
         .cluna_contract
         .expect("the cluna contract must have been registered");
 
-    messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: token_address,
-        msg: to_binary(&mint_msg)?,
-        funds: vec![],
-    })));
+    Ok((
+        mint_amount_with_fee,
+        vec![
+            SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
+                validator: unwrapped_validator,
+                amount: payment.clone(),
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: token_address,
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: sender.to_string(),
+                    amount: mint_amount_with_fee,
+                })?,
+                funds: vec![],
+            })),
+        ],
+    ))
+}
 
+pub fn execute_bond(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    validator: Option<String>,
+) -> StdResult<Response> {
+    // validator must be whitelisted
+
+    let params = PARAMETERS.load(deps.storage)?;
+    let coin_denom = params.underlying_coin_denom;
+
+    let payment = info
+        .funds
+        .iter()
+        .find(|x| x.denom == coin_denom && x.amount > Uint128::zero())
+        .ok_or_else(|| {
+            StdError::generic_err(format!("No {} assets are provided to bond", coin_denom))
+        })?;
+
+    let (mint_amount_with_fee, messages) = _execute_bond(deps, &env, &info, &validator)?;
     Ok(Response::new()
         .add_submessages(messages)
         .add_attributes(vec![
-            attr("action", "mint"),
-            attr("from", sender),
+            attr("action", "bond"),
+            attr("from", info.sender.as_str().clone()),
             attr("bonded", payment.amount),
             attr("minted", mint_amount_with_fee),
         ]))

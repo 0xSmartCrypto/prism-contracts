@@ -64,7 +64,7 @@ pub fn withdraw_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult
         deps.storage,
         (info.sender.as_bytes(), &end_time.to_be_bytes()),
         &(orig_vest + reward_info.pending_reward),
-    );
+    )?;
     Ok(Response::new())
 }
 
@@ -75,8 +75,6 @@ pub fn claim_withdrawn_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> St
         env.block.time.seconds(),
         &info.sender.to_string(),
     )?;
-    let sender_str = info.sender.clone().to_string();
-    let orig_vest = PENDING_WITHDRAW.load(deps.storage, sender_str.as_bytes())?;
     let amount = PENDING_WITHDRAW.load(deps.storage, info.sender.to_string().as_bytes())?;
     PENDING_WITHDRAW.save(
         deps.storage,

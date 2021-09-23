@@ -17,7 +17,7 @@ use crate::state::{
 };
 use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 
-use crate::bond::execute_bond;
+use crate::bond::{execute_bond, execute_bond_split};
 use crate::refract::{merge, split};
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw20_legacy::state::TokenInfo;
@@ -119,6 +119,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::Bond { validator } => execute_bond(deps, env, info, validator),
+        ExecuteMsg::BondSplit { validator } => execute_bond_split(deps, env, info, validator),
         ExecuteMsg::UpdateGlobalIndex { airdrop_hooks } => {
             execute_update_global(deps, env, airdrop_hooks)
         }
