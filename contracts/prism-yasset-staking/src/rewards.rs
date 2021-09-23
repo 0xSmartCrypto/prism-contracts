@@ -12,6 +12,7 @@ use cw20::Cw20ExecuteMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 use terraswap::asset::{Asset, AssetInfo};
 use terraswap::querier::query_supply;
+use prism_protocol::yasset_staking::RewardInfoResponse;
 
 // deposit_reward must be from reward token contract
 pub fn deposit_rewards(
@@ -176,7 +177,7 @@ pub fn pull_rewards(storage: &mut dyn Storage, owner: &String) -> StdResult<()> 
     Ok(())
 }
 
-pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<Vec<Asset>> {
+pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInfoResponse> {
     let bond_amount = BOND_AMOUNTS
         .load(deps.storage, staker_addr.as_bytes())
         .unwrap_or(Uint128::zero());
@@ -209,5 +210,10 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<Vec<Asset
             amount: reward_info.pending_reward,
         });
     }
-    Ok(reward_infos)
+
+    Ok(RewardInfoResponse {
+        staker_addr,
+        staked_amt: bond_amount,
+        reward_infos,
+    })
 }

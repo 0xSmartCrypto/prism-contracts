@@ -249,3 +249,31 @@ async def split_cluna(account, cluna_token, prism_vault, amount):
         cluna_token.increase_allowance(spender=prism_vault, amount=amount),
         prism_vault.split(amount=amount),
     )
+
+async def stake_yluna(account, yluna_token, yluna_staking, amount):
+    await yluna_token.send(
+        amount=amount, contract=yluna_staking, msg=yluna_staking.bond()
+    )
+
+async def update_global_index(prism_vault):
+    resp = await prism_vault.update_global_index()
+    #import pprint
+    #for log in resp.logs:
+    #    pprint.pprint(log.events_by_type)
+    return resp
+
+async def unstake_yluna(yluna_staking, amount):
+    await yluna_staking.unbond(amount=amount)
+
+async def withdraw_all_rewards(account, prism_vault, yluna_staking):
+    await account.chain(
+        prism_vault.update_global_index(),
+        yluna_staking.withdraw()
+    )
+
+async def merge_cluna(account, yluna_token, pluna_token, prism_vault, amount):
+    await account.chain(
+        yluna_token.increase_allowance(spender=prism_vault, amount=amount),
+        pluna_token.increase_allowance(spender=prism_vault, amount=amount),
+        prism_vault.merge(amount=amount),
+    )

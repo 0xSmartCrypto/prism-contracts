@@ -58,7 +58,8 @@ async def account():
 @pytest.fixture(scope='session')
 async def setup_contracts(account):
     """Sets up the PRISM contracts to prepare for testing."""
-    return await prism_core.setup_contracts(account)
+    contracts = await prism_core.setup_contracts(account)
+    return contracts
 ###################################################
 # Test Logic
 ###################################################
@@ -78,7 +79,10 @@ async def test_cluna_bonding(setup_contracts, account):
 @pytest.mark.asyncio
 @pytest.mark.dependency(depends=["test_cluna_bonding"])
 async def test_cluna_splitting(setup_contracts, account):
-    """Tests cLuna splitting (cLuna -> yLuna & pLuna) logic."""
+    """Tests cLuna splitting (cLuna -> yLuna & pLuna) logic.
+    
+    Depends on cLuna being bonded already (e.g. "test_cluna_bonding").
+    """
     # Step 1: Spit current cLuna balance and test...
     bal = await setup_contracts['cluna_token'].query.balance(address=account.acc_address)
     await prism_core.split_cluna(
@@ -104,5 +108,70 @@ async def test_cluna_splitting(setup_contracts, account):
     # Step 3: Ensure cLuna balance is zero...
     bal = await setup_contracts['cluna_token'].query.balance(address=account.acc_address)
     assert '0' == bal['balance']
+    # Step 4: Attempt to split cLuna without cLuna balance (should fail)...
+    with pytest.raises(Exception) as ex:
+        await prism_core.split_cluna(
+            account,
+            setup_contracts['cluna_token'],
+            setup_contracts['prism_vault'],
+            '1'
+        )
+    assert "execute wasm contract failed" in str(ex.value)
 
-# TODO: test invalid values...
+@pytest.mark.asyncio
+@pytest.mark.dependency(depends=["test_cluna_splitting"])
+async def test_yluna_staking(setup_contracts, account):
+    # Step 1: Stake all yLuna into the Vault...
+    yluna = await setup_contracts['yluna_token'].query.balance(address=account.acc_address)
+    original_bal = yluna['balance']
+    print(f"Attempting to stake {original_bal} yLuna...")
+    await prism_core.stake_yluna(account, setup_contracts['yluna_token'], setup_contracts['yluna_staking'], original_bal)
+    # Step 2: Update Rewards...
+    await prism_core.update_global_index(setup_contracts['prism_vault'])
+    # Step 3: Attempt to unstake 1 micro-yLuna
+    await prism_core.unstake_yluna(setup_contracts['yluna_staking'], '1')
+    # Step 4: Ensure that amount staked is 1 micro-yLuna less than before 
+    s = await setup_contracts['yluna_staking'].query.reward_info(staker_addr=account.acc_address)
+    print(f"{s}")
+    assert s['staked_amt'] == str(int(original_bal) - 1)
+    # Step 5: Ensure that yLuna balance is 1 micro-yLuna
+    yluna = await setup_contracts['yluna_token'].query.balance(address=account.acc_address)
+    assert yluna['balance'] == '1'
+    # Step 6: Withdraw remaining bonded yLuna...
+    await prism_core.unstake_yluna(setup_contracts['yluna_staking'], str(int(original_bal) - 1))
+    # Step 7: Ensure that amount staked is 0
+    s = await setup_contracts['yluna_staking'].query.reward_info(staker_addr=account.acc_address)
+    print(f"{s}")
+    assert s['staked_amt'] == '0'
+    # Step 8: Ensure that yLuna balance is original yLuna amount
+    yluna = await setup_contracts['yluna_token'].query.balance(address=account.acc_address)
+    assert yluna['balance'] == original_bal
+    # Step 9: Withdraw all rewards
+    await prism_core.withdraw_all_rewards(account, setup_contracts['prism_vault'], setup_contracts['yluna_staking'])
+    # Step 10: Ensure that the yLuna balance is higher than the original yLuna amount
+    yluna = await setup_contracts['yluna_token'].query.balance(address=account.acc_address)
+    print(f"Total yLuna balance: {yluna['balance']}")
+    assert int(yluna['balance']) > int(original_bal)
+    # Step 11: Ensure that there are no rewards available in the Vault
+    s = await setup_contracts['yluna_staking'].query.reward_info(staker_addr=account.acc_address)
+    print(f"{s}")
+    for ss in s['reward_infos']:
+        assert ss['amount'] == '0'
+
+@pytest.mark.asyncio
+@pytest.mark.dependency(depends=["test_yluna_staking"])
+async def test_cluna_merging(setup_contracts, account):
+    yluna = await setup_contracts['yluna_token'].query.balance(address=account.acc_address)
+    original_bal = yluna['balance']
+    await prism_core.merge_cluna(
+        account,
+        setup_contracts['yluna_token'],
+        setup_contracts['pluna_token'],
+        setup_contracts['prism_vault'],
+        original_bal
+    )
+    yluna = await setup_contracts['yluna_token'].query.balance(address=account.acc_address)
+    assert yluna['balance'] == '0'
+    cluna = await setup_contracts['cluna_token'].query.balance(address=account.acc_address)
+    print(f"Total cLuna balance: {cluna['balance']}")
+    assert cluna['balance'] == original_bal

@@ -76,12 +76,6 @@ pub struct PoolInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfoResponse {
     pub staker_addr: String,
-    pub reward_infos: Vec<RewardInfoResponseItem>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct RewardInfoResponseItem {
-    pub asset_token: String,
-    pub bond_amount: Uint128,
-    pub pending_reward: Uint128,
+    pub staked_amt: Uint128,
+    pub reward_infos: Vec<Asset>,
 }
