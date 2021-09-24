@@ -48,7 +48,7 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
     /// Bond yLuna to start receiving luna staking rewards
-    Bond {},
+    Bond { mode: Option<String> },
 }
 
 /// We currently take no arguments for migrations
@@ -77,5 +77,6 @@ pub struct PoolInfoResponse {
 pub struct RewardInfoResponse {
     pub staker_addr: String,
     pub staked_amt: Uint128,
+    pub staker_mode: Option<String>,
     pub reward_infos: Vec<Asset>,
 }
