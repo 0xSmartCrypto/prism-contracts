@@ -12,7 +12,7 @@ pub const TOTAL_BOND_AMOUNT: Item<Uint128> = Item::new("total_bond_amount");
 pub const POOL_INFO: Map<&[u8], PoolInfo> = Map::new("pool_info");
 // owner, asset_info -> RewardInfo;
 pub const REWARDS: Map<(&[u8], &[u8]), RewardInfo> = Map::new("rewards");
-pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
+pub const BOND_AMOUNTS: Map<&[u8], BondInfo> = Map::new("bond_amounts");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -22,6 +22,12 @@ pub struct Config {
     pub cluna_token: String,
     pub yluna_token: String,
     pub pluna_token: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct BondInfo {
+    pub bond_amount: Uint128,
+    pub mode: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

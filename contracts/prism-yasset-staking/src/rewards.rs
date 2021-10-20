@@ -5,7 +5,7 @@ use cosmwasm_std::{
 
 use crate::state::{
     PoolInfo, RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT,
-    WHITELISTED_ASSETS,
+    WHITELISTED_ASSETS, BondInfo,
 };
 
 use cw20::Cw20ExecuteMsg;
@@ -143,9 +143,9 @@ pub fn withdraw_reward(deps: DepsMut, info: MessageInfo) -> StdResult<Response<T
 
 // withdraw all rewards to pending rewards
 pub fn pull_rewards(storage: &mut dyn Storage, owner: &String) -> StdResult<()> {
-    let bond_amount = BOND_AMOUNTS
+    let b = BOND_AMOUNTS
         .load(storage, owner.as_bytes())
-        .unwrap_or(Uint128::zero());
+        .unwrap_or(BondInfo { bond_amount: Uint128::zero(), mode: None });
 
     let whitelisted_assets = WHITELISTED_ASSETS.load(storage)?;
     for asset_info in whitelisted_assets {
@@ -165,7 +165,7 @@ pub fn pull_rewards(storage: &mut dyn Storage, owner: &String) -> StdResult<()> 
                 pending_reward: Uint128::zero(),
             });
         let pending_reward =
-            (bond_amount * pool_info.reward_index).checked_sub(bond_amount * reward_info.index)?;
+            (b.bond_amount * pool_info.reward_index).checked_sub(b.bond_amount * reward_info.index)?;
         reward_info.index = pool_info.reward_index;
         reward_info.pending_reward += pending_reward;
         REWARDS.save(
@@ -178,9 +178,9 @@ pub fn pull_rewards(storage: &mut dyn Storage, owner: &String) -> StdResult<()> 
 }
 
 pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInfoResponse> {
-    let bond_amount = BOND_AMOUNTS
+    let b = BOND_AMOUNTS
         .load(deps.storage, staker_addr.as_bytes())
-        .unwrap_or(Uint128::zero());
+        .unwrap_or(BondInfo { bond_amount: Uint128::zero(), mode: None });
 
     let mut reward_infos = vec![];
 
@@ -202,7 +202,7 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInf
                 pending_reward: Uint128::zero(),
             });
         let pending_reward =
-            (bond_amount * pool_info.reward_index).checked_sub(bond_amount * reward_info.index)?;
+            (b.bond_amount * pool_info.reward_index).checked_sub(b.bond_amount * reward_info.index)?;
         reward_info.index = pool_info.reward_index;
         reward_info.pending_reward += pending_reward;
         reward_infos.push(Asset {
@@ -213,7 +213,8 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInf
 
     Ok(RewardInfoResponse {
         staker_addr,
-        staked_amt: bond_amount,
+        staked_amt: b.bond_amount,
+        staker_mode: b.mode,
         reward_infos,
     })
 }

@@ -139,7 +139,7 @@ pub fn bond(deps: DepsMut, env: Env, sender: &String, amount: Uint128) -> StdRes
             msg: to_binary(&TokenMsg::Send {
                 contract: cfg.yluna_staking,
                 amount,
-                msg: to_binary(&StakingHookMsg::Bond {})?,
+                msg: to_binary(&StakingHookMsg::Bond { mode: None })?,
             })?,
             funds: vec![],
         })]),

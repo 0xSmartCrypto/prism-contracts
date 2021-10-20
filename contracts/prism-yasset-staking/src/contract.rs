@@ -19,6 +19,8 @@ use cw20::Cw20ReceiveMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 use terraswap::asset::AssetInfo;
 
+const ALLOWED_STAKING_MODES: &'static [&str] = &[ "xprism" ];
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -80,7 +82,7 @@ pub fn receive_cw20(
     let msg = cw20_msg.msg;
 
     match from_binary(&msg)? {
-        Cw20HookMsg::Bond {} => {
+        Cw20HookMsg::Bond { mode } => {
             let cfg = CONFIG.load(deps.storage)?;
 
             // only yluna token contract can execute this message
@@ -88,7 +90,12 @@ pub fn receive_cw20(
                 return Err(StdError::generic_err("unauthorized"));
             }
 
-            bond(deps, cw20_msg.sender, cw20_msg.amount)
+            let m = mode.clone();
+            if m.is_some() && !ALLOWED_STAKING_MODES.contains(&m.unwrap().as_str()) {
+                return Err(StdError::generic_err("unregistered staking mode"));
+            }
+
+            bond(deps, cw20_msg.sender, cw20_msg.amount, mode)
         }
     }
 }
