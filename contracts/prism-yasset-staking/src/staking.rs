@@ -1,7 +1,10 @@
-use cosmwasm_std::{attr, to_binary, CosmosMsg, DepsMut, Response, StdResult, Uint128, WasmMsg};
+use cosmwasm_std::{
+    attr, to_binary, CosmosMsg, DepsMut, MessageInfo, Response, StdError, StdResult, Uint128,
+    WasmMsg,
+};
 
-use crate::rewards::pull_rewards;
-use crate::state::{BOND_AMOUNTS, CONFIG, TOTAL_BOND_AMOUNT, BondInfo};
+use crate::rewards::compute_all_rewards;
+use crate::state::{BOND_AMOUNTS, CONFIG, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
 use cw20::Cw20ExecuteMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 
@@ -11,61 +14,95 @@ pub fn bond(
     amount: Uint128,
     mode: Option<String>,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    pull_rewards(deps.storage, &staker_addr)?;
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
-    TOTAL_BOND_AMOUNT.save(deps.storage, &(bond_total + amount))?;
-
-    let mut b = BOND_AMOUNTS
+    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let mut bond_info = BOND_AMOUNTS
         .load(deps.storage, staker_addr.as_bytes())
-        .unwrap_or(BondInfo { bond_amount: Uint128::zero(), mode: mode.clone() });
-    // allow update of mode if nothing is bonded
-    if b.bond_amount == Uint128::zero() {
-        b.mode = mode;
-    }
-    b.bond_amount += amount;
-    BOND_AMOUNTS.save(
+        .unwrap_or_default();
+
+    // update reward pools
+    compute_all_rewards(
         deps.storage,
-        staker_addr.as_bytes(),
-        &b,
+        &staker_addr.to_string(),
+        bond_info.bond_amount,
+        &whitelisted_assets,
     )?;
+
+    // allow update of mode if nothing is bonded
+    if bond_info.bond_amount == Uint128::zero() {
+        bond_info.mode = mode.clone();
+    } else if mode.is_some() {
+        return Err(StdError::generic_err(
+            "mode can only be changed if nothing is bonded",
+        ));
+    }
+
+    // update bond amount
+    bond_info.bond_amount += amount;
+    TOTAL_BOND_AMOUNT.save(deps.storage, &(bond_total + amount))?;
+    BOND_AMOUNTS.save(deps.storage, staker_addr.as_bytes(), &bond_info)?;
+
     Ok(Response::new().add_attributes(vec![
         attr("action", "bond"),
         attr("staker_addr", staker_addr.as_str()),
         attr("amount", amount.to_string()),
+        attr("mode", mode.unwrap_or("default".to_string())),
     ]))
 }
 
 pub fn unbond(
     deps: DepsMut,
-    staker_addr: String,
-    amount: Uint128,
+    info: MessageInfo,
+    amount: Option<Uint128>,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    pull_rewards(deps.storage, &staker_addr)?;
+    let staker_addr = info.sender.to_string();
+    let cfg = CONFIG.load(deps.storage)?;
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
-    TOTAL_BOND_AMOUNT.save(deps.storage, &(bond_total - amount))?;
+    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let mut bond_info = BOND_AMOUNTS
+        .load(deps.storage, staker_addr.as_bytes())
+        .map_err(|_| StdError::generic_err("no tokens bonded"))?;
 
-    let mut b = BOND_AMOUNTS.load(deps.storage, staker_addr.as_bytes())?;
-    b.bond_amount -= amount;
-    BOND_AMOUNTS.save(
+    // update reward pools
+    compute_all_rewards(
         deps.storage,
-        staker_addr.as_bytes(),
-        &b,
+        &staker_addr.to_string(),
+        bond_info.bond_amount,
+        &whitelisted_assets,
     )?;
 
-    let cfg = CONFIG.load(deps.storage)?;
+    let unbonded_amt = match amount {
+        Some(amount) => {
+            if amount > bond_info.bond_amount {
+                return Err(StdError::generic_err(
+                    "can not unbond more than the bonded amount",
+                ));
+            }
+
+            amount
+        }
+        None => bond_info.bond_amount,
+    };
+
+    // update state, user bond amount and total
+    bond_info.bond_amount -= unbonded_amt;
+    TOTAL_BOND_AMOUNT.save(deps.storage, &(bond_total - unbonded_amt))?;
+    BOND_AMOUNTS.save(deps.storage, staker_addr.as_bytes(), &bond_info)?;
+
+    // TODO: charge fee if xprism mode
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.yluna_token,
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: staker_addr.to_string(),
-                amount,
+                amount: unbonded_amt,
             })?,
             funds: vec![],
         })])
         .add_attributes(vec![
             attr("action", "unbond"),
             attr("staker_addr", staker_addr.as_str()),
-            attr("amount", amount.to_string()),
+            attr("amount", unbonded_amt.to_string()),
         ]))
 }

@@ -7,19 +7,20 @@ use cosmwasm_std::{
 };
 
 use prism_protocol::yasset_staking::{
-    Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, PoolInfoResponse, QueryMsg,
+    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
+    RewardAssetWhitelistResponse,
 };
 
-use crate::rewards::{deposit_rewards, query_reward_info, withdraw_reward};
+use crate::rewards::{claim_rewards, deposit_rewards, query_reward_info, whitelist_reward_asset};
 use crate::staking::{bond, unbond};
 use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
 
-use crate::swaps::{convert_and_deposit_cluna, luna_to_cluna, process_delegator_rewards};
+use crate::swaps::{deposit_minted_pyluna_hook, luna_to_pyluna_hook, process_delegator_rewards};
 use cw20::Cw20ReceiveMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 use terraswap::asset::AssetInfo;
 
-const ALLOWED_STAKING_MODES: &'static [&str] = &[ "xprism" ];
+const ALLOWED_STAKING_MODES: &'static [&str] = &["xprism"];
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -34,7 +35,8 @@ pub fn instantiate(
             vault: msg.vault,
             gov: msg.gov,
             collector: msg.collector,
-            // TODO -- query vault for these addresses
+            reward_denom: msg.reward_denom,
+            protocol_fee: msg.protocol_fee,
             cluna_token: msg.cluna_token,
             yluna_token: msg.yluna_token.clone(),
             pluna_token: msg.pluna_token.clone(),
@@ -65,12 +67,13 @@ pub fn execute(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
-        ExecuteMsg::Unbond { amount } => unbond(deps, info.sender.to_string(), amount),
-        ExecuteMsg::Withdraw {} => withdraw_reward(deps, info),
+        ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
+        ExecuteMsg::ClaimRewards {} => claim_rewards(deps, info),
         ExecuteMsg::DepositRewards { assets } => deposit_rewards(deps, env, info, assets),
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
-        ExecuteMsg::LunaToCluna {} => luna_to_cluna(deps, env),
-        ExecuteMsg::ConvertAndDepositCluna {} => convert_and_deposit_cluna(deps, env),
+        ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
+        ExecuteMsg::DepositMintedPylunaHook {} => deposit_minted_pyluna_hook(deps, env),
+        ExecuteMsg::WhitelistRewardAsset { asset } => whitelist_reward_asset(deps, info, asset),
     }
 }
 
@@ -105,29 +108,38 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::PoolInfo { asset_token } => to_binary(&query_pool_info(deps, asset_token)?),
-        QueryMsg::Whitelist {} => to_binary(&query_whitelist(deps)?),
+        QueryMsg::RewardAssetWhitelist {} => to_binary(&query_whitelist(deps)?),
         QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
     }
 }
 
-pub fn query_whitelist(deps: Deps) -> StdResult<Vec<AssetInfo>> {
-    WHITELISTED_ASSETS.load(deps.storage)
+pub fn query_whitelist(deps: Deps) -> StdResult<RewardAssetWhitelistResponse> {
+    let whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
+
+    Ok(RewardAssetWhitelistResponse { assets: whitelist })
 }
 
-pub fn query_config(deps: Deps) -> StdResult<Config> {
-    CONFIG.load(deps.storage)
+pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    Ok(ConfigResponse {
+        vault: cfg.vault,
+        gov: cfg.gov,
+        collector: cfg.collector,
+        reward_denom: cfg.reward_denom,
+        protocol_fee: cfg.protocol_fee,
+        cluna_token: cfg.cluna_token,
+        yluna_token: cfg.yluna_token,
+        pluna_token: cfg.pluna_token,
+    })
 }
 
 pub fn query_pool_info(deps: Deps, asset_token: String) -> StdResult<PoolInfoResponse> {
     let pool_info = POOL_INFO.load(deps.storage, asset_token.as_bytes())?;
+
     Ok(PoolInfoResponse {
         asset_token,
         reward_index: pool_info.reward_index,
         pending_reward: pool_info.pending_reward,
     })
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
-    Ok(Response::default())
 }
