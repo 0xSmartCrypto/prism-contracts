@@ -19,24 +19,26 @@ pub struct Config {
     pub vault: String,
     pub gov: String,
     pub collector: String,
+    pub reward_denom: String,
+    pub protocol_fee: Decimal,
     pub cluna_token: String,
     pub yluna_token: String,
     pub pluna_token: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct BondInfo {
     pub bond_amount: Uint128,
     pub mode: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PoolInfo {
     pub pending_reward: Uint128, // not distributed amount due to zero bonding
     pub reward_index: Decimal,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct RewardInfo {
     pub index: Decimal,
     pub pending_reward: Uint128,

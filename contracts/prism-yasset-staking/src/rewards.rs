@@ -1,20 +1,18 @@
 use cosmwasm_std::{
-    attr, to_binary, Addr, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
+    attr, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
     StdError, StdResult, Storage, Uint128, WasmMsg,
 };
 
 use crate::state::{
-    PoolInfo, RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT,
-    WHITELISTED_ASSETS, BondInfo,
+    RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS,
 };
 
 use cw20::Cw20ExecuteMsg;
+use prism_protocol::yasset_staking::RewardInfoResponse;
 use terra_cosmwasm::TerraMsgWrapper;
 use terraswap::asset::{Asset, AssetInfo};
-use terraswap::querier::query_supply;
-use prism_protocol::yasset_staking::RewardInfoResponse;
 
-// deposit_reward must be from reward token contract
+// deposit whitelisted reward assets
 pub fn deposit_rewards(
     deps: DepsMut,
     env: Env,
@@ -22,27 +20,27 @@ pub fn deposit_rewards(
     assets: Vec<Asset>,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
-
-    let total_share = query_supply(&deps.querier, Addr::unchecked(cfg.yluna_token.clone()))?
-        + query_supply(&deps.querier, Addr::unchecked(cfg.cluna_token))?;
-
-    if total_share.is_zero() {
-        return Err(StdError::generic_err("no luna in vault"));
-    }
-
-    let yluna_staked = TOTAL_BOND_AMOUNT.load(deps.storage)?;
-    let num = yluna_staked.multiply_ratio(9u8, 1u8);
-    let den = total_share.multiply_ratio(10u8, 1u8);
-
-    let total_bond = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+    let total_bond_amount = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
 
     let mut messages = vec![];
-
     for asset in assets {
-        if let AssetInfo::Token { contract_addr, .. } = &asset.info {
-            if env.contract.address.as_str() != info.sender.as_str() {
+        if !whitelisted_assets.contains(&asset.info) {
+            return Err(StdError::generic_err(format!(
+                "asset {} is not whitelisted",
+                asset.info.to_string()
+            )));
+        }
+
+        // no need to handle native tokens, because native tokens can not be whitelisted
+        if let AssetInfo::Token {
+            contract_addr: token_addr,
+            ..
+        } = &asset.info
+        {
+            if env.contract.address != info.sender {
                 messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: contract_addr.clone(),
+                    contract_addr: token_addr.clone(),
                     msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
                         owner: info.sender.to_string(),
                         recipient: env.contract.address.to_string(),
@@ -54,167 +52,202 @@ pub fn deposit_rewards(
 
             let mut pool_info = POOL_INFO
                 .load(deps.storage, &asset.info.to_string().as_bytes())
-                .unwrap_or(PoolInfo {
-                    pending_reward: Uint128::zero(),
-                    reward_index: Decimal::zero(),
-                });
+                .unwrap_or_default();
 
-            let mut reward_amount = asset.amount.clone().multiply_ratio(num, den);
+            let protocol_fee_amount = asset.amount * cfg.protocol_fee;
+            let mut reward_amount = asset.amount - protocol_fee_amount;
 
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: contract_addr.clone(),
+                contract_addr: token_addr.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: cfg.collector.clone(),
-                    amount: asset.amount - reward_amount,
+                    recipient: cfg.collector.to_string(),
+                    amount: protocol_fee_amount,
                 })?,
                 funds: vec![],
             }));
 
-            if total_bond.is_zero() {
+            if total_bond_amount.is_zero() {
                 pool_info.pending_reward += reward_amount;
             } else {
                 reward_amount += pool_info.pending_reward;
-                let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond);
+                let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond_amount);
+
                 pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
                 pool_info.pending_reward = Uint128::zero();
             }
 
             POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
-        } else {
-            return Err(StdError::generic_err(
-                "native tokens should be transformed into yluna and pluna before deposit",
-            ));
         }
     }
 
     Ok(Response::new()
         .add_messages(messages)
-        .add_attributes(vec![attr("action", "deposit_reward")]))
+        .add_attributes(vec![attr("action", "deposit_rewards")]))
 }
 
-// withdraw all rewards or single reward depending on asset_token
-pub fn withdraw_reward(deps: DepsMut, info: MessageInfo) -> StdResult<Response<TerraMsgWrapper>> {
-    let mut messages = vec![];
+// claim all available rewards
+pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<TerraMsgWrapper>> {
     let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let bond_info = BOND_AMOUNTS
+        .load(deps.storage, info.sender.to_string().as_bytes())
+        .map_err(|_| StdError::generic_err("no tokens bonded"))?;
 
-    pull_rewards(deps.storage, &info.sender.clone().into_string())?;
+    let mut messages = vec![];
+    let mut attributes = vec![];
     for asset_info in whitelisted_assets {
-        let mut reward_info = REWARDS.load(
+        let mut reward_info = compute_asset_rewards(
             deps.storage,
-            (info.sender.as_bytes(), asset_info.to_string().as_bytes()),
+            &info.sender.to_string(),
+            bond_info.bond_amount,
+            &asset_info,
         )?;
 
-        let asset = Asset {
+        // create the claim asset from the pending rewards, and reset pending to 0
+        let claim_asset = Asset {
             info: asset_info.clone(),
             amount: reward_info.pending_reward,
         };
+        reward_info.pending_reward = Uint128::zero();
 
-        if asset.amount.is_zero() {
+        // save updated reward
+        REWARDS.save(
+            deps.storage,
+            (info.sender.as_bytes(), asset_info.to_string().as_bytes()),
+            &reward_info,
+        )?;
+
+        // if there is nothing to claim, skip
+        if claim_asset.amount.is_zero() {
             continue;
         }
 
         // re-implement into_msg here because life is cruel
+        // TODO: cleanup we dont need native
         let msg = match &asset_info {
             AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: contract_addr.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: info.sender.to_string(),
-                    amount: asset.amount,
+                    amount: claim_asset.amount,
                 })?,
                 funds: vec![],
             }),
             AssetInfo::NativeToken { .. } => CosmosMsg::Bank(BankMsg::Send {
                 to_address: info.sender.to_string(),
-                amount: vec![asset.deduct_tax(&deps.querier)?],
+                amount: vec![claim_asset.deduct_tax(&deps.querier)?],
             }),
         };
 
         messages.push(msg);
+        attributes.push(attr("claimed_asset", format!("{}", &claim_asset)));
+    }
 
-        reward_info.pending_reward = Uint128::zero();
+    Ok(Response::new()
+        .add_messages(messages)
+        .add_attribute("action", "claim_rewards")
+        .add_attributes(attributes))
+}
+
+pub fn compute_asset_rewards(
+    storage: &dyn Storage,
+    staker: &String,
+    bond_amount: Uint128,
+    asset_info: &AssetInfo,
+) -> StdResult<RewardInfo> {
+    let pool_info = POOL_INFO
+        .load(storage, asset_info.to_string().as_bytes())
+        .unwrap_or_default();
+
+    let mut reward_info: RewardInfo = match REWARDS.load(
+        storage,
+        (staker.as_bytes(), asset_info.to_string().as_bytes()),
+    ) {
+        Ok(mut info) => {
+            let pending_reward =
+                (bond_amount * pool_info.reward_index).checked_sub(bond_amount * info.index)?;
+
+            info.pending_reward += pending_reward;
+
+            info
+        }
+        Err(_) => RewardInfo::default(),
+    };
+
+    reward_info.index = pool_info.reward_index;
+    Ok(reward_info)
+}
+
+pub fn compute_all_rewards(
+    storage: &mut dyn Storage,
+    staker: &String,
+    bond_amount: Uint128,
+    whitelisted_assets: &Vec<AssetInfo>,
+) -> StdResult<()> {
+    for asset in whitelisted_assets {
+        let reward_info = compute_asset_rewards(storage, &staker, bond_amount, &asset)?;
+
+        // save updated reward
         REWARDS.save(
-            deps.storage,
-            (info.sender.as_bytes(), asset_info.to_string().as_bytes()),
+            storage,
+            (staker.as_bytes(), asset.to_string().as_bytes()),
             &reward_info,
         )?;
     }
-    Ok(Response::new().add_messages(messages))
-}
 
-// withdraw all rewards to pending rewards
-pub fn pull_rewards(storage: &mut dyn Storage, owner: &String) -> StdResult<()> {
-    let b = BOND_AMOUNTS
-        .load(storage, owner.as_bytes())
-        .unwrap_or(BondInfo { bond_amount: Uint128::zero(), mode: None });
-
-    let whitelisted_assets = WHITELISTED_ASSETS.load(storage)?;
-    for asset_info in whitelisted_assets {
-        let pool_info = POOL_INFO
-            .load(storage, asset_info.to_string().as_bytes())
-            .unwrap_or(PoolInfo {
-                pending_reward: Uint128::zero(),
-                reward_index: Decimal::zero(),
-            });
-        let mut reward_info = REWARDS
-            .load(
-                storage,
-                (owner.as_bytes(), asset_info.to_string().as_bytes()),
-            )
-            .unwrap_or(RewardInfo {
-                index: pool_info.reward_index,
-                pending_reward: Uint128::zero(),
-            });
-        let pending_reward =
-            (b.bond_amount * pool_info.reward_index).checked_sub(b.bond_amount * reward_info.index)?;
-        reward_info.index = pool_info.reward_index;
-        reward_info.pending_reward += pending_reward;
-        REWARDS.save(
-            storage,
-            (&owner.as_bytes(), &asset_info.to_string().as_bytes()),
-            &reward_info,
-        )?
-    }
     Ok(())
 }
 
-pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInfoResponse> {
-    let b = BOND_AMOUNTS
-        .load(deps.storage, staker_addr.as_bytes())
-        .unwrap_or(BondInfo { bond_amount: Uint128::zero(), mode: None });
+pub fn whitelist_reward_asset(
+    deps: DepsMut,
+    info: MessageInfo,
+    asset: AssetInfo,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let cfg = CONFIG.load(deps.storage)?;
 
-    let mut reward_infos = vec![];
-
-    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
-    for asset_info in whitelisted_assets {
-        let pool_info = POOL_INFO
-            .load(deps.storage, asset_info.to_string().as_bytes())
-            .unwrap_or(PoolInfo {
-                pending_reward: Uint128::zero(),
-                reward_index: Decimal::zero(),
-            });
-        let mut reward_info = REWARDS
-            .load(
-                deps.storage,
-                (staker_addr.as_bytes(), asset_info.to_string().as_bytes()),
-            )
-            .unwrap_or(RewardInfo {
-                index: pool_info.reward_index,
-                pending_reward: Uint128::zero(),
-            });
-        let pending_reward =
-            (b.bond_amount * pool_info.reward_index).checked_sub(b.bond_amount * reward_info.index)?;
-        reward_info.index = pool_info.reward_index;
-        reward_info.pending_reward += pending_reward;
-        reward_infos.push(Asset {
-            info: asset_info.clone(),
-            amount: reward_info.pending_reward,
-        });
+    // can only be exeucted by gov
+    if info.sender.as_str() != cfg.gov.as_str() {
+        return Err(StdError::generic_err("unauthorized"));
     }
+
+    if asset.is_native_token() {
+        return Err(StdError::generic_err("only token assets can be registered"));
+    }
+
+    let mut whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
+    whitelist.push(asset.clone());
+
+    WHITELISTED_ASSETS.save(deps.storage, &whitelist)?;
+
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "whitelist_reward_asset"),
+        attr("whitelisted_asset", asset.to_string()),
+    ]))
+}
+
+pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInfoResponse> {
+    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let bond_info = BOND_AMOUNTS
+        .load(deps.storage, staker_addr.as_bytes())
+        .map_err(|_| StdError::generic_err("there is no reward info for this address"))?;
+
+    // update all rewards
+    let rewards = whitelisted_assets
+        .iter()
+        .map(|wlasset| {
+            let reward_info =
+                compute_asset_rewards(deps.storage, &staker_addr, bond_info.bond_amount, &wlasset)?;
+
+            Ok(Asset {
+                info: wlasset.clone(),
+                amount: reward_info.pending_reward,
+            })
+        })
+        .collect::<StdResult<Vec<Asset>>>()?;
 
     Ok(RewardInfoResponse {
         staker_addr,
-        staked_amt: b.bond_amount,
-        staker_mode: b.mode,
-        reward_infos,
+        staked_amount: bond_info.bond_amount,
+        staker_mode: bond_info.mode,
+        rewards,
     })
 }

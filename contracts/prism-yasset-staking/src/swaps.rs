@@ -1,136 +1,123 @@
 use crate::state::CONFIG;
 use cosmwasm_std::{
-    attr, to_binary, Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult, SubMsg, WasmMsg,
+    attr, to_binary, Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
 };
-use cw20::Cw20ExecuteMsg;
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::ExecuteMsg;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
 use terraswap::asset::{Asset, AssetInfo};
 use terraswap::querier::{query_balance, query_token_balance};
 
-/// Swap all native tokens to reward_denom
-/// Only hub_contract is allowed to execute
-
+/// 1. Swap all native tokens to uluna
+/// 2. Use the uluna to mint pluna and yluna
+/// 4. Deposit pluna and yluna as reward to stakers
 pub fn process_delegator_rewards(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    _info: MessageInfo,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    if info.sender.as_str() != cfg.vault {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
     let contr_addr = env.contract.address.clone();
-    let balance = deps.querier.query_all_balances(contr_addr)?;
-    let mut messages: Vec<SubMsg<TerraMsgWrapper>> = Vec::new();
+    let balances = deps.querier.query_all_balances(contr_addr)?;
+    let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
 
-    let reward_denom = "uluna".to_string();
+    let reward_denom = cfg.reward_denom;
 
-    let mut is_listed = true;
+    let denoms: Vec<String> = balances.iter().map(|item| item.denom.clone()).collect();
 
-    let denoms: Vec<String> = balance.iter().map(|item| item.denom.clone()).collect();
+    let exchange_rates = query_exchange_rates(&deps, reward_denom.clone(), denoms)?;
+    let known_denoms: Vec<String> = exchange_rates
+        .exchange_rates
+        .iter()
+        .map(|item| item.quote_denom.clone())
+        .collect();
 
-    if query_exchange_rates(&deps, reward_denom.clone(), denoms).is_err() {
-        is_listed = false;
-    }
-
-    for coin in balance.clone() {
-        if coin.denom == reward_denom.clone() {
+    for coin in balances {
+        if coin.denom == reward_denom.clone() || !known_denoms.contains(&coin.denom) {
             continue;
         }
 
-        if is_listed {
-            messages.push(SubMsg::new(create_swap_msg(coin, reward_denom.to_string())));
-        } else if query_exchange_rates(&deps, reward_denom.clone(), vec![coin.denom.clone()])
-            .is_ok()
-        {
-            messages.push(SubMsg::new(create_swap_msg(coin, reward_denom.to_string())));
-        }
+        messages.push(create_swap_msg(coin, reward_denom.to_string()));
     }
 
     let res = Response::new()
-        .add_submessages(messages)
-        .add_messages(vec![
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: env.contract.address.clone().to_string(),
-                msg: to_binary(&ExecuteMsg::LunaToCluna {})?,
-                funds: vec![],
-            }),
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: env.contract.address.clone().to_string(),
-                msg: to_binary(&ExecuteMsg::ConvertAndDepositCluna {})?,
-                funds: vec![],
-            }),
-        ])
-        .add_attributes(vec![attr("action", "process_delegator_rewards")]);
+        .add_messages(messages)
+        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            msg: to_binary(&ExecuteMsg::LunaToPylunaHook {})?,
+            funds: vec![],
+        })])
+        .add_attribute("action", "process_delegator_rewards");
 
     Ok(res)
 }
 
-pub fn luna_to_cluna(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
-    let luna_amt = query_balance(&deps.querier, env.contract.address, "uluna".to_string())?;
-    Ok(Response::new()
-        .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.vault,
-            msg: to_binary(&VaultExecuteMsg::Bond { validator: None })?,
-            funds: vec![Coin {
-                denom: "uluna".to_string(),
-                amount: luna_amt,
-            }],
-        }))
-        .add_attributes(vec![attr("action", "luna_to_cluna")]))
-}
-
-pub fn convert_and_deposit_cluna(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-    let cluna_amt = query_token_balance(
+    let luna_amt = query_balance(
         &deps.querier,
-        Addr::unchecked(cfg.cluna_token.clone()),
         env.contract.address.clone(),
+        cfg.reward_denom.clone(),
     )?;
+
     Ok(Response::new()
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: cfg.cluna_token.clone(),
-                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                    spender: cfg.vault.clone(),
-                    amount: cluna_amt.clone(),
-                    expires: None,
-                })?,
-                funds: vec![],
-            }),
-            CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: cfg.vault,
-                msg: to_binary(&VaultExecuteMsg::Split { amount: cluna_amt })?,
-                funds: vec![],
+                msg: to_binary(&VaultExecuteMsg::BondSplit { validator: None })?,
+                funds: vec![Coin {
+                    denom: cfg.reward_denom,
+                    amount: luna_amt,
+                }],
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: env.contract.address.clone().to_string(),
-                msg: to_binary(&ExecuteMsg::DepositRewards {
-                    assets: vec![
-                        Asset {
-                            info: AssetInfo::Token {
-                                contract_addr: cfg.yluna_token.clone(),
-                            },
-                            amount: cluna_amt.clone(),
-                        },
-                        Asset {
-                            info: AssetInfo::Token {
-                                contract_addr: cfg.pluna_token.clone(),
-                            },
-                            amount: cluna_amt.clone(),
-                        },
-                    ],
-                })?,
+                contract_addr: env.contract.address.to_string(),
+                msg: to_binary(&ExecuteMsg::DepositMintedPylunaHook {})?,
                 funds: vec![],
             }),
         ])
-        .add_attributes(vec![attr("action", "convert_and_deposit_cluna")]))
+        .add_attributes(vec![attr("action", "luna_to_pyluna_hook")]))
+}
+
+pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // query yluna amount to know how much we received from vault
+    // received pluna amount should always be same as yluna amount
+    let yluna_amt = query_token_balance(
+        &deps.querier,
+        Addr::unchecked(cfg.yluna_token.clone()),
+        env.contract.address.clone(),
+    )?;
+    let pluna_amt = query_token_balance(
+        &deps.querier,
+        Addr::unchecked(cfg.pluna_token.clone()),
+        env.contract.address.clone(),
+    )?;
+
+    Ok(Response::new()
+        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            msg: to_binary(&ExecuteMsg::DepositRewards {
+                assets: vec![
+                    Asset {
+                        info: AssetInfo::Token {
+                            contract_addr: cfg.yluna_token,
+                        },
+                        amount: yluna_amt.clone(),
+                    },
+                    Asset {
+                        info: AssetInfo::Token {
+                            contract_addr: cfg.pluna_token,
+                        },
+                        amount: pluna_amt,
+                    },
+                ],
+            })?,
+            funds: vec![],
+        })])
+        .add_attributes(vec![attr("action", "deposit_minted_pyluna_hook")]))
 }
 
 pub fn query_exchange_rates(

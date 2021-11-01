@@ -4,7 +4,7 @@ name = "prism-yasset-staking"
 version = "1.0.0"
 authors = ["Prism"]
 edition = "2018"
-description = "Prism yAsset Stakikng"
+description = "Prism yAsset staking contract"
 license = "Apache-2.0"
 
 exclude = [
