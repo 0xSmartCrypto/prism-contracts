@@ -7,6 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::testing::{mock_env, mock_info};
+use terraswap::asset::{Asset, AssetInfo};
 
 use crate::contract::{execute, instantiate, query};
 use crate::unbond::execute_unbond;
@@ -24,8 +25,9 @@ use prism_protocol::vault::ExecuteMsg::{CheckSlashing, Receive, UpdateConfig, Up
 use super::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use crate::math::decimal_division;
 use crate::state::{read_unbond_wait_list, Parameters, CONFIG};
-use prism_protocol::airdrop::ExecuteMsg::{FabricateANCClaim, FabricateMIRClaim};
+use prism_protocol::airdrop::ExecuteMsg::FabricateClaim;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
+use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
 use std::borrow::BorrowMut;
 
 const DEFAULT_VALIDATOR: &str = "default-validator";
@@ -590,108 +592,98 @@ fn proper_deregister() {
 }
 
 /// Covers if Withdraw message, swap message, and update global index are sent.
-// #[test]
-// pub fn proper_update_global_index() {
-//     let mut deps = dependencies(&[]);
-//     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
-//     set_validator_mock(&mut deps.querier);
+#[test]
+pub fn proper_update_global_index() {
+    let mut deps = dependencies(&[]);
+    let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
+    set_validator_mock(&mut deps.querier);
 
-//     let addr1 = "addr1000".to_string();
-//     let bond_amount = Uint128::new(10);
+    let addr1 = "addr1000".to_string();
+    let bond_amount = Uint128::new(10);
 
-//     let owner = "owner1".to_string();
-//     let yluna_staking = "ylunastaking".to_string();
-//     let yluna_contract = "yluna".to_string();
-//     let pluna_contract = "pluna".to_string();
-//     let cluna_contract = "cluna".to_string();
+    let owner = "owner1".to_string();
+    let yluna_staking = "ylunastaking".to_string();
+    let yluna_contract = "yluna".to_string();
+    let pluna_contract = "pluna".to_string();
+    let cluna_contract = "cluna".to_string();
 
-//     init(
-//         deps.borrow_mut(),
-//         owner,
-//         yluna_staking,
-//         cluna_contract,
-//         yluna_contract,
-//         pluna_contract,
-//         validator.address.clone(),
-//     );
+    init(
+        deps.borrow_mut(),
+        owner,
+        yluna_staking.clone(),
+        cluna_contract,
+        yluna_contract,
+        pluna_contract,
+        validator.address.clone(),
+    );
 
-//     // register_validator
-//     do_register_validator(deps.as_mut(), validator.clone());
+    // register_validator
+    do_register_validator(deps.as_mut(), validator.clone());
 
-//     // fails if there is no delegation
-//     let reward_msg = ExecuteMsg::UpdateGlobalIndex {
-//         airdrop_hooks: None,
-//     };
+    // fails if there is no delegation
+    let reward_msg = ExecuteMsg::UpdateGlobalIndex {
+        airdrop_hooks: None,
+    };
 
-//     let info = mock_info(&addr1, &[]);
-//     let res = execute(deps.as_mut(), mock_env(), info, reward_msg).unwrap();
-//     assert_eq!(res.messages.len(), 2);
+    let info = mock_info(&addr1, &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, reward_msg).unwrap();
+    assert_eq!(res.messages.len(), 1);
 
-//     // bond
-//     do_bond(deps.as_mut(), addr1.clone(), bond_amount, validator.clone());
+    // bond
+    do_bond(deps.as_mut(), addr1.clone(), bond_amount, validator.clone());
 
-//     //set delegation for query-all-delegation
-//     let delegations: [FullDelegation; 1] =
-//         [(sample_delegation(validator.address.clone(), coin(bond_amount.u128(), "uluna")))];
+    //set delegation for query-all-delegation
+    let delegations: [FullDelegation; 1] =
+        [(sample_delegation(validator.address.clone(), coin(bond_amount.u128(), "uluna")))];
 
-//     let validators: [Validator; 1] = [(validator.clone())];
+    let validators: [Validator; 1] = [(validator.clone())];
 
-//     set_delegation_query(&mut deps.querier, &delegations, &validators);
+    set_delegation_query(&mut deps.querier, &delegations, &validators);
 
-//     //set bob's balance to 10 in token contract
-//     deps.querier
-//         .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &bond_amount)])]);
+    //set bob's balance to 10 in token contract
+    deps.querier
+        .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &bond_amount)])]);
 
-//     let reward_msg = ExecuteMsg::UpdateGlobalIndex {
-//         airdrop_hooks: None,
-//     };
+    let reward_msg = ExecuteMsg::UpdateGlobalIndex {
+        airdrop_hooks: None,
+    };
 
-//     let info = mock_info(&addr1, &[]);
-//     let res = execute(deps.as_mut(), mock_env(), info, reward_msg).unwrap();
-//     assert_eq!(3, res.messages.len());
+    let info = mock_info(&addr1, &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, reward_msg).unwrap();
+    assert_eq!(2, res.messages.len());
 
-//     let last_index_query = QueryMsg::State {};
-//     let last_modification: StateResponse =
-//         from_binary(&query(deps.as_ref(), mock_env(), last_index_query).unwrap()).unwrap();
-//     assert_eq!(
-//         &last_modification.last_index_modification,
-//         &mock_env().block.time.seconds()
-//     );
+    let last_index_query = QueryMsg::State {};
+    let last_modification: StateResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), last_index_query).unwrap()).unwrap();
+    assert_eq!(
+        &last_modification.last_index_modification,
+        &mock_env().block.time.seconds()
+    );
 
-//     let withdraw = &res.messages[0].msg;
-//     match withdraw {
-//         CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward { validator: val }) => {
-//             assert_eq!(val, &validator.address);
-//         }
-//         _ => panic!("Unexpected message: {:?}", withdraw),
-//     }
+    let withdraw = &res.messages[0].msg;
+    match withdraw {
+        CosmosMsg::Distribution(DistributionMsg::WithdrawDelegatorReward { validator: val }) => {
+            assert_eq!(val, &validator.address);
+        }
+        _ => panic!("Unexpected message: {:?}", withdraw),
+    }
 
-//     let swap = &res.messages[1].msg;
-//     match swap {
-//         CosmosMsg::Wasm(WasmMsg::Execute {
-//             contract_addr,
-//             msg,
-//             funds: _,
-//         }) => {
-//             assert_eq!(contract_addr, &cluna);
-//             assert_eq!(msg, &to_binary(&SwapToRewardDenom {}).unwrap())
-//         }
-//         _ => panic!("Unexpected message: {:?}", swap),
-//     }
-
-//     let update_g_index = &res.messages[2].msg;
-//     match update_g_index {
-//         CosmosMsg::Wasm(WasmMsg::Execute {
-//             contract_addr,
-//             msg,
-//             funds: _,
-//         }) => {
-//             assert_eq!(contract_addr, &yluna_staking);
-//             assert_eq!(msg, &to_binary(&UpdateGlobalIndex {}).unwrap())
-//         }
-//         _ => panic!("Unexpected message: {:?}", update_g_index),
-//     }
-// }
+    let process_rewards = &res.messages[1].msg;
+    match process_rewards {
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr,
+            msg,
+            funds: _,
+        }) => {
+            assert_eq!(contract_addr, &yluna_staking);
+            assert_eq!(
+                msg,
+                &to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap()
+            )
+        }
+        _ => panic!("Unexpected message: {:?}", process_rewards),
+    }
+}
 
 /// Covers update_global_index when there is more than one validator.
 /// Checks if more than one Withdraw message is sent.
@@ -2812,149 +2804,133 @@ pub fn proper_update_config() {
     );
 }
 
-// #[test]
-// fn proper_claim_airdrop() {
-//     let mut deps = dependencies(&[]);
+#[test]
+fn proper_claim_airdrop() {
+    let mut deps = dependencies(&[]);
 
-//     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
-//     set_validator_mock(&mut deps.querier);
+    let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
+    set_validator_mock(&mut deps.querier);
 
-//     let owner = "owner1".to_string();
-//     let yluna_staking = "ylunastaking".to_string();
-//     let yluna_contract = "yluna".to_string();
-//     let pluna_contract = "pluna".to_string();
-//     let cluna_contract = "cluna".to_string();
+    let owner = "owner1".to_string();
+    let yluna_staking = "ylunastaking".to_string();
+    let yluna_contract = "yluna".to_string();
+    let pluna_contract = "pluna".to_string();
+    let cluna_contract = "cluna".to_string();
 
-//     init(
-//         deps.borrow_mut(),
-//         owner,
-//         yluna_staking,
-//         cluna_contract,
-//         yluna_contract,
-//         pluna_contract,
-//         validator.address.clone(),
-//     );
+    init(
+        deps.borrow_mut(),
+        owner.clone(),
+        yluna_staking,
+        cluna_contract,
+        yluna_contract,
+        pluna_contract,
+        validator.address.clone(),
+    );
 
-//     let claim_msg = ExecuteMsg::ClaimAirdrop {
-//         airdrop_token_contract: "airdrop_token".to_string(),
-//         airdrop_contract: "MIR_contract".to_string(),
-//         airdrop_swap_contract: "airdrop_swap".to_string(),
-//         claim_msg: to_binary(&MIRMsg::MIRClaim {}).unwrap(),
-//         swap_msg: Default::default(),
-//     };
+    let claim_msg = ExecuteMsg::ClaimAirdrop {
+        airdrop_token_contract: "airdrop_token".to_string(),
+        airdrop_contract: "MIR_contract".to_string(),
+        claim_msg: to_binary(&MIRMsg::MIRClaim {}).unwrap(),
+    };
 
-//     //invalid sender
-//     let info = mock_info(&owner, &[]);
-//     let res = execute(deps.as_mut(), mock_env(), info, claim_msg.clone()).unwrap_err();
-//     assert_eq!(
-//         res,
-//         StdError::generic_err(format!("Sender must be {}", &airdrop_registry))
-//     );
+    //invalid sender
+    let info = mock_info(&owner, &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, claim_msg.clone()).unwrap_err();
+    assert_eq!(
+        res,
+        StdError::generic_err("Sender must be airdrop_registry")
+    );
 
-//     let valid_info = mock_info(&airdrop_registry, &[]);
-//     let res = execute(deps.as_mut(), mock_env(), valid_info, claim_msg).unwrap();
-//     assert_eq!(res.messages.len(), 2);
+    let valid_info = mock_info("airdrop_registry", &[]);
+    let res = execute(deps.as_mut(), mock_env(), valid_info, claim_msg).unwrap();
+    assert_eq!(res.messages.len(), 2);
 
-//     assert_eq!(
-//         res.messages[0],
-//         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-//             contract_addr: "MIR_contract".to_string(),
-//             msg: to_binary(&MIRMsg::MIRClaim {}).unwrap(),
-//             funds: vec![]
-//         }))
-//     );
-//     assert_eq!(
-//         res.messages[1],
-//         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-//             contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-//             msg: to_binary(&ExecuteMsg::SwapHook {
-//                 airdrop_token_contract: "airdrop_token".to_string(),
-//                 airdrop_swap_contract: "airdrop_swap".to_string(),
-//                 swap_msg: Default::default()
-//             })
-//             .unwrap(),
-//             funds: vec![]
-//         }))
-//     );
-// }
+    assert_eq!(
+        res.messages[0],
+        SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "MIR_contract".to_string(),
+            msg: to_binary(&MIRMsg::MIRClaim {}).unwrap(),
+            funds: vec![]
+        }))
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: MOCK_CONTRACT_ADDR.to_string(),
+            msg: to_binary(&ExecuteMsg::DepositAirdropReward {
+                airdrop_token_contract: "airdrop_token".to_string(),
+            })
+            .unwrap(),
+            funds: vec![]
+        }))
+    );
+}
 
-// #[test]
-// fn proper_swap_hook() {
-//     let mut deps = dependencies(&[]);
+#[test]
+fn proper_deposit_airdrop_reward() {
+    let mut deps = dependencies(&[]);
 
-//     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
-//     set_validator_mock(&mut deps.querier);
+    let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
+    set_validator_mock(&mut deps.querier);
 
-//     let owner = "owner1".to_string();
-//     let yluna_staking = "ylunastaking".to_string();
-//     let yluna_contract = "yluna".to_string();
-//     let pluna_contract = "pluna".to_string();
-//     let cluna_contract = "cluna".to_string();
+    let owner = "owner1".to_string();
+    let yluna_staking = "ylunastaking".to_string();
+    let yluna_contract = "yluna".to_string();
+    let pluna_contract = "pluna".to_string();
+    let cluna_contract = "cluna".to_string();
 
-//     init(
-//         deps.borrow_mut(),
-//         owner,
-//         yluna_staking,
-//         cluna_contract,
-//         yluna_contract,
-//         pluna_contract,
-//         validator.address.clone(),
-//     );
+    init(
+        deps.borrow_mut(),
+        owner,
+        yluna_staking.clone(),
+        cluna_contract,
+        yluna_contract,
+        pluna_contract,
+        validator.address.clone(),
+    );
 
-//     let swap_msg = ExecuteMsg::SwapHook {
-//         airdrop_token_contract: "airdrop_token".to_string(),
-//         airdrop_swap_contract: "swap_contract".to_string(),
-//         swap_msg: to_binary(&PairHandleMsg::Swap {
-//             belief_price: None,
-//             max_spread: None,
-//             to: Some(reward_contract.clone()),
-//         })
-//         .unwrap(),
-//     };
+    let swap_msg = ExecuteMsg::DepositAirdropReward {
+        airdrop_token_contract: "airdrop_token".to_string(),
+    };
 
-//     //invalid sender
-//     let info = mock_info(&owner, &[]);
-//     let env = mock_env();
-//     let res = execute(deps.as_mut(), mock_env(), info, swap_msg.clone()).unwrap_err();
-//     assert_eq!(res, StdError::generic_err("unauthorized"));
+    // no balance for hub
+    let contract_info = mock_info(MOCK_CONTRACT_ADDR, &[]);
 
-//     // no balance for hub
-//     let contract_info = mock_info(env.contract.address.as_str(), &[]);
-//     let res = execute(
-//         deps.as_mut(),
-//         mock_env(),
-//         contract_info.clone(),
-//         swap_msg.clone(),
-//     );
+    deps.querier.with_token_balances(&[(
+        &"airdrop_token".to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::new(1000))],
+    )]);
 
-//     assert!(res.is_err());
-
-//     deps.querier.with_token_balances(&[(
-//         &"airdrop_token".to_string(),
-//         &[(&env.contract.address.to_string(), &Uint128::new(1000))],
-//     )]);
-
-//     let res = execute(deps.as_mut(), mock_env(), contract_info, swap_msg).unwrap();
-//     assert_eq!(res.messages.len(), 1);
-//     assert_eq!(
-//         res.messages[0],
-//         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-//             contract_addr: "airdrop_token".to_string(),
-//             msg: to_binary(&Cw20ExecuteMsg::Send {
-//                 contract: "swap_contract".to_string(),
-//                 amount: Uint128::new(1000),
-//                 msg: to_binary(&PairHandleMsg::Swap {
-//                     belief_price: None,
-//                     max_spread: None,
-//                     to: Some(reward_contract),
-//                 })
-//                 .unwrap()
-//             })
-//             .unwrap(),
-//             funds: vec![],
-//         }))
-//     )
-// }
+    let res = execute(deps.as_mut(), mock_env(), contract_info, swap_msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "airdrop_token".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: yluna_staking.clone(),
+                    amount: Uint128::from(1000u128),
+                    expires: None,
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: yluna_staking,
+                msg: to_binary(&StakingExecuteMsg::DepositRewards {
+                    assets: vec![Asset {
+                        info: AssetInfo::Token {
+                            contract_addr: "airdrop_token".to_string(),
+                        },
+                        amount: Uint128::from(1000u128)
+                    }],
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+        ]
+    );
+}
 
 #[test]
 fn proper_update_global_index_with_airdrop() {
@@ -3000,14 +2976,16 @@ fn proper_update_global_index_with_airdrop() {
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &bond_amount)])]);
 
-    let binary_msg = to_binary(&FabricateMIRClaim {
+    let binary_msg = to_binary(&FabricateClaim {
+        airdrop_token: "MIR".to_string(),
         stage: 0,
         amount: Uint128::new(1000),
         proof: vec!["proof".to_string()],
     })
     .unwrap();
 
-    let binary_msg2 = to_binary(&FabricateANCClaim {
+    let binary_msg2 = to_binary(&FabricateClaim {
+        airdrop_token: "ANC".to_string(),
         stage: 0,
         amount: Uint128::new(1000),
         proof: vec!["proof".to_string()],
