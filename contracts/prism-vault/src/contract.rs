@@ -19,11 +19,10 @@ use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 
 use crate::bond::{execute_bond, execute_bond_split};
 use crate::refract::{merge, split};
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
-use cw20_legacy::state::TokenInfo;
+use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, TokenInfoResponse};
 use prism_protocol::vault::{
     AllHistoryResponse, Config, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
-    InstantiateMsg, MigrateMsg, QueryMsg, State, StateResponse, UnbondRequestsResponse,
+    InstantiateMsg, QueryMsg, State, StateResponse, UnbondRequestsResponse,
     WhitelistedValidatorsResponse, WithdrawableUnbondedResponse,
 };
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
@@ -62,8 +61,8 @@ pub fn instantiate(
     // store state
     let state = State {
         exchange_rate: Decimal::one(),
-        last_index_modification: env.block.time.nanos(),
-        last_unbonded_time: env.block.time.nanos(),
+        last_index_modification: env.block.time.seconds(),
+        last_unbonded_time: env.block.time.seconds(),
         last_processed_batch: 0u64,
         total_bond_amount: payment.amount,
         ..Default::default()
@@ -245,9 +244,9 @@ pub fn execute_update_global(
         funds: vec![],
     })));
 
-    //update state last modified
+    // update state last modified
     STATE.update(deps.storage, |mut last_state| -> StdResult<State> {
-        last_state.last_index_modification = env.block.time.nanos();
+        last_state.last_index_modification = env.block.time.seconds();
         Ok(last_state)
     })?;
 
@@ -487,11 +486,16 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
     let token_address = CONFIG
         .load(deps.storage)?
         .cluna_contract
-        .expect("token contract must have been registered");
-    let token_info: TokenInfo = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Raw {
-        contract_addr: token_address,
-        key: Binary::from("token_info".as_bytes()),
-    }))?;
+        .expect("pluna contract must have been registered");
+
+    let token_info: TokenInfoResponse =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: token_address,
+            msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
+        }))?;
+
+    // TODO: we have to add the amount of yluna/pluna IMPORTANT
+
     Ok(token_info.total_supply)
 }
 
@@ -509,9 +513,4 @@ fn query_unbond_requests_limitation(
     let requests = all_unbond_history(deps.storage, start, limit)?;
     let res = AllHistoryResponse { history: requests };
     Ok(res)
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
-    Ok(Response::default())
 }

@@ -167,8 +167,6 @@ pub fn execute_bond(
     info: MessageInfo,
     validator: Option<String>,
 ) -> StdResult<Response> {
-    // validator must be whitelisted
-
     let params = PARAMETERS.load(deps.storage)?;
     let coin_denom = params.underlying_coin_denom;
 
