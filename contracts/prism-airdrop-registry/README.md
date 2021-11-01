@@ -1,1 +1,1 @@
-Prism Airdrop Registry
+# Prism Airdrop Registry

@@ -2,16 +2,17 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     attr, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult, SubMsg, Uint128, WasmMsg,
+    StdResult, Uint128, WasmMsg,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::state::{
     read_airdrop_info, read_all_airdrop_infos, read_config, remove_airdrop_info,
     store_airdrop_info, store_config, update_airdrop_info, Config, CONFIG,
 };
 use prism_protocol::airdrop::{
-    ANCAirdropHandleMsg, AirdropInfo, AirdropInfoElem, AirdropInfoResponse, ConfigResponse,
-    ExecuteMsg, InstantiateMsg, MIRAirdropHandleMsg, QueryMsg,
+    AirdropInfo, AirdropInfoElem, AirdropInfoResponse, ClaimType, ConfigResponse, ExecuteMsg,
+    InstantiateMsg, QueryMsg,
 };
 use prism_protocol::vault::ExecuteMsg as VaultHandleMsg;
 
@@ -27,7 +28,6 @@ pub fn instantiate(
     let config = Config {
         owner: sndr_raw,
         vault_contract: msg.vault_contract,
-        reward_contract: msg.reward_contract,
         airdrop_tokens: vec![],
     };
 
@@ -39,21 +39,16 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
-        ExecuteMsg::FabricateMIRClaim {
+        ExecuteMsg::FabricateClaim {
+            airdrop_token,
             stage,
             amount,
             proof,
-        } => execute_fabricate_mir_claim(deps, env, info, stage, amount, proof),
-        ExecuteMsg::FabricateANCClaim {
-            stage,
-            amount,
-            proof,
-        } => execute_fabricate_anchor_claim(deps, env, info, stage, amount, proof),
+        } => execute_fabricate_claim(deps, airdrop_token, stage, amount, proof),
         ExecuteMsg::UpdateConfig {
             owner,
             vault_contract,
-            reward_contract,
-        } => execute_update_config(deps, env, info, owner, vault_contract, reward_contract),
+        } => execute_update_config(deps, info, owner, vault_contract),
         ExecuteMsg::AddAirdropInfo {
             airdrop_token,
             airdrop_info,
@@ -68,76 +63,45 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     }
 }
 
-fn execute_fabricate_mir_claim(
+fn execute_fabricate_claim(
     deps: DepsMut,
-    _env: Env,
-    _info: MessageInfo,
+    airdrop_token: String,
     stage: u8,
     amount: Uint128,
     proof: Vec<String>,
 ) -> StdResult<Response> {
     let config = read_config(deps.storage)?;
 
-    let mut messages: Vec<SubMsg> = vec![];
+    let airdrop_info = read_airdrop_info(deps.storage, airdrop_token.clone())
+        .map_err(|_| StdError::generic_err("no info registered for this airdrop token"))?;
+    let claim_msg: Binary = match airdrop_info.claim_type {
+        ClaimType::Generic => to_binary(&GenericAirdropExecuteMsg::Claim {
+            stage,
+            amount,
+            proof,
+        })?,
+    };
 
-    let airdrop_info = read_airdrop_info(deps.storage, "MIR".to_string()).unwrap();
-    messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+    let vault_claim_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.vault_contract,
         msg: to_binary(&VaultHandleMsg::ClaimAirdrop {
-            airdrop_token_contract: airdrop_info.airdrop_token_contract,
+            airdrop_token_contract: airdrop_token,
             airdrop_contract: airdrop_info.airdrop_contract,
-            claim_msg: to_binary(&MIRAirdropHandleMsg::Claim {
-                stage,
-                amount,
-                proof,
-            })?,
+            claim_msg,
         })?,
         funds: vec![],
-    })));
+    });
 
     Ok(Response::new()
-        .add_submessages(messages)
-        .add_attributes(vec![attr("action", "fabricate_mir_claim")]))
+        .add_message(vault_claim_msg)
+        .add_attributes(vec![attr("action", "fabricate_generic_claim")]))
 }
 
-fn execute_fabricate_anchor_claim(
-    deps: DepsMut,
-    _env: Env,
-    _info: MessageInfo,
-    stage: u8,
-    amount: Uint128,
-    proof: Vec<String>,
-) -> StdResult<Response> {
-    let config = read_config(deps.storage)?;
-
-    let mut messages: Vec<SubMsg> = vec![];
-
-    let airdrop_info = read_airdrop_info(deps.storage, "ANC".to_string())?;
-    messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.vault_contract,
-        msg: to_binary(&VaultHandleMsg::ClaimAirdrop {
-            airdrop_token_contract: airdrop_info.airdrop_token_contract,
-            airdrop_contract: airdrop_info.airdrop_contract,
-            claim_msg: to_binary(&ANCAirdropHandleMsg::Claim {
-                stage,
-                amount,
-                proof,
-            })?,
-        })?,
-        funds: vec![],
-    })));
-
-    Ok(Response::new()
-        .add_submessages(messages)
-        .add_attributes(vec![attr("action", "fabricate_anc_claim")]))
-}
 pub fn execute_update_config(
     deps: DepsMut,
-    _env: Env,
     info: MessageInfo,
     owner: Option<String>,
     vault_contract: Option<String>,
-    reward_contract: Option<String>,
 ) -> StdResult<Response> {
     // only owner can send this message.
     let mut config = read_config(deps.storage)?;
@@ -150,11 +114,9 @@ pub fn execute_update_config(
         let owner_raw = deps.api.addr_canonicalize(&o)?;
         config.owner = owner_raw
     }
+
     if let Some(vault) = vault_contract {
         config.vault_contract = vault;
-    }
-    if let Some(reward_addr) = reward_contract {
-        config.reward_contract = reward_addr;
     }
 
     store_config(deps.storage, &config)?;
@@ -283,7 +245,6 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(ConfigResponse {
         owner: owner_addr.to_string(),
         vault_contract: config.vault_contract,
-        reward_contract: config.reward_contract,
         airdrop_tokens: config.airdrop_tokens,
     })
 }
@@ -295,7 +256,7 @@ fn query_airdrop_infos(
     limit: Option<u32>,
 ) -> StdResult<AirdropInfoResponse> {
     if let Some(air_token) = airdrop_token {
-        let info = read_airdrop_info(deps.storage, air_token.clone()).unwrap();
+        let info = read_airdrop_info(deps.storage, air_token.clone())?;
 
         Ok(AirdropInfoResponse {
             airdrop_info: vec![AirdropInfoElem {
@@ -309,4 +270,14 @@ fn query_airdrop_infos(
             airdrop_info: infos,
         })
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum GenericAirdropExecuteMsg {
+    Claim {
+        stage: u8,
+        amount: Uint128,
+        proof: Vec<String>,
+    },
 }

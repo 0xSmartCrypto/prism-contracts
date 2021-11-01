@@ -1,22 +1,18 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use prism_protocol::airdrop::{AirdropInfo, AirdropInfoElem};
 use cosmwasm_std::{from_slice, to_vec, CanonicalAddr, Order, StdResult, Storage};
 use cw_storage_plus::{Bound, Item, Map};
-
-pub static KEY_CONFIG: &[u8] = b"config";
-pub static PREFIX_AIRODROP_INFO: &[u8] = b"airdrop_info";
+use prism_protocol::airdrop::{AirdropInfo, AirdropInfoElem};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: CanonicalAddr,
     pub vault_contract: String,
-    pub reward_contract: String,
     pub airdrop_tokens: Vec<String>,
 }
 
-pub const CONFIG: Item<Config> = Item::new("\u{0}\u{6}config");
+pub const CONFIG: Item<Config> = Item::new("config");
 pub const AIRDROP_INFO: Map<&[u8], AirdropInfo> = Map::new("airdrop_info");
 
 pub fn store_config(storage: &mut dyn Storage, config: &Config) -> StdResult<()> {
