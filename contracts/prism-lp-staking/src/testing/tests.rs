@@ -1,7 +1,6 @@
 use crate::contract::{execute, instantiate, query};
-use crate::testing::mock_querier::mock_dependencies;
 use crate::ContractError;
-use cosmwasm_std::testing::{mock_env, mock_info};
+use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
 use cosmwasm_std::{from_binary, to_binary, CosmosMsg, Decimal, SubMsg, Uint128, WasmMsg};
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
