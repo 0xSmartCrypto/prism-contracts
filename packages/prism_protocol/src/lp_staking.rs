@@ -38,6 +38,7 @@ pub enum QueryMsg {
     },
     StakerInfo {
         staker: String,
+        staking_token: Option<String>,
     },
     TokenStakersInfo {
         staking_token: String,

@@ -131,6 +131,7 @@ fn test_bond_tokens() {
                 mock_env(),
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
+                    staking_token: None,
                 },
             )
             .unwrap(),
@@ -185,6 +186,7 @@ fn test_bond_tokens() {
                 env.clone(),
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
+                    staking_token: None,
                 },
             )
             .unwrap(),
@@ -379,6 +381,7 @@ fn test_compute_reward() {
                 env.clone(),
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
+                    staking_token: None,
                 },
             )
             .unwrap()
@@ -412,6 +415,7 @@ fn test_compute_reward() {
                 env,
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
+                    staking_token: None,
                 },
             )
             .unwrap()

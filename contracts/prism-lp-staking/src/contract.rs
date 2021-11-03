@@ -94,14 +94,24 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     match msg {
         QueryMsg::Config {} => Ok(to_binary(&query_config(deps)?)?),
         QueryMsg::PoolInfo { staking_token } => {
-            let staking_token_addr = deps.api.addr_validate(&staking_token)?;
+            let staking_token_addr: Addr = deps.api.addr_validate(&staking_token)?;
 
             Ok(to_binary(&query_pool_info(deps, staking_token_addr)?)?)
         }
-        QueryMsg::StakerInfo { staker } => {
-            let staker_addr = deps.api.addr_validate(&staker)?;
+        QueryMsg::StakerInfo {
+            staker,
+            staking_token,
+        } => {
+            let staker_addr: Addr = deps.api.addr_validate(&staker)?;
+            let staking_token_addr: Option<Addr> =
+                staking_token.map(|item| deps.api.addr_validate(&item).unwrap());
 
-            Ok(to_binary(&query_staker_info(deps, env, staker_addr)?)?)
+            Ok(to_binary(&query_staker_info(
+                deps,
+                env,
+                staker_addr,
+                staking_token_addr,
+            )?)?)
         }
         QueryMsg::TokenStakersInfo {
             staking_token,
@@ -109,11 +119,14 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
             limit,
         } => {
             let staking_token_addr = deps.api.addr_validate(&staking_token)?;
+            let start_after_addr: Option<Addr> =
+                start_after.map(|item| deps.api.addr_validate(&item).unwrap());
+
             Ok(to_binary(&query_token_stakers_info(
                 deps,
                 env,
                 staking_token_addr,
-                start_after,
+                start_after_addr,
                 limit,
             )?)?)
         }

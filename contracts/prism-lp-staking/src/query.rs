@@ -1,9 +1,10 @@
 use cosmwasm_std::{Addr, CanonicalAddr, Deps, Env};
 
 use crate::error::ContractError;
+use crate::handle::{compute_pool_reward, compute_staker_reward};
 use crate::state::{
-    read_token_stakers_with_updated_rewards, read_updated_staker_rewards, Config, PoolInfo, CONFIG,
-    POOLS,
+    read_token_stakers_with_updated_rewards, read_updated_staker_rewards, Config, PoolInfo,
+    RewardInfo, CONFIG, POOLS, REWARD_INFO,
 };
 
 use prism_protocol::lp_staking::{
@@ -28,11 +29,33 @@ pub fn query_staker_info(
     deps: Deps,
     env: Env,
     staker: Addr,
+    staking_token: Option<Addr>,
 ) -> Result<StakerInfoResponse, ContractError> {
     let staker_raw: CanonicalAddr = deps.api.addr_canonicalize(staker.as_str())?;
 
-    let staker_rewards: Vec<RewardInfoResponseItem> =
-        read_updated_staker_rewards(deps.storage, deps.api, env.block.time.seconds(), staker_raw)?;
+    let staker_rewards: Vec<RewardInfoResponseItem> = match staking_token {
+        Some(staking_token) => {
+            let config: Config = CONFIG.load(deps.storage)?;
+            let staking_token_raw: CanonicalAddr =
+                deps.api.addr_canonicalize(staking_token.as_str())?;
+            let mut pool: PoolInfo = POOLS.load(deps.storage, staking_token_raw.as_slice())?;
+            let mut reward_info: RewardInfo = REWARD_INFO.load(
+                deps.storage,
+                (staker_raw.as_slice(), staking_token_raw.as_slice()),
+            )?;
+
+            compute_pool_reward(&config, &mut pool, env.block.time.seconds());
+            compute_staker_reward(&pool, &mut reward_info);
+
+            vec![reward_info.as_res(&staking_token)]
+        }
+        None => read_updated_staker_rewards(
+            deps.storage,
+            deps.api,
+            env.block.time.seconds(),
+            staker_raw,
+        )?,
+    };
 
     Ok(StakerInfoResponse {
         staker: staker.to_string(),
@@ -44,7 +67,7 @@ pub fn query_token_stakers_info(
     deps: Deps,
     env: Env,
     staking_token: Addr,
-    start_after: Option<String>,
+    start_after: Option<Addr>,
     limit: Option<u32>,
 ) -> Result<StakersInfoResponse, ContractError> {
     let staking_token_raw: CanonicalAddr = deps.api.addr_canonicalize(staking_token.as_str())?;
