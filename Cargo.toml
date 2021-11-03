@@ -1,12 +1,6 @@
 [workspace]
 members = [
-    "contracts/prism-vault",
-    "contracts/prism-yasset-staking",
-    "contracts/prism-airdrop-registry",
-    "contracts/prism-gov",
-    "contracts/fair-launch",
-    "contracts/prism-launch-pool",
-    "contracts/prism-collector",
+    "contracts/*",
     "packages/*"
 ]
 

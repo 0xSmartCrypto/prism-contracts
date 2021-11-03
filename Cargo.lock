@@ -987,6 +987,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-lp-staking"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20",
+ "prism-protocol",
+ "schemars",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "prism-protocol"
 version = "1.0.0"
 dependencies = [
