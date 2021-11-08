@@ -2,9 +2,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{StdResult, Storage};
-use cosmwasm_storage::{singleton, singleton_read};
+use cw_storage_plus::{Item};
 
-static KEY_CONFIG: &[u8] = b"config";
+pub const CONFIG: Item<Config> = Item::new("config");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -17,9 +17,9 @@ pub struct Config {
 }
 
 pub fn store_config(storage: &mut dyn Storage, config: &Config) -> StdResult<()> {
-    singleton(storage, KEY_CONFIG).save(config)
+    CONFIG.save(storage, config)
 }
 
 pub fn read_config(storage: &dyn Storage) -> StdResult<Config> {
-    singleton_read(storage, KEY_CONFIG).load()
+    CONFIG.load(storage)
 }
