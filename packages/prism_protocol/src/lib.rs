@@ -6,3 +6,4 @@ pub mod launch_pool;
 pub mod vault;
 pub mod yasset_staking;
 pub mod lp_staking;
+pub mod limit_order;
