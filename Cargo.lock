@@ -982,19 +982,18 @@ dependencies = [
 
 [[package]]
 name = "prism-gov"
-version = "2.1.1"
+version = "1.0.0"
 dependencies = [
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
  "cw-storage-plus",
  "cw20",
- "cw20-base",
  "hex",
  "prism-protocol",
  "schemars",
  "serde",
- "terraswap",
 ]
 
 [[package]]
