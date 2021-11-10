@@ -25,7 +25,7 @@ pub const DEFAULT_LIMIT: u32 = 10;
 pub struct Config {
     pub owner: CanonicalAddr,
     pub prism_token: CanonicalAddr,
-    pub xprism_token: CanonicalAddr,
+    pub xprism_token: Option<CanonicalAddr>,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,

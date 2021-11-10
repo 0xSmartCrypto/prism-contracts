@@ -39,7 +39,7 @@ pub fn instantiate(
 
     let config = Config {
         prism_token: deps.api.addr_canonicalize(&msg.prism_token)?,
-        xprism_token: deps.api.addr_canonicalize(&msg.xprism_token)?,
+        xprism_token: None,
         owner: deps.api.addr_canonicalize(info.sender.as_str())?,
         quorum: msg.quorum,
         threshold: msg.threshold,
@@ -60,6 +60,7 @@ pub fn instantiate(
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
+        ExecuteMsg::PostInitialize { xprism_token } => post_initialize(deps, info, xprism_token),
         ExecuteMsg::UpdateConfig {
             owner,
             quorum,
@@ -103,7 +104,7 @@ pub fn receive_cw20(
     // only asset contract can execute this message
     let config: Config = config_read(deps.storage).load()?;
     let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
-    if config.xprism_token == sender_raw {
+    if config.xprism_token.unwrap() == sender_raw {
         match from_binary(&cw20_msg.msg) {
             Ok(Cw20HookMsg::StakeVotingTokens {}) => {
                 stake_voting_tokens(deps, cw20_msg.sender, cw20_msg.amount)
@@ -150,6 +151,28 @@ pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
         }
         _ => Err(StdError::generic_err("reply id is invalid")),
     }
+}
+
+pub fn post_initialize(
+    deps: DepsMut,
+    info: MessageInfo,
+    xprism_token: String,
+) -> StdResult<Response> {
+    let mut config: Config = config_read(deps.storage).load()?;
+
+    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    if config.xprism_token.is_some() {
+        return Err(StdError::generic_err("xprism token was already set"));
+    }
+
+    config.xprism_token = Some(deps.api.addr_canonicalize(&xprism_token)?);
+
+    config_store(deps.storage).save(&config)?;
+
+    Ok(Response::default())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -249,7 +272,10 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = config_read(deps.storage).load()?;
     Ok(ConfigResponse {
         owner: deps.api.addr_humanize(&config.owner)?.to_string(),
-        xprism_token: deps.api.addr_humanize(&config.xprism_token)?.to_string(),
+        xprism_token: deps
+            .api
+            .addr_humanize(&config.xprism_token.unwrap())?
+            .to_string(),
         quorum: config.quorum,
         threshold: config.threshold,
         voting_period: config.voting_period,

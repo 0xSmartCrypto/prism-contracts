@@ -22,7 +22,7 @@ pub fn mint_xprism(
 ) -> StdResult<Response> {
     let cfg = config_read(deps.storage).load()?;
     let prism_token = deps.api.addr_humanize(&cfg.prism_token)?;
-    let xprism_token = deps.api.addr_humanize(&cfg.xprism_token)?;
+    let xprism_token = deps.api.addr_humanize(&cfg.xprism_token.unwrap())?;
 
     let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address.clone())?;
     let xprism_amt = query_supply(&deps.querier, xprism_token.clone())?;
@@ -56,7 +56,7 @@ pub fn redeem_xprism(
 ) -> StdResult<Response> {
     let cfg = config_read(deps.storage).load()?;
     let prism_token = deps.api.addr_humanize(&cfg.prism_token)?;
-    let xprism_token = deps.api.addr_humanize(&cfg.xprism_token)?;
+    let xprism_token = deps.api.addr_humanize(&cfg.xprism_token.unwrap())?;
 
     let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address.clone())?;
     let xprism_amt = query_supply(&deps.querier, xprism_token.clone())?;
@@ -81,7 +81,7 @@ pub fn redeem_xprism(
 pub fn claim_redeemed_prism(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
     let cfg = config_read(deps.storage).load()?;
     let prism_token = deps.api.addr_humanize(&cfg.prism_token)?;
-    let xprism_token = deps.api.addr_humanize(&cfg.xprism_token)?;
+    let xprism_token = deps.api.addr_humanize(&cfg.xprism_token.unwrap())?;
 
     let (w_xprism, w_prism) =
         compute_withdrawable(deps.storage, env.block.time.seconds(), &info.sender)?;

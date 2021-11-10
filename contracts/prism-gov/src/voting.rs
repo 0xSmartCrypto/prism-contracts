@@ -63,7 +63,7 @@ pub fn withdraw_voting_tokens(
 
     send_tokens(
         deps,
-        &config.xprism_token,
+        &config.xprism_token.unwrap(),
         &sender_address_raw,
         withdraw_amount,
         "withdraw_voting_tokens",

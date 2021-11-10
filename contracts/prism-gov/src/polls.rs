@@ -121,8 +121,11 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
     let total_supply = match a_poll.supply_snapshot {
         Some(v) => v,
         None => {
-            let supply =
-                query_supply(&deps.querier, deps.api.addr_humanize(&config.xprism_token)?)?;
+            let supply = query_supply(
+                &deps.querier,
+                deps.api
+                    .addr_humanize(&config.xprism_token.as_ref().unwrap())?,
+            )?;
             a_poll.supply_snapshot = Some(supply);
 
             supply
@@ -152,7 +155,10 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
         // Refunds deposit only when quorum is reached
         if !a_poll.deposit_amount.is_zero() {
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: deps.api.addr_humanize(&config.xprism_token)?.to_string(),
+                contract_addr: deps
+                    .api
+                    .addr_humanize(config.xprism_token.as_ref().unwrap())?
+                    .to_string(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: deps.api.addr_humanize(&a_poll.creator)?.to_string(),
@@ -301,7 +307,10 @@ pub fn cast_vote(
     // processing snapshot
     let time_to_end = a_poll.end_time - current_seconds;
     if time_to_end < config.snapshot_period && a_poll.supply_snapshot.is_none() {
-        let supply = query_supply(&deps.querier, deps.api.addr_humanize(&config.xprism_token)?)?;
+        let supply = query_supply(
+            &deps.querier,
+            deps.api.addr_humanize(&config.xprism_token.unwrap())?,
+        )?;
         a_poll.supply_snapshot = Some(supply);
     }
 
@@ -339,7 +348,10 @@ pub fn snapshot_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Respons
     }
 
     // store the current supply amount for quorum calculation
-    let supply = query_supply(&deps.querier, deps.api.addr_humanize(&config.xprism_token)?)?;
+    let supply = query_supply(
+        &deps.querier,
+        deps.api.addr_humanize(&config.xprism_token.unwrap())?,
+    )?;
 
     a_poll.supply_snapshot = Some(supply);
 

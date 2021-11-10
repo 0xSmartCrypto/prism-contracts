@@ -9,7 +9,6 @@ use crate::common::OrderBy;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub prism_token: String,
-    pub xprism_token: String,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,
@@ -23,6 +22,9 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
+    PostInitialize {
+        xprism_token: String,
+    },
     UpdateConfig {
         owner: Option<String>,
         quorum: Option<Decimal>,
