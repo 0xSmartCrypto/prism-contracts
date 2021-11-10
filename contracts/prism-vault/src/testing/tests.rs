@@ -1,7 +1,7 @@
 use cosmwasm_std::{
     coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut,
     DistributionMsg, Env, FullDelegation, MessageInfo, OwnedDeps, Querier, Response, StakingMsg,
-    StdError, Storage, SubMsg, Uint128, Validator, WasmMsg,
+    StdError, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use crate::contract::{execute, instantiate, query};
 use crate::unbond::execute_unbond;
 use prism_protocol::vault::{
     AllHistoryResponse, ConfigResponse, CurrentBatchResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
-    StateResponse, UnbondRequestsResponse, WhitelistedValidatorsResponse,
+    StateResponse, UnbondHistory, UnbondRequestsResponse, WhitelistedValidatorsResponse,
     WithdrawableUnbondedResponse,
 };
 
@@ -24,7 +24,12 @@ use prism_protocol::vault::ExecuteMsg::{CheckSlashing, Receive, UpdateConfig, Up
 
 use super::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use crate::math::decimal_division;
-use crate::state::{read_unbond_wait_list, Parameters, CONFIG};
+use crate::state::{
+    all_unbond_history, get_finished_amount, get_unbond_batches, get_unbond_requests,
+    is_valid_validator, query_get_finished_amount, read_unbond_history, read_unbond_wait_list,
+    read_validators, remove_unbond_wait_list, remove_white_validators, store_unbond_history,
+    store_unbond_wait_list, store_white_validators, Parameters, CONFIG,
+};
 use prism_protocol::airdrop::ExecuteMsg::FabricateClaim;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
@@ -3051,4 +3056,210 @@ fn sample_delegation(addr: String, amount: Coin) -> FullDelegation {
 #[serde(rename_all = "snake_case")]
 pub enum MIRMsg {
     MIRClaim {},
+}
+
+#[test]
+fn proper_unbond_storage() -> StdResult<()> {
+    let mut deps = dependencies(&[]);
+    let addr1 = "addr1000".to_string();
+    let addr2 = "addr2000".to_string();
+    let amount1 = Uint128::from(100u32);
+    let amount2 = Uint128::from(200u32);
+
+    // store unbondings for addr1 and addr2
+    store_unbond_wait_list(deps.as_mut().storage, 1, addr1.clone(), amount1)?;
+    store_unbond_wait_list(deps.as_mut().storage, 2, addr1.clone(), amount1)?;
+    store_unbond_wait_list(deps.as_mut().storage, 2, addr1.clone(), amount2)?;
+    store_unbond_wait_list(deps.as_mut().storage, 1, addr2.clone(), amount1)?;
+
+    // validate addr1 requests
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, addr1.clone())?;
+    assert_eq!(unbond_requests.len(), 2);
+    assert_eq!(unbond_requests[0], (1u64, amount1));
+    assert_eq!(unbond_requests[1], (2u64, amount1 + amount2));
+
+    // validate addr2 requests
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, addr2.clone())?;
+    assert_eq!(unbond_requests.len(), 1);
+    assert_eq!(unbond_requests[0], (1u64, amount1));
+
+    // read unbond wait list for addr1, batch2
+    let res = read_unbond_wait_list(deps.as_mut().storage, 2, addr1.clone())?;
+    assert_eq!(res, amount1 + amount2);
+
+    // read invalid batch id for user
+    let err = read_unbond_wait_list(deps.as_mut().storage, 3, addr1.clone());
+    if let StdError::NotFound { .. } = err.unwrap_err() {
+    } else {
+        panic!("Expected StdError::NotFound");
+    }
+
+    // no finished amount yet
+    let res = get_finished_amount(deps.as_ref().storage, addr1.clone())?;
+    assert_eq!(res, Uint128::zero());
+
+    // no unbonded batches yet
+    let res = get_unbond_batches(deps.as_ref().storage, addr1.clone())?;
+    assert_eq!(res.len(), 0);
+
+    //no unbond history yet
+    let res = all_unbond_history(deps.as_ref().storage, None, None)?;
+    assert_eq!(res.len(), 0);
+
+    // no unbond_history for block 1
+    let err = read_unbond_history(deps.as_ref().storage, 1);
+    if let StdError::GenericErr { .. } = err.unwrap_err() {
+    } else {
+        panic!("Expected StdError::GenericErr");
+    }
+
+    // create some history
+    let env = mock_env();
+    let exchange_rate = Decimal::percent(110);
+    let unbond_amount = Uint128::from(50u128);
+
+    let mut history1 = UnbondHistory {
+        batch_id: 1,
+        time: env.block.time.seconds(),
+        amount: unbond_amount,
+        applied_exchange_rate: exchange_rate,
+        withdraw_rate: exchange_rate,
+        released: false,
+    };
+
+    let exchange_rate2 = Decimal::percent(120);
+    let history2 = UnbondHistory {
+        batch_id: 2,
+        time: env.block.time.seconds() + 100,
+        applied_exchange_rate: exchange_rate2,
+        withdraw_rate: exchange_rate2,
+        ..history1
+    };
+
+    // write some history
+    store_unbond_history(deps.as_mut().storage, history1.batch_id, history1.clone())?;
+    store_unbond_history(deps.as_mut().storage, history2.batch_id, history2.clone())?;
+
+    // read all history
+    let res = all_unbond_history(deps.as_ref().storage, None, None)?;
+    assert_eq!(res.len(), 2);
+    assert_eq!(res[0], history1);
+    assert_eq!(res[1], history2);
+
+    // write some more history in order to test pagination code
+    let history3 = UnbondHistory{
+        batch_id: 3,
+        ..history2
+    };
+    let history4 = UnbondHistory{
+        batch_id: 4,
+        ..history2
+    };
+    let history5 = UnbondHistory{
+        batch_id: 5,
+        ..history2
+    };
+    store_unbond_history(deps.as_mut().storage, 3, history3.clone())?;
+    store_unbond_history(deps.as_mut().storage, 4, history4.clone())?;
+    store_unbond_history(deps.as_mut().storage, 5, history5.clone())?;
+
+    // read all history with pagination of 2 records at a time
+    let mut start : Option<u64> = None;
+    let limit = Some(2u32);
+    loop {
+        let res = all_unbond_history(deps.as_ref().storage, start, limit)?;
+        if (res.len() as u32) < limit.unwrap() {
+            break;
+        }
+        start = start.or(Some(0)).map(|x| x + res.len() as u64);
+    }
+    assert_eq!(start.unwrap(), 4);
+
+    // read block 1 history
+    let res = read_unbond_history(deps.as_ref().storage, 1)?;
+    assert_eq!(res, history1);
+
+    // still no finished amount
+    let res = get_finished_amount(deps.as_ref().storage, addr1.clone())?;
+    assert_eq!(res, Uint128::zero());
+
+    // release the first batch
+    history1.released = true;
+    store_unbond_history(deps.as_mut().storage, history1.batch_id, history1.clone())?;
+
+    // query addr1 finished amount
+    let res = get_finished_amount(deps.as_ref().storage, addr1.clone())?;
+    assert_eq!(res, amount1 * exchange_rate);
+
+    // query addr2 finished amount
+    let res = get_finished_amount(deps.as_ref().storage, addr2.clone())?;
+    assert_eq!(res, amount1 * exchange_rate);
+
+    // query a time between block1 and block2
+    let time_in_future = env.block.time.seconds() + 50;
+    let res = query_get_finished_amount(deps.as_ref().storage, addr1.clone(), time_in_future)?;
+    assert_eq!(res, amount1 * exchange_rate);
+
+    // query a time after block2
+    let time_in_future = env.block.time.seconds() + 150;
+    let res = query_get_finished_amount(deps.as_ref().storage, addr1.clone(), time_in_future)?;
+    assert_eq!(
+        res,
+        amount1 * exchange_rate + (amount1 + amount2) * exchange_rate2
+    );
+
+    // block1 should be unbonded now
+    let unbond_batches = get_unbond_batches(deps.as_ref().storage, addr1.clone())?;
+    assert_eq!(unbond_batches.len(), 1);
+    assert_eq!(unbond_batches[0], 1);
+
+    // remove block1 from addr1 and verify that it's gone via unbond_requests
+    remove_unbond_wait_list(
+        deps.as_mut().storage,
+        unbond_batches,
+        Addr::unchecked(addr1.clone()),
+    )?;
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, addr1.clone())?;
+    assert_eq!(unbond_requests.len(), 1);
+    assert_eq!(unbond_requests[0], (2u64, amount1 + amount2));
+
+    Ok(())
+}
+
+#[test]
+fn proper_validator_storage() -> StdResult<()> {
+    let mut deps = dependencies(&[]);
+
+    // start with empty validators
+    let res = read_validators(deps.as_ref().storage)?;
+    assert_eq!(res.len(), 0);
+
+    // add 2 validators and validate storage afterwards
+    store_white_validators(deps.as_mut().storage, DEFAULT_VALIDATOR.to_string())?;
+    store_white_validators(deps.as_mut().storage, DEFAULT_VALIDATOR2.to_string())?;
+    let res = read_validators(deps.as_ref().storage)?;
+    assert_eq!(res.len(), 2);
+    assert_eq!(res[0], DEFAULT_VALIDATOR);
+    assert_eq!(res[1], DEFAULT_VALIDATOR2);
+
+    // is_valid_validator testing
+    let res = is_valid_validator(deps.as_ref().storage, DEFAULT_VALIDATOR.to_string())?;
+    assert_eq!(res, true);
+    let res = is_valid_validator(deps.as_ref().storage, DEFAULT_VALIDATOR2.to_string())?;
+    assert_eq!(res, true);
+    let res = is_valid_validator(deps.as_ref().storage, DEFAULT_VALIDATOR3.to_string())?;
+    assert_eq!(res, false);
+
+    // remove validator 2, verify it's gone
+    remove_white_validators(deps.as_mut().storage, DEFAULT_VALIDATOR2.to_string())?;
+    let res = is_valid_validator(deps.as_ref().storage, DEFAULT_VALIDATOR2.to_string())?;
+    assert_eq!(res, false);
+    let res = read_validators(deps.as_ref().storage)?;
+    assert_eq!(res.len(), 1);
+    assert_eq!(res[0], DEFAULT_VALIDATOR);
+
+    // remove a validator that is not whitelisted, no error is emitted here
+    remove_white_validators(deps.as_mut().storage, "fakevalidator".to_string())?;
+
+    Ok(())
 }
