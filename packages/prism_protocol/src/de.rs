@@ -2,26 +2,28 @@ use cosmwasm_std::{StdError, StdResult};
 use std::array::TryFromSliceError;
 use std::convert::TryInto;
 
-/// This is just a copy of the necessary funtions from storage-plus
+/// This code is mostly just a copy of the necessary functions from storage-plus
 /// but not introduced until cw-storage-plus 0.10.0.  Can remove this 
-/// file entirely once we upgrade cw-storage-plus.
+/// file entirely once we upgrade cw-storage-plus and use the prefix_de/range_de 
+/// methods instead.
+
+pub fn deserialize_key<K: KeyDeserialize>(key: Vec<u8>) -> StdResult<K::Output> {
+    K::from_vec(key)
+}
 
 pub trait KeyDeserialize {
-    fn from_slice(key: &Vec<u8>) -> StdResult<Self>
-    where
-        Self: Sized;
+    type Output: Sized;
+
+    fn from_vec(value: Vec<u8>) -> StdResult<Self::Output>;
 }
 
 impl KeyDeserialize for u64 {
-    fn from_slice(key: &Vec<u8>) -> StdResult<u64> {
-        Ok(u64::from_be_bytes(key.as_slice().try_into().map_err(
+    type Output = u64;
+
+    #[inline(always)]
+    fn from_vec(value: Vec<u8>) -> StdResult<Self::Output> {
+        Ok(u64::from_be_bytes(value.as_slice().try_into().map_err(
             |err: TryFromSliceError| StdError::generic_err(err.to_string()),
         )?))
-    }
-}
-
-impl KeyDeserialize for String {
-    fn from_slice(key: &Vec<u8>) -> StdResult<String> {
-        String::from_utf8(key.clone()).map_err(StdError::invalid_utf8)
     }
 }

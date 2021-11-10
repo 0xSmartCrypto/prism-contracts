@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Addr, CanonicalAddr, Decimal, Deps, DepsMut, Order, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Item, Map, U64Key};
 
-use prism_protocol::de::KeyDeserialize;
+use prism_protocol::de::{deserialize_key};
 use prism_protocol::vault::{Config, State, UnbondHistory, UnbondRequest};
 
 pub type LastBatch = u64;
@@ -80,7 +80,7 @@ pub fn get_unbond_requests(deps: &Deps, sender_addr: String) -> StdResult<Unbond
         .range(deps.storage, None, None, Order::Ascending)
         .map(|item| {
             let (k, v) = item.unwrap();
-            let batch_id = KeyDeserialize::from_slice(&k).unwrap();
+            let batch_id = deserialize_key::<u64>(k).unwrap();
             (batch_id, v)
         })
         .collect();
@@ -94,7 +94,7 @@ pub fn get_unbond_batches(deps: &Deps, sender_addr: String) -> StdResult<Vec<u64
         .range(deps.storage, None, None, Order::Ascending)
         .filter_map(|item| {
             let (k, _) = item.unwrap();
-            let batch_id = KeyDeserialize::from_slice(&k).unwrap();
+            let batch_id = deserialize_key::<u64>(k).unwrap();
             if let Ok(h) = read_unbond_history(deps.storage, batch_id) {
                 if h.released {
                     Some(batch_id)
@@ -120,7 +120,7 @@ pub fn get_finished_amount(deps: &Deps, sender_addr: String) -> StdResult<Uint12
         .range(deps.storage, None, None, Order::Ascending)
         .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
-            let batch_id = KeyDeserialize::from_slice(&k).unwrap();
+            let batch_id = deserialize_key::<u64>(k).unwrap();
             if let Ok(h) = read_unbond_history(deps.storage, batch_id) {
                 if h.released {
                     acc + v * h.withdraw_rate
@@ -146,7 +146,7 @@ pub fn query_get_finished_amount(
         .range(deps.storage, None, None, Order::Ascending)
         .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
-            let batch_id = KeyDeserialize::from_slice(&k).unwrap();
+            let batch_id = deserialize_key::<u64>(k).unwrap();
             if let Ok(h) = read_unbond_history(deps.storage, batch_id) {
                 if h.time < block_time {
                     acc + v * h.withdraw_rate
