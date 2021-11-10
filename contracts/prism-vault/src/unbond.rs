@@ -51,7 +51,7 @@ pub(crate) fn execute_unbond(
     current_batch.requested_with_fee += amount_with_fee;
 
     store_unbond_wait_list(
-        deps.storage,
+        &mut deps,
         current_batch.id,
         sender.clone(),
         amount_with_fee,
@@ -148,7 +148,7 @@ pub(crate) fn execute_unbond(
 }
 
 pub fn execute_withdraw_unbonded(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> StdResult<Response> {
@@ -171,7 +171,7 @@ pub fn execute_withdraw_unbonded(
     // calculate withdraw rate for user requests
     process_withdraw_rate(deps.storage, historical_time, vault_balance)?;
 
-    let withdraw_amount = get_finished_amount(deps.storage, sender_human.to_string()).unwrap();
+    let withdraw_amount = get_finished_amount(&deps.as_ref(), sender_human.to_string()).unwrap();
 
     if withdraw_amount.is_zero() {
         return Err(StdError::generic_err(format!(
@@ -181,8 +181,8 @@ pub fn execute_withdraw_unbonded(
     }
 
     // remove the previous batches for the user
-    let deprecated_batches = get_unbond_batches(deps.storage, sender_human.to_string())?;
-    remove_unbond_wait_list(deps.storage, deprecated_batches, sender_human.clone())?;
+    let deprecated_batches = get_unbond_batches(&deps.as_ref(), sender_human.to_string())?;
+    remove_unbond_wait_list(&mut deps, deprecated_batches, sender_human.clone())?;
 
     // Update previous balance used for calculation in next Luna batch release
     let prev_balance = (vault_balance.checked_sub(withdraw_amount))?;

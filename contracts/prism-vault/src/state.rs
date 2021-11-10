@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Decimal, Order, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, CanonicalAddr, Decimal, Deps, DepsMut, Order, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Item, Map, U64Key};
 
 use prism_protocol::de::KeyDeserialize;
@@ -28,21 +28,22 @@ pub const CONFIG: Item<Config> = Item::new("config");
 pub const PARAMETERS: Item<Parameters> = Item::new("parameters");
 pub const CURRENT_BATCH: Item<CurrentBatch> = Item::new("current_batch");
 pub const STATE: Item<State> = Item::new("state");
-pub const UNBOND_WAITLIST: Map<(&Addr, U64Key), Uint128> = Map::new("unbond_waitlist");
+pub const UNBOND_WAITLIST: Map<(&[u8], U64Key), Uint128> = Map::new("unbond_waitlist");
 pub const UNBOND_HISTORY: Map<U64Key, UnbondHistory> = Map::new("unbond_history");
-pub const VALIDATORS: Map<&Addr, bool> = Map::new("validators");
+pub const VALIDATORS: Map<&[u8], bool> = Map::new("validators");
 
 /// Store undelegation wait list per each batch
 /// HashMap<user's address, <batch_id, requested_amount>
 pub fn store_unbond_wait_list(
-    storage: &mut dyn Storage,
+    deps: &mut DepsMut,
     batch_id: u64,
     sender_addr: String,
     amount: Uint128,
 ) -> StdResult<()> {
+    let sender_addr_raw = deps.api.addr_canonicalize(&sender_addr)?;
     UNBOND_WAITLIST.update(
-        storage,
-        (&Addr::unchecked(sender_addr), batch_id.into()),
+        deps.storage,
+        (sender_addr_raw.as_slice(), batch_id.into()),
         |existing_amount: Option<Uint128>| -> StdResult<_> {
             Ok(existing_amount.unwrap_or_default() + amount)
         },
@@ -52,28 +53,31 @@ pub fn store_unbond_wait_list(
 
 /// Remove unbond batch id from user's wait list
 pub fn remove_unbond_wait_list(
-    storage: &mut dyn Storage,
+    deps: &mut DepsMut,
     batch_id: Vec<u64>,
     sender_addr: Addr,
 ) -> StdResult<()> {
+    let sender_addr_raw = deps.api.addr_canonicalize(&sender_addr.as_str())?;
     for b in batch_id {
-        UNBOND_WAITLIST.remove(storage, (&sender_addr, b.into()));
+        UNBOND_WAITLIST.remove(deps.storage, (sender_addr_raw.as_slice(), b.into()));
     }
     Ok(())
 }
 
 pub fn read_unbond_wait_list(
-    storage: &dyn Storage,
+    deps: &Deps,
     batch_id: u64,
     sender_addr: String,
 ) -> StdResult<Uint128> {
-    UNBOND_WAITLIST.load(storage, (&Addr::unchecked(sender_addr), batch_id.into()))
+    let sender_addr_raw = deps.api.addr_canonicalize(&sender_addr)?;
+    UNBOND_WAITLIST.load(deps.storage, (sender_addr_raw.as_slice(), batch_id.into()))
 }
 
-pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: String) -> StdResult<UnbondRequest> {
+pub fn get_unbond_requests(deps: &Deps, sender_addr: String) -> StdResult<UnbondRequest> {
+    let sender_addr_raw = deps.api.addr_canonicalize(&sender_addr)?;
     let sender_requests: Vec<_> = UNBOND_WAITLIST
-        .prefix(&Addr::unchecked(sender_addr))
-        .range(storage, None, None, Order::Ascending)
+        .prefix(sender_addr_raw.as_slice())
+        .range(deps.storage, None, None, Order::Ascending)
         .map(|item| {
             let (k, v) = item.unwrap();
             let batch_id = KeyDeserialize::from_slice(&k).unwrap();
@@ -83,14 +87,15 @@ pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: String) -> StdRes
     Ok(sender_requests)
 }
 
-pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: String) -> StdResult<Vec<u64>> {
+pub fn get_unbond_batches(deps: &Deps, sender_addr: String) -> StdResult<Vec<u64>> {
+    let sender_addr_raw = deps.api.addr_canonicalize(&sender_addr)?;
     let deprecated_batches: Vec<u64> = UNBOND_WAITLIST
-        .prefix(&Addr::unchecked(sender_addr))
-        .range(storage, None, None, Order::Ascending)
+        .prefix(sender_addr_raw.as_slice())
+        .range(deps.storage, None, None, Order::Ascending)
         .filter_map(|item| {
             let (k, _) = item.unwrap();
             let batch_id = KeyDeserialize::from_slice(&k).unwrap();
-            if let Ok(h) = read_unbond_history(storage, batch_id) {
+            if let Ok(h) = read_unbond_history(deps.storage, batch_id) {
                 if h.released {
                     Some(batch_id)
                 } else {
@@ -108,14 +113,15 @@ pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: String) -> StdResu
 /// This needs to be called after process withdraw rate function.
 /// If the batch is released, this will return user's requested
 /// amount proportional to withdraw rate.
-pub fn get_finished_amount(storage: &dyn Storage, sender_addr: String) -> StdResult<Uint128> {
+pub fn get_finished_amount(deps: &Deps, sender_addr: String) -> StdResult<Uint128> {
+    let sender_addr_raw = deps.api.addr_canonicalize(&sender_addr)?;
     let withdrawable_amount = UNBOND_WAITLIST
-        .prefix(&Addr::unchecked(sender_addr))
-        .range(storage, None, None, Order::Ascending)
+        .prefix(sender_addr_raw.as_slice())
+        .range(deps.storage, None, None, Order::Ascending)
         .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
             let batch_id = KeyDeserialize::from_slice(&k).unwrap();
-            if let Ok(h) = read_unbond_history(storage, batch_id) {
+            if let Ok(h) = read_unbond_history(deps.storage, batch_id) {
                 if h.released {
                     acc + v * h.withdraw_rate
                 } else {
@@ -130,17 +136,18 @@ pub fn get_finished_amount(storage: &dyn Storage, sender_addr: String) -> StdRes
 
 /// Return the finished amount for all batches that has been before the given block time.
 pub fn query_get_finished_amount(
-    storage: &dyn Storage,
+    deps: &Deps,
     sender_addr: String,
     block_time: u64,
 ) -> StdResult<Uint128> {
+    let sender_addr_raw = deps.api.addr_canonicalize(&sender_addr)?;
     let withdrawable_amount = UNBOND_WAITLIST
-        .prefix(&Addr::unchecked(sender_addr))
-        .range(storage, None, None, Order::Ascending)
+        .prefix(sender_addr_raw.as_slice())
+        .range(deps.storage, None, None, Order::Ascending)
         .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
             let batch_id = KeyDeserialize::from_slice(&k).unwrap();
-            if let Ok(h) = read_unbond_history(storage, batch_id) {
+            if let Ok(h) = read_unbond_history(deps.storage, batch_id) {
                 if h.time < block_time {
                     acc + v * h.withdraw_rate
                 } else {
@@ -154,35 +161,42 @@ pub fn query_get_finished_amount(
 }
 
 /// Store valid validators
-pub fn store_white_validators(storage: &mut dyn Storage, validator_addr: String) -> StdResult<()> {
-    VALIDATORS.save(storage, &Addr::unchecked(validator_addr), &true)?;
+pub fn store_white_validators(deps: &mut DepsMut, validator_addr: String) -> StdResult<()> {
+    let addr_raw = deps.api.addr_canonicalize(&validator_addr)?;
+    VALIDATORS.save(deps.storage, addr_raw.as_slice(), &true)?;
     Ok(())
 }
 
 /// Remove valid validators
-pub fn remove_white_validators(storage: &mut dyn Storage, validator_addr: String) -> StdResult<()> {
-    VALIDATORS.remove(storage, &Addr::unchecked(validator_addr));
+pub fn remove_white_validators(deps: &mut DepsMut, validator_addr: String) -> StdResult<()> {
+    let addr_raw = deps.api.addr_canonicalize(&validator_addr)?;
+    VALIDATORS.remove(deps.storage, addr_raw.as_slice());
     Ok(())
 }
 
 // Returns all validators
-pub fn read_validators(storage: &dyn Storage) -> StdResult<Vec<String>> {
+pub fn read_validators(deps: &Deps) -> StdResult<Vec<String>> {
     VALIDATORS
-        .range(storage, None, None, Order::Ascending)
-        .map(|item| KeyDeserialize::from_slice(&item.unwrap().0))
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|item| {
+            let canon = CanonicalAddr::from(item.unwrap().0);
+            let addr = deps.api.addr_humanize(&canon)?;
+            Ok(addr.into_string())
+        })
         .collect()
 }
 
 /// Check whether the validator is whitelisted.
-pub fn is_valid_validator(storage: &dyn Storage, validator_addr: String) -> StdResult<bool> {
-    let res = VALIDATORS.may_load(storage, &Addr::unchecked(validator_addr))?;
+pub fn is_valid_validator(deps: &Deps, validator_addr: String) -> StdResult<bool> {
+    let addr_raw = deps.api.addr_canonicalize(&validator_addr)?;
+    let res = VALIDATORS.may_load(deps.storage, addr_raw.as_slice())?;
     Ok(res.is_some())
 }
 
 /// Read whitelisted validators
 /// Todo: remove me, same as read_validators
-pub fn read_valid_validators(storage: &dyn Storage) -> StdResult<Vec<String>> {
-    read_validators(storage)
+pub fn read_valid_validators(deps: &Deps) -> StdResult<Vec<String>> {
+    read_validators(deps)
 }
 
 pub fn store_unbond_history(
