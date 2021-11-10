@@ -50,12 +50,7 @@ pub(crate) fn execute_unbond(
     }
     current_batch.requested_with_fee += amount_with_fee;
 
-    store_unbond_wait_list(
-        &mut deps,
-        current_batch.id,
-        sender.clone(),
-        amount_with_fee,
-    )?;
+    store_unbond_wait_list(&mut deps, current_batch.id, sender.clone(), amount_with_fee)?;
 
     total_supply = (total_supply.checked_sub(amount))
         .expect("the requested can not be more than the total supply");

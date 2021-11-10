@@ -3,8 +3,8 @@ use std::array::TryFromSliceError;
 use std::convert::TryInto;
 
 /// This code is mostly just a copy of the necessary functions from storage-plus
-/// but not introduced until cw-storage-plus 0.10.0.  Can remove this 
-/// file entirely once we upgrade cw-storage-plus and use the prefix_de/range_de 
+/// but not introduced until cw-storage-plus 0.10.0.  Can remove this
+/// file entirely once we upgrade cw-storage-plus and use the prefix_de/range_de
 /// methods instead.
 
 pub fn deserialize_key<K: KeyDeserialize>(key: Vec<u8>) -> StdResult<K::Output> {

@@ -3147,15 +3147,15 @@ fn proper_unbond_storage() -> StdResult<()> {
     assert_eq!(res[1], history2);
 
     // write some more history in order to test pagination code
-    let history3 = UnbondHistory{
+    let history3 = UnbondHistory {
         batch_id: 3,
         ..history2
     };
-    let history4 = UnbondHistory{
+    let history4 = UnbondHistory {
         batch_id: 4,
         ..history2
     };
-    let history5 = UnbondHistory{
+    let history5 = UnbondHistory {
         batch_id: 5,
         ..history2
     };
@@ -3164,7 +3164,7 @@ fn proper_unbond_storage() -> StdResult<()> {
     store_unbond_history(deps.as_mut().storage, 5, history5.clone())?;
 
     // read all history with pagination of 2 records at a time
-    let mut start : Option<u64> = None;
+    let mut start: Option<u64> = None;
     let limit = Some(2u32);
     loop {
         let res = all_unbond_history(deps.as_ref().storage, start, limit)?;
