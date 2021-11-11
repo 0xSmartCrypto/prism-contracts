@@ -1,10 +1,10 @@
-use crate::msg::{DepositResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, LaunchConfig, CONFIG, DEPOSITS, TOTAL_DEPOSIT};
+use crate::state::{Config, CONFIG, DEPOSITS, TOTAL_DEPOSIT};
 use cosmwasm_std::{
     entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult, Uint128, WasmMsg,
 };
 use cw20_base::msg::ExecuteMsg as TokenMsg;
+use prism_protocol::fair_launch::{DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg};
 use terraswap::asset::{Asset, AssetInfo};
 
 #[cfg_attr(not(feature = "library"), entry_point)]

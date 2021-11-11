@@ -1,7 +1,17 @@
-use crate::state::LaunchConfig;
 use cosmwasm_std::Uint128;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct LaunchConfig {
+    pub amount: Uint128,
+    // can deposit and withdraw
+    pub phase1_start: u64,
+    // can only withdraw
+    pub phase2_start: u64,
+    // can withdraw tokens
+    pub phase2_end: u64,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {

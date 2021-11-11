@@ -598,12 +598,14 @@ dependencies = [
 name = "fair-launch"
 version = "0.1.0"
 dependencies = [
+ "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
  "cw-storage-plus",
  "cw20-base",
  "hex",
  "lazy_static",
+ "prism-protocol",
  "schemars",
  "serde",
  "serde_json",

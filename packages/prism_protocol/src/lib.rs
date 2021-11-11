@@ -1,6 +1,7 @@
 pub mod airdrop;
 pub mod collector;
 pub mod common;
+pub mod fair_launch;
 pub mod gov;
 pub mod launch_pool;
 pub mod vault;
