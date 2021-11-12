@@ -2,7 +2,7 @@ use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADD
 use cosmwasm_std::{
     to_binary, Binary, Coin, ContractResult, Decimal, OwnedDeps, SystemResult, Uint128,
 };
-use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper};
+use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 
 const TAX_RATE: u64 = 5;
 const TAX_CAP: u128 = 10;
@@ -23,19 +23,25 @@ pub fn mock_dependencies(
 }
 
 pub fn custom_query_execute(query: &TerraQueryWrapper) -> ContractResult<Binary> {
-    match query.query_data {
-        TerraQuery::TaxRate {} => {
-            let resp = TaxRateResponse {
-                rate: Decimal::percent(TAX_RATE),
-            };
-            to_binary(&resp).into()
-        }
-        TerraQuery::TaxCap { .. } => {
-            let resp = TaxCapResponse {
-                cap: Uint128::from(TAX_CAP),
-            };
-            to_binary(&resp).into()
-        }
+    match query {
+        TerraQueryWrapper {
+            route: TerraRoute::Treasury,
+            query_data,
+        } => match query_data {
+            TerraQuery::TaxRate {} => {
+                let resp = TaxRateResponse {
+                    rate: Decimal::percent(TAX_RATE),
+                };
+                to_binary(&resp).into()
+            }
+            TerraQuery::TaxCap { .. } => {
+                let resp = TaxCapResponse {
+                    cap: Uint128::from(TAX_CAP),
+                };
+                to_binary(&resp).into()
+            }
+            _ => ContractResult::Err("Unhandled query: ".to_string()),
+        },
         _ => ContractResult::Err("Unhandled query: ".to_string()),
     }
 }

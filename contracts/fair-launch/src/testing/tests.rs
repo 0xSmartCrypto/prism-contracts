@@ -13,7 +13,6 @@ use prism_protocol::fair_launch::{DepositResponse, InstantiateMsg, LaunchConfig}
 use terra_cosmwasm::TerraQueryWrapper;
 
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, MockQuerier<TerraQueryWrapper>>) {
-    //deps.querier.with_custom_handler(|query| SystemResult::Ok(custom_query_execute(&query)));
     let msg = InstantiateMsg {
         owner: "owner0001".to_string(),
         token: "prism0001".to_string(),
@@ -173,7 +172,7 @@ fn proper_deposit() {
     );
 
     // failed deposit, after phase 1
-    env.block.time = env.block.time.plus_seconds(250u64);
+    env.block.time = env.block.time.plus_seconds(150u64);
     let err = deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(
         err.unwrap_err(),
@@ -284,7 +283,7 @@ fn proper_withdraw() {
     let res = deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
-    // travel through time to phase 2, withdraws still allowed
+    // fast forward to phase 2, withdraws still allowed
     env.block.time = env.block.time.plus_seconds(150);
     let res = withdraw(
         deps.as_mut(),
@@ -295,7 +294,7 @@ fn proper_withdraw() {
     .unwrap();
     assert_eq!(res.messages.len(), 1);
 
-    // fast forward past phase 2, withdraw not allowed
+    // fast forward to after phase 2, withdraws not allowed
     env.block.time = env.block.time.plus_seconds(100);
     let err = withdraw(
         deps.as_mut(),
