@@ -4,7 +4,9 @@ use cosmwasm_std::{
 };
 use cw20::Cw20ExecuteMsg;
 
-use crate::contract::{deposit, instantiate, post_initialize, query_deposit_info, withdraw, withdraw_tokens};
+use crate::contract::{
+    deposit, instantiate, post_initialize, query_deposit_info, withdraw, withdraw_tokens,
+};
 use crate::error::ContractError;
 use crate::testing::mock_querier::mock_dependencies;
 use prism_protocol::fair_launch::{DepositResponse, InstantiateMsg, LaunchConfig};
@@ -325,9 +327,12 @@ fn proper_withdraw_tokens1() {
     assert_eq!(res.unwrap().messages.len(), 0);
 
     let err = withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
-    assert_eq!(err, ContractError::InvalidWithdrawTokens{
-        reason: "cannot withdraw tokens yet".to_string()
-    });
+    assert_eq!(
+        err,
+        ContractError::InvalidWithdrawTokens {
+            reason: "cannot withdraw tokens yet".to_string()
+        }
+    );
 
     // fast forward past phase 2, withdraw tokens now allowed
     env.block.time = env.block.time.plus_seconds(250);
@@ -335,18 +340,19 @@ fn proper_withdraw_tokens1() {
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
-        CosmosMsg::Wasm(WasmMsg::Execute { 
-            contract_addr, 
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr,
             msg,
             funds,
         }) => {
             assert_eq!(contract_addr, &"prism0001".to_string());
             assert_eq!(
                 msg,
-                &to_binary(&Cw20ExecuteMsg::Transfer{ 
+                &to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: "addr0001".to_string(),
                     amount: Uint128::from(1_000_000u64),
-                }).unwrap(),
+                })
+                .unwrap(),
             );
             assert_eq!(funds, &[])
         }
@@ -381,18 +387,19 @@ fn proper_withdraw_tokens2() {
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
-        CosmosMsg::Wasm(WasmMsg::Execute { 
-            contract_addr, 
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr,
             msg,
             funds,
         }) => {
             assert_eq!(contract_addr, &"prism0001".to_string());
             assert_eq!(
                 msg,
-                &to_binary(&Cw20ExecuteMsg::Transfer{ 
+                &to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: "addr0001".to_string(),
                     amount: Uint128::from(1_000_000u64).multiply_ratio(1u128, 6u128),
-                }).unwrap(),
+                })
+                .unwrap(),
             );
             assert_eq!(funds, &[])
         }
@@ -401,31 +408,34 @@ fn proper_withdraw_tokens2() {
 
     // addr0001 try to withdraw again, nothing available
     let err = withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap_err();
-    assert_eq!(err, ContractError::InvalidWithdrawTokens {
-        reason: "no tokens available for withdraw".to_string()
-    });
-    
+    assert_eq!(
+        err,
+        ContractError::InvalidWithdrawTokens {
+            reason: "no tokens available for withdraw".to_string()
+        }
+    );
+
     // addr0002 gets 1M * 5/6
-     let res = withdraw_tokens(deps.as_mut(), env.clone(), info2.clone()).unwrap();
-     assert_eq!(res.messages.len(), 1);
-     let msg = &res.messages[0].msg;
-     match msg {
-         CosmosMsg::Wasm(WasmMsg::Execute { 
-             contract_addr, 
-             msg,
-             funds,
-         }) => {
-             assert_eq!(contract_addr, &"prism0001".to_string());
-             assert_eq!(
-                 msg,
-                 &to_binary(&Cw20ExecuteMsg::Transfer{ 
-                     recipient: "addr0002".to_string(),
-                     amount: Uint128::from(1_000_000u64).multiply_ratio(5u128, 6u128),
-                 }).unwrap(),
-             );
-             assert_eq!(funds, &[])
-         }
-         _ => panic!("Unexpected message: {:?}", msg),
-     };
-    
+    let res = withdraw_tokens(deps.as_mut(), env.clone(), info2.clone()).unwrap();
+    assert_eq!(res.messages.len(), 1);
+    let msg = &res.messages[0].msg;
+    match msg {
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr,
+            msg,
+            funds,
+        }) => {
+            assert_eq!(contract_addr, &"prism0001".to_string());
+            assert_eq!(
+                msg,
+                &to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: "addr0002".to_string(),
+                    amount: Uint128::from(1_000_000u64).multiply_ratio(5u128, 6u128),
+                })
+                .unwrap(),
+            );
+            assert_eq!(funds, &[])
+        }
+        _ => panic!("Unexpected message: {:?}", msg),
+    };
 }

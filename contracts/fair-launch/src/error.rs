@@ -16,17 +16,11 @@ pub enum ContractError {
     InvalidLaunchConfig {},
 
     #[error("Invalid deposit: {reason}")]
-    InvalidDeposit {
-        reason: String,
-    },
+    InvalidDeposit { reason: String },
 
     #[error("Invalid withdraw: {reason}")]
-    InvalidWithdraw {
-        reason: String,
-    },
+    InvalidWithdraw { reason: String },
 
     #[error("Invalid withdraw tokens: {reason}")]
-    InvalidWithdrawTokens {
-        reason: String,
-    },
+    InvalidWithdrawTokens { reason: String },
 }

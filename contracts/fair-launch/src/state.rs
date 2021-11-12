@@ -1,8 +1,8 @@
 use cosmwasm_std::Uint128;
 use cw_storage_plus::{Item, Map};
+use prism_protocol::fair_launch::LaunchConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use prism_protocol::fair_launch::LaunchConfig;
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
