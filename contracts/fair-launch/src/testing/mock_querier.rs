@@ -5,6 +5,8 @@ use cosmwasm_std::{
 use cosmwasm_std::testing::{MockApi, MockStorage, MockQuerier, MOCK_CONTRACT_ADDR};
 use terra_cosmwasm::{TerraQuery, TerraQueryWrapper, TaxCapResponse, TaxRateResponse};
 
+const TAX_RATE: u64 = 5;
+const TAX_CAP: u128 = 10;
 
 /// A drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -24,11 +26,11 @@ pub fn mock_dependencies(
 pub fn custom_query_execute(query: &TerraQueryWrapper) -> ContractResult<Binary> {
   match query.query_data {
       TerraQuery::TaxRate {} => {
-          let resp = TaxRateResponse { rate: Decimal::percent(5) };
+          let resp = TaxRateResponse { rate: Decimal::percent(TAX_RATE) };
           to_binary(&resp).into()
       }
       TerraQuery::TaxCap { .. } => {
-          let resp = TaxCapResponse { cap: Uint128::from(10u128) };
+          let resp = TaxCapResponse { cap: Uint128::from(TAX_CAP) };
           to_binary(&resp).into()
       }
       _ => ContractResult::Err("Unhandled query: ".to_string())

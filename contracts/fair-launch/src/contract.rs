@@ -101,18 +101,17 @@ pub fn deposit(
             reason: "requires uusd and positive amount".to_string()
         });
     }
-    let deposit_amt = coin.amount;
 
-    let cur_deposit = DEPOSITS
-        .load(deps.storage, info.sender.as_bytes())
-        .unwrap_or(Uint128::zero());
-
-    let total_deposit = TOTAL_DEPOSIT.load(deps.storage)?;
-    TOTAL_DEPOSIT.save(deps.storage, &(total_deposit + deposit_amt))?;
-    DEPOSITS.save(
+    DEPOSITS.update(
         deps.storage,
         info.sender.as_bytes(),
-        &(cur_deposit + deposit_amt),
+        |curr| -> StdResult<Uint128> { 
+            Ok(curr.unwrap_or(Uint128::zero()) + coin.amount) 
+        }
+    )?;
+    TOTAL_DEPOSIT.update(
+        deps.storage,
+        |curr| -> StdResult<Uint128> { Ok(curr + coin.amount) }
     )?;
 
     Ok(Response::new())
@@ -135,26 +134,32 @@ pub fn withdraw(
         .unwrap_or(Uint128::zero());
 
     // withdraw everything if amount > deposit amount, possibly error instead?
-    let withdraw_amt = min(cur_deposit, amount);
-    if withdraw_amt == Uint128::zero() {
+    let withdraw_amount = min(cur_deposit, amount);
+    if withdraw_amount == Uint128::zero() {
         return Err(ContractError::InvalidWithdraw {
             reason: "no funds available to withdraw".to_string()
         })
     }
 
-    DEPOSITS.save(
-        deps.storage,
-        info.sender.as_bytes(),
-        &(cur_deposit - amount),
-    )?;
-
-    let to_withdraw = Asset {
+    let withdraw_asset = Asset {
         info: AssetInfo::NativeToken {
             denom: "uusd".to_string(),
         },
-        amount: withdraw_amt,
+        amount: withdraw_amount,
     };
-    let msg = to_withdraw.into_msg(&deps.querier, info.sender)?;
+
+    DEPOSITS.save(
+        deps.storage,
+        info.sender.as_bytes(),
+        &(cur_deposit - withdraw_asset.amount),
+    )?;
+
+    TOTAL_DEPOSIT.update(
+        deps.storage,
+        |curr| -> StdResult<Uint128> { Ok(curr - withdraw_asset.amount) }
+    )?;
+
+    let msg = withdraw_asset.into_msg(&deps.querier, info.sender)?;
     Ok(Response::new().add_message(msg))
 }
 
@@ -175,6 +180,13 @@ pub fn withdraw_tokens(
     let deposited = DEPOSITS.load(deps.storage, info.sender.as_bytes())?;
     let deposit_total = TOTAL_DEPOSIT.load(deps.storage)?;
     let amount = launch_cfg.amount.multiply_ratio(deposited, deposit_total);
+    if amount == Uint128::zero() {
+        return Err(ContractError::InvalidWithdrawTokens{ 
+            reason: "no tokens available for withdraw".to_string()
+        });
+    }
+   
+    DEPOSITS.save(deps.storage, info.sender.as_bytes(), &Uint128::zero())?;
     let to_send = Asset {
         info: AssetInfo::Token {
             contract_addr: cfg.token,
