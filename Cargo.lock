@@ -602,14 +602,16 @@ dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",
  "cw-storage-plus",
- "cw20-base",
+ "cw20",
  "hex",
  "lazy_static",
  "prism-protocol",
  "schemars",
  "serde",
  "serde_json",
+ "terra-cosmwasm",
  "terraswap",
+ "thiserror",
 ]
 
 [[package]]

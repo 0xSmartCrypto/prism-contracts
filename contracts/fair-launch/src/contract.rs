@@ -1,11 +1,14 @@
 use crate::state::{Config, CONFIG, DEPOSITS, TOTAL_DEPOSIT};
+use crate::error::ContractError;
+
 use cosmwasm_std::{
-    entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
     StdResult, Uint128, WasmMsg,
 };
-use cw20_base::msg::ExecuteMsg as TokenMsg;
+use cw20::Cw20ExecuteMsg;
 use prism_protocol::fair_launch::{DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg};
 use terraswap::asset::{Asset, AssetInfo};
+use std::cmp::min;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -25,7 +28,7 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Deposit {} => deposit(deps, env, info),
         ExecuteMsg::Withdraw { amount } => withdraw(deps, env, info, amount),
@@ -41,21 +44,21 @@ pub fn post_initialize(
     env: Env,
     info: MessageInfo,
     launch_config: LaunchConfig,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
     let mut cfg = CONFIG.load(deps.storage)?;
     if info.sender.as_str() != cfg.owner.as_str() {
-        return Err(StdError::generic_err("unauthorized"));
+        return Err(ContractError::Unauthorized{});
     }
 
     if cfg.launch_config.is_some() {
-        return Err(StdError::generic_err("already post initialized"));
+        return Err(ContractError::DuplicatePostInit{});
     }
 
     if env.block.time.seconds() > launch_config.phase1_start
         || launch_config.phase1_start > launch_config.phase2_start
         || launch_config.phase2_end > launch_config.phase2_end
     {
-        return Err(StdError::generic_err("invalid launch config"));
+        return Err(ContractError::InvalidLaunchConfig{});
     }
 
     cfg.launch_config = Some(launch_config.clone());
@@ -65,7 +68,7 @@ pub fn post_initialize(
     Ok(
         Response::new().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.token.clone(),
-            msg: to_binary(&TokenMsg::TransferFrom {
+            msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
                 owner: info.sender.to_string(),
                 recipient: env.contract.address.to_string(),
                 amount: launch_config.amount.clone(),
@@ -75,19 +78,30 @@ pub fn post_initialize(
     )
 }
 
-pub fn deposit(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
+pub fn deposit(
+    deps: DepsMut, 
+    env: Env, 
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?.launch_config.unwrap();
     if env.block.time.seconds() >= cfg.phase2_start {
-        return Err(StdError::generic_err("deposit period is over"));
+        return Err(ContractError::InvalidDeposit{ 
+            reason: "deposit period is over".to_string()
+        });
     }
 
-    let mut deposit_amt = Uint128::zero();
-    for coin in info.funds {
-        if coin.denom == "uusd".to_string() {
-            deposit_amt = coin.amount;
-            break;
-        }
+    if info.funds.len() != 1 {
+        return Err(ContractError::InvalidDeposit{ 
+            reason: "requires 1 coin deposited".to_string()
+        });
     }
+    let coin = &info.funds[0];
+    if coin.denom != "uusd".to_string() || coin.amount == Uint128::zero() {
+        return Err(ContractError::InvalidDeposit{ 
+            reason: "requires uusd and positive amount".to_string()
+        });
+    }
+    let deposit_amt = coin.amount;
 
     let cur_deposit = DEPOSITS
         .load(deps.storage, info.sender.as_bytes())
@@ -109,15 +123,24 @@ pub fn withdraw(
     env: Env,
     info: MessageInfo,
     amount: Uint128,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?.launch_config.unwrap();
     if env.block.time.seconds() >= cfg.phase2_end {
-        return Err(StdError::generic_err("withdraw period is over"));
+        return Err(ContractError::InvalidWithdraw {
+            reason: "withdraw period is over".to_string()
+        });
     }
-
     let cur_deposit = DEPOSITS
         .load(deps.storage, info.sender.as_bytes())
         .unwrap_or(Uint128::zero());
+
+    // withdraw everything if amount > deposit amount, possibly error instead?
+    let withdraw_amt = min(cur_deposit, amount);
+    if withdraw_amt == Uint128::zero() {
+        return Err(ContractError::InvalidWithdraw {
+            reason: "no funds available to withdraw".to_string()
+        })
+    }
 
     DEPOSITS.save(
         deps.storage,
@@ -129,18 +152,24 @@ pub fn withdraw(
         info: AssetInfo::NativeToken {
             denom: "uusd".to_string(),
         },
-        amount,
+        amount: withdraw_amt,
     };
-
-    Ok(Response::new().add_message(to_withdraw.into_msg(&deps.querier, info.sender)?))
+    let msg = to_withdraw.into_msg(&deps.querier, info.sender)?;
+    Ok(Response::new().add_message(msg))
 }
 
-pub fn withdraw_tokens(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
+pub fn withdraw_tokens(
+    deps: DepsMut, 
+    env: Env, 
+    info: MessageInfo
+) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     let launch_cfg = cfg.launch_config.unwrap();
 
     if env.block.time.seconds() < launch_cfg.phase2_end {
-        return Err(StdError::generic_err("cannot withdraw tokens yet"));
+        return Err(ContractError::InvalidWithdrawTokens{ 
+            reason: "cannot withdraw tokens yet".to_string()
+        });
     }
 
     let deposited = DEPOSITS.load(deps.storage, info.sender.as_bytes())?;
