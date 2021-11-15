@@ -450,7 +450,7 @@ fn query_state(deps: Deps) -> StdResult<StateResponse> {
 }
 
 fn query_white_validators(deps: Deps) -> StdResult<WhitelistedValidatorsResponse> {
-    let validators = read_valid_validators(&deps)?;
+    let validators = read_valid_validators(deps.storage)?;
     let response = WhitelistedValidatorsResponse { validators };
     Ok(response)
 }
@@ -470,7 +470,7 @@ fn query_withdrawable_unbonded(
 ) -> StdResult<WithdrawableUnbondedResponse> {
     let params = PARAMETERS.load(deps.storage)?;
     let historical_time = env.block.time.seconds() - params.unbonding_period;
-    let all_requests = query_get_finished_amount(&deps, address, historical_time)?;
+    let all_requests = query_get_finished_amount(deps.storage, address, historical_time)?;
 
     let withdrawable = WithdrawableUnbondedResponse {
         withdrawable: all_requests,
@@ -500,7 +500,7 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
 }
 
 fn query_unbond_requests(deps: Deps, address: String) -> StdResult<UnbondRequestsResponse> {
-    let requests = get_unbond_requests(&deps, address.clone())?;
+    let requests = get_unbond_requests(deps.storage, address.clone())?;
     let res = UnbondRequestsResponse { address, requests };
     Ok(res)
 }

@@ -27,3 +27,12 @@ impl KeyDeserialize for u64 {
         )?))
     }
 }
+
+impl KeyDeserialize for String {
+    type Output = String;
+
+    #[inline(always)]
+    fn from_vec(value: Vec<u8>) -> StdResult<Self::Output> {
+        String::from_utf8(value).map_err(StdError::invalid_utf8)
+    }
+}

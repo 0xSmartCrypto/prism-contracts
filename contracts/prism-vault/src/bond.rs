@@ -71,12 +71,12 @@ pub fn _execute_bond(
     let unwrapped_validator = match validator {
         Some(v) => v.clone(),
         None => {
-            let validators = read_valid_validators(&deps.as_ref())?;
+            let validators = read_valid_validators(deps.storage)?;
             let idx = env.block.time.nanos() as usize % validators.len();
             validators[idx].clone()
         }
     };
-    let is_valid = is_valid_validator(&deps.as_ref(), unwrapped_validator.clone())?;
+    let is_valid = is_valid_validator(deps.storage, unwrapped_validator.clone())?;
     if !is_valid {
         return Err(StdError::generic_err(
             "The chosen validator is currently not supported",

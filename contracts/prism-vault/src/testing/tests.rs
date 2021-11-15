@@ -1043,7 +1043,7 @@ pub fn proper_unbond() {
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(9u128))])]);
 
     //read the undelegated waitlist of the current epoch for the user bob
-    let wait_list = read_unbond_wait_list(&deps.as_ref(), 1, bob.clone()).unwrap();
+    let wait_list = read_unbond_wait_list(&deps.storage, 1, bob.clone()).unwrap();
     assert_eq!(Uint128::new(1), wait_list);
 
     //successful call
@@ -1085,7 +1085,7 @@ pub fn proper_unbond() {
         _ => panic!("Unexpected message: {:?}", msg),
     }
 
-    let waitlist2 = read_unbond_wait_list(&deps.as_ref(), 1, bob.to_string()).unwrap();
+    let waitlist2 = read_unbond_wait_list(&deps.storage, 1, bob.to_string()).unwrap();
     assert_eq!(Uint128::new(6), waitlist2);
 
     let current_batch = QueryMsg::CurrentBatch {};
@@ -3067,39 +3067,39 @@ fn proper_unbond_storage() -> StdResult<()> {
     let amount2 = Uint128::from(200u32);
 
     // store unbondings for addr1 and addr2
-    store_unbond_wait_list(&mut deps.as_mut(), 1, addr1.clone(), amount1)?;
-    store_unbond_wait_list(&mut deps.as_mut(), 2, addr1.clone(), amount1)?;
-    store_unbond_wait_list(&mut deps.as_mut(), 2, addr1.clone(), amount2)?;
-    store_unbond_wait_list(&mut deps.as_mut(), 1, addr2.clone(), amount1)?;
+    store_unbond_wait_list(deps.as_mut().storage, 1, addr1.clone(), amount1)?;
+    store_unbond_wait_list(deps.as_mut().storage, 2, addr1.clone(), amount1)?;
+    store_unbond_wait_list(deps.as_mut().storage, 2, addr1.clone(), amount2)?;
+    store_unbond_wait_list(deps.as_mut().storage, 1, addr2.clone(), amount1)?;
 
     // validate addr1 requests
-    let unbond_requests = get_unbond_requests(&deps.as_ref(), addr1.clone())?;
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, addr1.clone())?;
     assert_eq!(unbond_requests.len(), 2);
     assert_eq!(unbond_requests[0], (1u64, amount1));
     assert_eq!(unbond_requests[1], (2u64, amount1 + amount2));
 
     // validate addr2 requests
-    let unbond_requests = get_unbond_requests(&deps.as_ref(), addr2.clone())?;
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, addr2.clone())?;
     assert_eq!(unbond_requests.len(), 1);
     assert_eq!(unbond_requests[0], (1u64, amount1));
 
     // read unbond wait list for addr1, batch2
-    let res = read_unbond_wait_list(&deps.as_ref(), 2, addr1.clone())?;
+    let res = read_unbond_wait_list(deps.as_mut().storage, 2, addr1.clone())?;
     assert_eq!(res, amount1 + amount2);
 
     // read invalid batch id for user
-    let err = read_unbond_wait_list(&deps.as_ref(), 3, addr1.clone());
+    let err = read_unbond_wait_list(deps.as_mut().storage, 3, addr1.clone());
     if let StdError::NotFound { .. } = err.unwrap_err() {
     } else {
         panic!("Expected StdError::NotFound");
     }
 
     // no finished amount yet
-    let res = get_finished_amount(&deps.as_ref(), addr1.clone())?;
+    let res = get_finished_amount(deps.as_ref().storage, addr1.clone())?;
     assert_eq!(res, Uint128::zero());
 
     // no unbonded batches yet
-    let res = get_unbond_batches(&deps.as_ref(), addr1.clone())?;
+    let res = get_unbond_batches(deps.as_ref().storage, addr1.clone())?;
     assert_eq!(res.len(), 0);
 
     //no unbond history yet
@@ -3180,7 +3180,7 @@ fn proper_unbond_storage() -> StdResult<()> {
     assert_eq!(res, history1);
 
     // still no finished amount
-    let res = get_finished_amount(&deps.as_ref(), addr1.clone())?;
+    let res = get_finished_amount(deps.as_ref().storage, addr1.clone())?;
     assert_eq!(res, Uint128::zero());
 
     // release the first batch
@@ -3188,38 +3188,38 @@ fn proper_unbond_storage() -> StdResult<()> {
     store_unbond_history(deps.as_mut().storage, history1.batch_id, history1.clone())?;
 
     // query addr1 finished amount
-    let res = get_finished_amount(&deps.as_ref(), addr1.clone())?;
+    let res = get_finished_amount(deps.as_ref().storage, addr1.clone())?;
     assert_eq!(res, amount1 * exchange_rate);
 
     // query addr2 finished amount
-    let res = get_finished_amount(&deps.as_ref(), addr2.clone())?;
+    let res = get_finished_amount(deps.as_ref().storage, addr2.clone())?;
     assert_eq!(res, amount1 * exchange_rate);
 
     // query a time between block1 and block2
     let time_in_future = env.block.time.seconds() + 50;
-    let res = query_get_finished_amount(&deps.as_ref(), addr1.clone(), time_in_future)?;
+    let res = query_get_finished_amount(deps.as_ref().storage, addr1.clone(), time_in_future)?;
     assert_eq!(res, amount1 * exchange_rate);
 
     // query a time after block2
     let time_in_future = env.block.time.seconds() + 150;
-    let res = query_get_finished_amount(&deps.as_ref(), addr1.clone(), time_in_future)?;
+    let res = query_get_finished_amount(deps.as_ref().storage, addr1.clone(), time_in_future)?;
     assert_eq!(
         res,
         amount1 * exchange_rate + (amount1 + amount2) * exchange_rate2
     );
 
     // block1 should be unbonded now
-    let unbond_batches = get_unbond_batches(&deps.as_ref(), addr1.clone())?;
+    let unbond_batches = get_unbond_batches(deps.as_ref().storage, addr1.clone())?;
     assert_eq!(unbond_batches.len(), 1);
     assert_eq!(unbond_batches[0], 1);
 
     // remove block1 from addr1 and verify that it's gone via unbond_requests
     remove_unbond_wait_list(
-        &mut deps.as_mut(),
+        deps.as_mut().storage,
         unbond_batches,
         Addr::unchecked(addr1.clone()),
     )?;
-    let unbond_requests = get_unbond_requests(&deps.as_ref(), addr1.clone())?;
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, addr1.clone())?;
     assert_eq!(unbond_requests.len(), 1);
     assert_eq!(unbond_requests[0], (2u64, amount1 + amount2));
 
@@ -3231,35 +3231,35 @@ fn proper_validator_storage() -> StdResult<()> {
     let mut deps = dependencies(&[]);
 
     // start with empty validators
-    let res = read_validators(&deps.as_ref())?;
+    let res = read_validators(deps.as_ref().storage)?;
     assert_eq!(res.len(), 0);
 
     // add 2 validators and validate storage afterwards
-    store_white_validators(&mut deps.as_mut(), DEFAULT_VALIDATOR.to_string())?;
-    store_white_validators(&mut deps.as_mut(), DEFAULT_VALIDATOR2.to_string())?;
-    let res = read_validators(&deps.as_ref())?;
+    store_white_validators(deps.as_mut().storage, DEFAULT_VALIDATOR.to_string())?;
+    store_white_validators(deps.as_mut().storage, DEFAULT_VALIDATOR2.to_string())?;
+    let res = read_validators(deps.as_ref().storage)?;
     assert_eq!(res.len(), 2);
     assert_eq!(res[0], DEFAULT_VALIDATOR);
     assert_eq!(res[1], DEFAULT_VALIDATOR2);
 
     // is_valid_validator testing
-    let res = is_valid_validator(&deps.as_ref(), DEFAULT_VALIDATOR.to_string())?;
+    let res = is_valid_validator(deps.as_ref().storage, DEFAULT_VALIDATOR.to_string())?;
     assert_eq!(res, true);
-    let res = is_valid_validator(&deps.as_ref(), DEFAULT_VALIDATOR2.to_string())?;
+    let res = is_valid_validator(deps.as_ref().storage, DEFAULT_VALIDATOR2.to_string())?;
     assert_eq!(res, true);
-    let res = is_valid_validator(&deps.as_ref(), DEFAULT_VALIDATOR3.to_string())?;
+    let res = is_valid_validator(deps.as_ref().storage, DEFAULT_VALIDATOR3.to_string())?;
     assert_eq!(res, false);
 
     // remove validator 2, verify it's gone
-    remove_white_validators(&mut deps.as_mut(), DEFAULT_VALIDATOR2.to_string())?;
-    let res = is_valid_validator(&deps.as_ref(), DEFAULT_VALIDATOR2.to_string())?;
+    remove_white_validators(deps.as_mut().storage, DEFAULT_VALIDATOR2.to_string())?;
+    let res = is_valid_validator(deps.as_ref().storage, DEFAULT_VALIDATOR2.to_string())?;
     assert_eq!(res, false);
-    let res = read_validators(&deps.as_ref())?;
+    let res = read_validators(deps.as_ref().storage)?;
     assert_eq!(res.len(), 1);
     assert_eq!(res[0], DEFAULT_VALIDATOR);
 
     // remove a validator that is not whitelisted, no error is emitted here
-    remove_white_validators(&mut deps.as_mut(), "fakevalidator".to_string())?;
+    remove_white_validators(deps.as_mut().storage, "fakevalidator".to_string())?;
 
     Ok(())
 }

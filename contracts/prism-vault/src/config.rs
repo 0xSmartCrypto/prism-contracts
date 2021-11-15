@@ -120,7 +120,7 @@ pub fn execute_update_config(
 /// Register a white listed validator.
 /// Only creator/owner is allowed to execute
 pub fn execute_register_validator(
-    mut deps: DepsMut,
+    deps: DepsMut,
     env: Env,
     info: MessageInfo,
     validator: String,
@@ -145,7 +145,7 @@ pub fn execute_register_validator(
         ));
     }
 
-    store_white_validators(&mut deps, validator.clone())?;
+    store_white_validators(deps.storage, validator.clone())?;
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "register_validator"),
@@ -156,7 +156,7 @@ pub fn execute_register_validator(
 /// Deregister a previously-whitelisted validator.
 /// Only creator/owner is allowed to execute
 pub fn execute_deregister_validator(
-    mut deps: DepsMut,
+    deps: DepsMut,
     env: Env,
     info: MessageInfo,
     validator: String,
@@ -167,7 +167,7 @@ pub fn execute_deregister_validator(
     if token.creator != info.sender.to_string() {
         return Err(StdError::generic_err("unauthorized"));
     }
-    let validators_before_remove = read_validators(&deps.as_ref())?;
+    let validators_before_remove = read_validators(deps.storage)?;
 
     if validators_before_remove.len() == 1 {
         return Err(StdError::generic_err(
@@ -175,7 +175,7 @@ pub fn execute_deregister_validator(
         ));
     }
 
-    remove_white_validators(&mut deps, validator_addr.to_string())?;
+    remove_white_validators(deps.storage, validator_addr.to_string())?;
 
     let query = deps
         .querier
@@ -186,7 +186,7 @@ pub fn execute_deregister_validator(
 
     if let Ok(q) = query {
         let delegated_amount = q;
-        let validators = read_validators(&deps.as_ref())?;
+        let validators = read_validators(deps.storage)?;
 
         // redelegate the amount to a random validator.
         let block_height = env.block.height;
