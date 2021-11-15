@@ -1,4 +1,4 @@
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Addr, Uint128};
 use cw_storage_plus::{Item, Map};
 use prism_protocol::fair_launch::LaunchConfig;
 use schemars::JsonSchema;
@@ -8,7 +8,7 @@ pub const CONFIG: Item<Config> = Item::new("config");
 
 pub const TOTAL_TOKEN: Item<Uint128> = Item::new("total_token");
 pub const TOTAL_DEPOSIT: Item<Uint128> = Item::new("total_deposit");
-pub const DEPOSITS: Map<&[u8], Uint128> = Map::new("deposits");
+pub const DEPOSITS: Map<&Addr, Uint128> = Map::new("deposits");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {

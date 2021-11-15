@@ -105,10 +105,9 @@ pub fn deposit(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, C
         });
     }
 
-    let canon_addr = deps.api.addr_canonicalize(info.sender.as_str())?;
     DEPOSITS.update(
         deps.storage,
-        canon_addr.as_slice(),
+        &info.sender,
         |curr| -> StdResult<Uint128> { Ok(curr.unwrap_or(Uint128::zero()) + coin.amount) },
     )?;
     TOTAL_DEPOSIT.update(deps.storage, |curr| -> StdResult<Uint128> {
@@ -130,9 +129,8 @@ pub fn withdraw(
             reason: "withdraw period is over".to_string(),
         });
     }
-    let canon_addr = deps.api.addr_canonicalize(info.sender.as_str())?;
     let cur_deposit = DEPOSITS
-        .load(deps.storage, canon_addr.as_slice())
+        .load(deps.storage, &info.sender)
         .unwrap_or(Uint128::zero());
 
     // withdraw everything if amount > deposit amount, possibly error instead?
@@ -152,7 +150,7 @@ pub fn withdraw(
 
     DEPOSITS.save(
         deps.storage,
-        canon_addr.as_slice(),
+        &info.sender,
         &(cur_deposit - withdraw_asset.amount),
     )?;
 
@@ -178,8 +176,7 @@ pub fn withdraw_tokens(
         });
     }
 
-    let canon_addr = deps.api.addr_canonicalize(info.sender.as_str())?;
-    let deposited = DEPOSITS.load(deps.storage, canon_addr.as_slice())?;
+    let deposited = DEPOSITS.load(deps.storage, &info.sender)?;
     let deposit_total = TOTAL_DEPOSIT.load(deps.storage)?;
     let amount = launch_cfg.amount.multiply_ratio(deposited, deposit_total);
     if amount == Uint128::zero() {
@@ -188,7 +185,7 @@ pub fn withdraw_tokens(
         });
     }
 
-    DEPOSITS.save(deps.storage, canon_addr.as_slice(), &Uint128::zero())?;
+    DEPOSITS.save(deps.storage, &info.sender, &Uint128::zero())?;
     let to_send = Asset {
         info: AssetInfo::Token {
             contract_addr: cfg.token,
@@ -203,10 +200,10 @@ pub fn query_config(deps: Deps) -> StdResult<Config> {
 }
 
 pub fn query_deposit_info(deps: Deps, address: String) -> StdResult<DepositResponse> {
-    let canon_addr = deps.api.addr_canonicalize(&address)?;
+    let addr = deps.api.addr_validate(&address)?;
     Ok(DepositResponse {
         address_deposit: DEPOSITS
-            .load(deps.storage, canon_addr.as_slice())
+            .load(deps.storage, &addr)
             .unwrap_or(Uint128::zero()),
         total_deposit: TOTAL_DEPOSIT.load(deps.storage)?,
     })
