@@ -1,4 +1,4 @@
-use cosmwasm_std::{StdError, StdResult};
+use cosmwasm_std::{Addr, StdError, StdResult};
 use std::array::TryFromSliceError;
 use std::convert::TryInto;
 
@@ -34,5 +34,14 @@ impl KeyDeserialize for String {
     #[inline(always)]
     fn from_vec(value: Vec<u8>) -> StdResult<Self::Output> {
         String::from_utf8(value).map_err(StdError::invalid_utf8)
+    }
+}
+
+impl KeyDeserialize for Addr {
+    type Output = Addr;
+
+    #[inline(always)]
+    fn from_vec(value: Vec<u8>) -> StdResult<Self::Output> {
+        Ok(Addr::unchecked(String::from_vec(value)?))
     }
 }

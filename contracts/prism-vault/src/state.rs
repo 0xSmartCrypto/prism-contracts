@@ -37,12 +37,12 @@ pub const VALIDATORS: Map<&Addr, bool> = Map::new("validators");
 pub fn store_unbond_wait_list(
     storage: &mut dyn Storage,
     batch_id: u64,
-    sender_addr: String,
+    sender_addr: &Addr,
     amount: Uint128,
 ) -> StdResult<()> {
     UNBOND_WAITLIST.update(
         storage,
-        (&Addr::unchecked(sender_addr), batch_id.into()),
+        (sender_addr, batch_id.into()),
         |existing_amount: Option<Uint128>| -> StdResult<_> {
             Ok(existing_amount.unwrap_or_default() + amount)
         },
@@ -54,10 +54,10 @@ pub fn store_unbond_wait_list(
 pub fn remove_unbond_wait_list(
     storage: &mut dyn Storage,
     batch_id: Vec<u64>,
-    sender_addr: Addr,
+    sender_addr: &Addr,
 ) -> StdResult<()> {
     for b in batch_id {
-        UNBOND_WAITLIST.remove(storage, (&sender_addr, b.into()));
+        UNBOND_WAITLIST.remove(storage, (sender_addr, b.into()));
     }
     Ok(())
 }
@@ -65,14 +65,14 @@ pub fn remove_unbond_wait_list(
 pub fn read_unbond_wait_list(
     storage: &dyn Storage,
     batch_id: u64,
-    sender_addr: String,
+    sender_addr: &Addr,
 ) -> StdResult<Uint128> {
-    UNBOND_WAITLIST.load(storage, (&Addr::unchecked(sender_addr), batch_id.into()))
+    UNBOND_WAITLIST.load(storage, (sender_addr, batch_id.into()))
 }
 
-pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: String) -> StdResult<UnbondRequest> {
+pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<UnbondRequest> {
     let sender_requests: Vec<_> = UNBOND_WAITLIST
-        .prefix(&Addr::unchecked(sender_addr))
+        .prefix(sender_addr)
         .range(storage, None, None, Order::Ascending)
         .map(|item| {
             let (k, v) = item.unwrap();
@@ -83,9 +83,9 @@ pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: String) -> StdRes
     Ok(sender_requests)
 }
 
-pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: String) -> StdResult<Vec<u64>> {
+pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<Vec<u64>> {
     let deprecated_batches: Vec<u64> = UNBOND_WAITLIST
-        .prefix(&Addr::unchecked(sender_addr))
+        .prefix(sender_addr)
         .range(storage, None, None, Order::Ascending)
         .filter_map(|item| {
             let (k, _) = item.unwrap();
@@ -108,9 +108,9 @@ pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: String) -> StdResu
 /// This needs to be called after process withdraw rate function.
 /// If the batch is released, this will return user's requested
 /// amount proportional to withdraw rate.
-pub fn get_finished_amount(storage: &dyn Storage, sender_addr: String) -> StdResult<Uint128> {
+pub fn get_finished_amount(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<Uint128> {
     let withdrawable_amount = UNBOND_WAITLIST
-        .prefix(&Addr::unchecked(sender_addr))
+        .prefix(sender_addr)
         .range(storage, None, None, Order::Ascending)
         .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
@@ -131,11 +131,11 @@ pub fn get_finished_amount(storage: &dyn Storage, sender_addr: String) -> StdRes
 /// Return the finished amount for all batches that has been before the given block time.
 pub fn query_get_finished_amount(
     storage: &dyn Storage,
-    sender_addr: String,
+    sender_addr: &Addr,
     block_time: u64,
 ) -> StdResult<Uint128> {
     let withdrawable_amount = UNBOND_WAITLIST
-        .prefix(&Addr::unchecked(sender_addr))
+        .prefix(sender_addr)
         .range(storage, None, None, Order::Ascending)
         .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
@@ -154,34 +154,34 @@ pub fn query_get_finished_amount(
 }
 
 /// Store valid validators
-pub fn store_white_validators(storage: &mut dyn Storage, validator_addr: String) -> StdResult<()> {
-    VALIDATORS.save(storage, &Addr::unchecked(validator_addr), &true)?;
+pub fn store_white_validators(storage: &mut dyn Storage, validator_addr: &Addr) -> StdResult<()> {
+    VALIDATORS.save(storage, validator_addr, &true)?;
     Ok(())
 }
 
 /// Remove valid validators
-pub fn remove_white_validators(storage: &mut dyn Storage, validator_addr: String) -> StdResult<()> {
-    VALIDATORS.remove(storage, &Addr::unchecked(validator_addr));
+pub fn remove_white_validators(storage: &mut dyn Storage, validator_addr: &Addr) -> StdResult<()> {
+    VALIDATORS.remove(storage, validator_addr);
     Ok(())
 }
 
 // Returns all validators
-pub fn read_validators(storage: &dyn Storage) -> StdResult<Vec<String>> {
+pub fn read_validators(storage: &dyn Storage) -> StdResult<Vec<Addr>> {
     VALIDATORS
         .range(storage, None, None, Order::Ascending)
-        .map(|item| deserialize_key::<String>(item.unwrap().0))
+        .map(|item| deserialize_key::<Addr>(item.unwrap().0))
         .collect()
 }
 
 /// Check whether the validator is whitelisted.
-pub fn is_valid_validator(storage: &dyn Storage, validator_addr: String) -> StdResult<bool> {
-    let res = VALIDATORS.may_load(storage, &Addr::unchecked(validator_addr))?;
+pub fn is_valid_validator(storage: &dyn Storage, validator_addr: &Addr) -> StdResult<bool> {
+    let res = VALIDATORS.may_load(storage, validator_addr)?;
     Ok(res.is_some())
 }
 
 /// Read whitelisted validators
 /// Todo: remove me, same as read_validators
-pub fn read_valid_validators(storage: &dyn Storage) -> StdResult<Vec<String>> {
+pub fn read_valid_validators(storage: &dyn Storage) -> StdResult<Vec<Addr>> {
     read_validators(storage)
 }
 
