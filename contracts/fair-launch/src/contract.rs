@@ -9,7 +9,6 @@ use cw20::Cw20ExecuteMsg;
 use prism_protocol::fair_launch::{
     DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg,
 };
-use std::cmp::min;
 use terraswap::asset::{Asset, AssetInfo};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -105,11 +104,9 @@ pub fn deposit(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, C
         });
     }
 
-    DEPOSITS.update(
-        deps.storage,
-        &info.sender,
-        |curr| -> StdResult<Uint128> { Ok(curr.unwrap_or(Uint128::zero()) + coin.amount) },
-    )?;
+    DEPOSITS.update(deps.storage, &info.sender, |curr| -> StdResult<Uint128> {
+        Ok(curr.unwrap_or(Uint128::zero()) + coin.amount)
+    })?;
     TOTAL_DEPOSIT.update(deps.storage, |curr| -> StdResult<Uint128> {
         Ok(curr + coin.amount)
     })?;
@@ -121,7 +118,7 @@ pub fn withdraw(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: Uint128,
+    amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?.launch_config.unwrap();
     if env.block.time.seconds() >= cfg.phase2_end {
@@ -133,13 +130,32 @@ pub fn withdraw(
         .load(deps.storage, &info.sender)
         .unwrap_or(Uint128::zero());
 
-    // withdraw everything if amount > deposit amount, possibly error instead?
-    let withdraw_amount = min(cur_deposit, amount);
-    if withdraw_amount == Uint128::zero() {
+    if cur_deposit == Uint128::zero() {
         return Err(ContractError::InvalidWithdraw {
             reason: "no funds available to withdraw".to_string(),
         });
     }
+
+    let withdraw_amount = match amount {
+        None => cur_deposit,
+        Some(requested_amount) => {
+            if requested_amount > cur_deposit {
+                return Err(ContractError::InvalidWithdraw {
+                    reason: format!(
+                        "can not withdraw more than current deposit amount ({})",
+                        cur_deposit
+                    ),
+                });
+            }
+            if requested_amount == Uint128::zero() {
+                return Err(ContractError::InvalidWithdraw {
+                    reason: "withdraw amount must be bigger than 0".to_string(),
+                });
+            }
+
+            requested_amount
+        }
+    };
 
     let withdraw_asset = Asset {
         info: AssetInfo::NativeToken {

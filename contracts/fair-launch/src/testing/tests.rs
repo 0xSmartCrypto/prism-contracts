@@ -196,12 +196,27 @@ fn proper_withdraw() {
     let res = deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
+    // try to withdraw 0, expect error
+    let err = withdraw(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        Some(Uint128::zero()),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidWithdraw {
+            reason: "withdraw amount must be bigger than 0".to_string()
+        }
+    );
+
     // successful withdraw 100, we get 95 due to 5% taxes configured inside mock_querier
     let res = withdraw(
         deps.as_mut(),
         env.clone(),
         info.clone(),
-        Uint128::from(100u128),
+        Some(Uint128::from(100u128)),
     )
     .unwrap();
     assert_eq!(res.messages.len(), 1);
@@ -230,14 +245,8 @@ fn proper_withdraw() {
         }
     );
 
-    // successful withdraw 1000, we have 900 left, we get 890 (tax cap = 10)
-    let res = withdraw(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        Uint128::from(1_000u128),
-    )
-    .unwrap();
+    // successful withdraw remaining, we have 900 left, we get 890 (tax cap = 10)
+    let res = withdraw(deps.as_mut(), env.clone(), info.clone(), None).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
@@ -268,7 +277,7 @@ fn proper_withdraw() {
         deps.as_mut(),
         env.clone(),
         info.clone(),
-        Uint128::from(1_000u128),
+        Some(Uint128::from(1_000u128)),
     )
     .unwrap_err();
     assert_eq!(
@@ -289,7 +298,7 @@ fn proper_withdraw() {
         deps.as_mut(),
         env.clone(),
         info.clone(),
-        Uint128::from(100u128),
+        Some(Uint128::from(100u128)),
     )
     .unwrap();
     assert_eq!(res.messages.len(), 1);
@@ -300,7 +309,7 @@ fn proper_withdraw() {
         deps.as_mut(),
         env.clone(),
         info.clone(),
-        Uint128::from(100u128),
+        Some(Uint128::from(100u128)),
     )
     .unwrap_err();
     assert_eq!(

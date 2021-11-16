@@ -23,7 +23,7 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     Deposit {},
-    Withdraw { amount: Uint128 },
+    Withdraw { amount: Option<Uint128> },
     WithdrawTokens {},
     PostInitialize { launch_config: LaunchConfig },
 }
