@@ -15,4 +15,5 @@ pub struct Config {
     pub owner: String,
     pub token: String,
     pub launch_config: Option<LaunchConfig>,
+    pub base_denom: String,
 }

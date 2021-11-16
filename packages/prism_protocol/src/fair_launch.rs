@@ -17,6 +17,7 @@ pub struct LaunchConfig {
 pub struct InstantiateMsg {
     pub owner: String,
     pub token: String,
+    pub base_denom: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

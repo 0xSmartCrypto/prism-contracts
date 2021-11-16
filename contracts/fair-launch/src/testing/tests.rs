@@ -16,6 +16,7 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, MockQuerier<TerraQueryW
     let msg = InstantiateMsg {
         owner: "owner0001".to_string(),
         token: "prism0001".to_string(),
+        base_denom: "uusd".to_string(),
     };
 
     let info = mock_info("owner0001", &[]);

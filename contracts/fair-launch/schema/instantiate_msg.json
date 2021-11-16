@@ -3,10 +3,14 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
+    "base_denom",
     "owner",
     "token"
   ],
   "properties": {
+    "base_denom": {
+      "type": "string"
+    },
     "owner": {
       "type": "string"
     },

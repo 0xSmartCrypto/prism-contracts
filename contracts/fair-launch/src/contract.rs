@@ -22,6 +22,7 @@ pub fn instantiate(
         owner: msg.owner,
         token: msg.token,
         launch_config: None,
+        base_denom: msg.base_denom,
     };
     TOTAL_DEPOSIT.save(deps.storage, &Uint128::zero())?;
     CONFIG.save(deps.storage, &cfg)?;
@@ -85,8 +86,9 @@ pub fn post_initialize(
 }
 
 pub fn deposit(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?.launch_config.unwrap();
-    if env.block.time.seconds() >= cfg.phase2_start {
+    let cfg = CONFIG.load(deps.storage)?;
+    let launch_cfg = cfg.launch_config.unwrap();
+    if env.block.time.seconds() >= launch_cfg.phase2_start {
         return Err(ContractError::InvalidDeposit {
             reason: "deposit period is over".to_string(),
         });
@@ -98,9 +100,9 @@ pub fn deposit(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, C
         });
     }
     let coin = &info.funds[0];
-    if coin.denom != "uusd".to_string() || coin.amount == Uint128::zero() {
+    if coin.denom != cfg.base_denom || coin.amount == Uint128::zero() {
         return Err(ContractError::InvalidDeposit {
-            reason: "requires uusd and positive amount".to_string(),
+            reason: format!("requires {} and positive amount", cfg.base_denom),
         });
     }
 
@@ -120,8 +122,9 @@ pub fn withdraw(
     info: MessageInfo,
     amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?.launch_config.unwrap();
-    if env.block.time.seconds() >= cfg.phase2_end {
+    let cfg = CONFIG.load(deps.storage)?;
+    let launch_config = cfg.launch_config.unwrap();
+    if env.block.time.seconds() >= launch_config.phase2_end {
         return Err(ContractError::InvalidWithdraw {
             reason: "withdraw period is over".to_string(),
         });
@@ -159,7 +162,7 @@ pub fn withdraw(
 
     let withdraw_asset = Asset {
         info: AssetInfo::NativeToken {
-            denom: "uusd".to_string(),
+            denom: cfg.base_denom,
         },
         amount: withdraw_amount,
     };
