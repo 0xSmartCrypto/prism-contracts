@@ -1,7 +1,7 @@
 pub mod contract;
-mod querier;
-mod staking;
+mod polls;
 pub mod state;
+mod voting;
 mod xprism;
 
 #[cfg(test)]

@@ -10,44 +10,35 @@ use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{PollStatus, VoterInfo};
 
 static KEY_CONFIG: &[u8] = b"config";
-static KEY_STATE: &[u8] = b"state";
 static KEY_TMP_POLL_ID: &[u8] = b"tmp_poll_id";
+static KEY_LAST_POLL_ID: &[u8] = b"last_poll_id";
 
 static PREFIX_POLL_INDEXER: &[u8] = b"poll_indexer";
 static PREFIX_POLL_VOTER: &[u8] = b"poll_voter";
 static PREFIX_POLL: &[u8] = b"poll";
 static PREFIX_BANK: &[u8] = b"bank";
 
-const MAX_LIMIT: u32 = 30;
-const DEFAULT_LIMIT: u32 = 10;
+pub const MAX_LIMIT: u32 = 30;
+pub const DEFAULT_LIMIT: u32 = 10;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: CanonicalAddr,
     pub prism_token: CanonicalAddr,
-    pub xprism_token: CanonicalAddr,
+    pub xprism_token: Option<CanonicalAddr>,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,
     pub effective_delay: u64,
-    pub expiration_period: u64, // deprecated, to remove on next state migration
     pub proposal_deposit: Uint128,
     pub snapshot_period: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct State {
-    pub contract_addr: CanonicalAddr,
-    pub poll_count: u64,
-    pub total_share: Uint128,
-    pub total_deposit: Uint128,
+    pub redemption_time: u64,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TokenManager {
-    pub share: Uint128,                        // total staked balance
-    pub locked_balance: Vec<(u64, VoterInfo)>, // maps poll_id to weight voted
-    pub participated_polls: Vec<u64>,          // poll_id
+pub struct VotingTokenManager {
+    pub deposit: Uint128,                      // total staked balance
+    pub locked_balance: Vec<(u64, VoterInfo)>, // maps poll_id to balance voted
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -64,9 +55,7 @@ pub struct Poll {
     pub link: Option<String>,
     pub execute_data: Option<ExecuteData>,
     pub deposit_amount: Uint128,
-    /// Total balance at the end poll
-    pub total_balance_at_end_poll: Option<Uint128>,
-    pub staked_amount: Option<Uint128>,
+    pub supply_snapshot: Option<Uint128>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -83,20 +72,23 @@ pub fn read_tmp_poll_id(storage: &dyn Storage) -> StdResult<u64> {
     singleton_read(storage, KEY_TMP_POLL_ID).load()
 }
 
+pub fn store_last_poll_id(storage: &mut dyn Storage, last_id: u64) -> StdResult<()> {
+    singleton(storage, KEY_LAST_POLL_ID).save(&last_id)
+}
+
+pub fn pop_last_poll_id(storage: &mut dyn Storage) -> StdResult<u64> {
+    let last_id: u64 = singleton_read(storage, KEY_LAST_POLL_ID).load()?;
+    singleton(storage, KEY_LAST_POLL_ID).save(&(last_id + 1u64))?;
+
+    Ok(last_id)
+}
+
 pub fn config_store(storage: &mut dyn Storage) -> Singleton<Config> {
     singleton(storage, KEY_CONFIG)
 }
 
 pub fn config_read(storage: &dyn Storage) -> ReadonlySingleton<Config> {
     singleton_read(storage, KEY_CONFIG)
-}
-
-pub fn state_store(storage: &mut dyn Storage) -> Singleton<State> {
-    singleton(storage, KEY_STATE)
-}
-
-pub fn state_read(storage: &dyn Storage) -> ReadonlySingleton<State> {
-    singleton_read(storage, KEY_STATE)
 }
 
 pub fn poll_store(storage: &mut dyn Storage) -> Bucket<Poll> {
@@ -196,11 +188,11 @@ pub fn read_polls<'a>(
     }
 }
 
-pub fn bank_store(storage: &mut dyn Storage) -> Bucket<TokenManager> {
+pub fn bank_store(storage: &mut dyn Storage) -> Bucket<VotingTokenManager> {
     bucket(storage, PREFIX_BANK)
 }
 
-pub fn bank_read(storage: &dyn Storage) -> ReadonlyBucket<TokenManager> {
+pub fn bank_read(storage: &dyn Storage) -> ReadonlyBucket<VotingTokenManager> {
     bucket_read(storage, PREFIX_BANK)
 }
 
@@ -209,14 +201,14 @@ pub fn read_bank_stakers<'a>(
     start_after: Option<CanonicalAddr>,
     limit: Option<u32>,
     order_by: Option<OrderBy>,
-) -> StdResult<Vec<(CanonicalAddr, TokenManager)>> {
+) -> StdResult<Vec<(CanonicalAddr, VotingTokenManager)>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let (start, end, order_by) = match order_by {
         Some(OrderBy::Asc) => (calc_range_start_addr(start_after), None, OrderBy::Asc),
         _ => (None, calc_range_end_addr(start_after), OrderBy::Desc),
     };
 
-    let stakers: ReadonlyBucket<'a, TokenManager> = ReadonlyBucket::new(storage, PREFIX_BANK);
+    let stakers: ReadonlyBucket<'a, VotingTokenManager> = ReadonlyBucket::new(storage, PREFIX_BANK);
     stakers
         .range(start.as_deref(), end.as_deref(), order_by.into())
         .take(limit)
@@ -228,7 +220,7 @@ pub fn read_bank_stakers<'a>(
 }
 
 // this will set the first key after the provided key, by appending a 1 byte
-fn calc_range_start(start_after: Option<u64>) -> Option<Vec<u8>> {
+pub fn calc_range_start(start_after: Option<u64>) -> Option<Vec<u8>> {
     start_after.map(|id| {
         let mut v = id.to_be_bytes().to_vec();
         v.push(1);
@@ -237,7 +229,7 @@ fn calc_range_start(start_after: Option<u64>) -> Option<Vec<u8>> {
 }
 
 // this will set the first key after the provided key, by appending a 1 byte
-fn calc_range_end(start_after: Option<u64>) -> Option<Vec<u8>> {
+pub fn calc_range_end(start_after: Option<u64>) -> Option<Vec<u8>> {
     start_after.map(|id| id.to_be_bytes().to_vec())
 }
 

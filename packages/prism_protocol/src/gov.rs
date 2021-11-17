@@ -9,19 +9,22 @@ use crate::common::OrderBy;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub prism_token: String,
-    pub xprism_token: String,
     pub quorum: Decimal,
     pub threshold: Decimal,
     pub voting_period: u64,
     pub effective_delay: u64,
     pub proposal_deposit: Uint128,
     pub snapshot_period: u64,
+    pub redemption_time: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
+    PostInitialize {
+        xprism_token: String,
+    },
     UpdateConfig {
         owner: Option<String>,
         quorum: Option<Decimal>,
@@ -30,6 +33,7 @@ pub enum ExecuteMsg {
         effective_delay: Option<u64>,
         proposal_deposit: Option<Uint128>,
         snapshot_period: Option<u64>,
+        redemption_time: Option<u64>,
     },
     CastVote {
         poll_id: u64,
@@ -54,8 +58,7 @@ pub enum ExecuteMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
-    /// StakeVotingTokens a user can stake their prism token to receive rewards
-    /// or do vote on polls
+    /// StakeVotingTokens a user can stake their xPRISM to vote on polls
     StakeVotingTokens {},
     /// CreatePoll need to receive deposit from a proposer
     CreatePoll {
@@ -64,7 +67,7 @@ pub enum Cw20HookMsg {
         link: Option<String>,
         execute_msg: Option<PollExecuteMsg>,
     },
-    /// Deposit rewards to be distributed among stakers and voters
+    /// Deposit PRISM rewards, increasing PRISM/xPRISM ratio
     DepositReward {},
 
     MintXprism {},
@@ -82,8 +85,7 @@ pub struct PollExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-    State {},
-    Staker {
+    VotingTokens {
         address: String,
     },
     Poll {
@@ -105,11 +107,12 @@ pub enum QueryMsg {
         limit: Option<u32>,
         order_by: Option<OrderBy>,
     },
-    Shares {
-        start_after: Option<String>,
+    PrismWithdrawOrders {
+        address: String,
+        start_after: Option<u64>,
         limit: Option<u32>,
         order_by: Option<OrderBy>,
-    },
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
@@ -122,13 +125,7 @@ pub struct ConfigResponse {
     pub effective_delay: u64,
     pub proposal_deposit: Uint128,
     pub snapshot_period: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
-pub struct StateResponse {
-    pub poll_count: u64,
-    pub total_share: Uint128,
-    pub total_deposit: Uint128,
+    pub redemption_time: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
@@ -145,8 +142,7 @@ pub struct PollResponse {
     pub yes_votes: Uint128,     // balance
     pub no_votes: Uint128,      // balance
     pub abstain_votes: Uint128, // balance
-    pub total_balance_at_end_poll: Option<Uint128>,
-    pub staked_amount: Option<Uint128>,
+    pub supply_snapshot: Option<Uint128>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
@@ -154,27 +150,10 @@ pub struct PollsResponse {
     pub polls: Vec<PollResponse>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
-pub struct PollCountResponse {
-    pub poll_count: u64,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
-pub struct StakerResponse {
+pub struct VotingTokensResponse {
     pub balance: Uint128,
-    pub share: Uint128,
     pub locked_balance: Vec<(u64, VoterInfo)>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
-pub struct SharesResponseItem {
-    pub staker: String,
-    pub share: Uint128,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
-pub struct SharesResponse {
-    pub stakers: Vec<SharesResponseItem>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
@@ -190,12 +169,15 @@ pub struct VotersResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MigrateMsg {}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct VoterInfo {
     pub vote: VoteOption,
     pub balance: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PrismWithdrawOrdersResponse {
+    pub claimable_amount: Uint128,
+    pub orders: Vec<(u64, Uint128)>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -205,7 +187,6 @@ pub enum PollStatus {
     Passed,
     Rejected,
     Executed,
-    Expired,
     Failed,
 }
 
