@@ -1,20 +1,13 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{
-    from_slice, to_vec, Addr, Decimal, Order, StdError, StdResult, Storage, Uint128,
-};
-use cosmwasm_storage::{Bucket, PrefixedStorage, ReadonlyBucket, ReadonlyPrefixedStorage};
-use cw_storage_plus::Item;
+use cosmwasm_std::{Addr, Decimal, Order, StdError, StdResult, Storage, Uint128};
+use cw_storage_plus::{Bound, Item, Map, U64Key};
 
+use prism_protocol::de::deserialize_key;
 use prism_protocol::vault::{Config, State, UnbondHistory, UnbondRequest};
 
 pub type LastBatch = u64;
-
-pub static PREFIX_WAIT_MAP: &[u8] = b"wait";
-pub static PREFIX_AIRDROP_INFO: &[u8] = b"airedrop_info";
-pub static UNBOND_HISTORY_MAP: &[u8] = b"history_map";
-pub static VALIDATORS: &[u8] = b"validators";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Parameters {
@@ -35,23 +28,25 @@ pub const CONFIG: Item<Config> = Item::new("config");
 pub const PARAMETERS: Item<Parameters> = Item::new("parameters");
 pub const CURRENT_BATCH: Item<CurrentBatch> = Item::new("current_batch");
 pub const STATE: Item<State> = Item::new("state");
+pub const UNBOND_WAITLIST: Map<(&Addr, U64Key), Uint128> = Map::new("unbond_waitlist");
+pub const UNBOND_HISTORY: Map<U64Key, UnbondHistory> = Map::new("unbond_history");
+pub const VALIDATORS: Map<&Addr, bool> = Map::new("validators");
 
 /// Store undelegation wait list per each batch
 /// HashMap<user's address, <batch_id, requested_amount>
 pub fn store_unbond_wait_list(
     storage: &mut dyn Storage,
     batch_id: u64,
-    sender_address: String,
+    sender_addr: &Addr,
     amount: Uint128,
 ) -> StdResult<()> {
-    let batch = to_vec(&batch_id)?;
-    let addr = to_vec(&sender_address)?;
-    let mut position_indexer: Bucket<Uint128> =
-        Bucket::multilevel(storage, &[PREFIX_WAIT_MAP, &addr]);
-    position_indexer.update(&batch, |asked_already| -> StdResult<Uint128> {
-        Ok(asked_already.unwrap_or_default() + amount)
-    })?;
-
+    UNBOND_WAITLIST.update(
+        storage,
+        (sender_addr, batch_id.into()),
+        |existing_amount: Option<Uint128>| -> StdResult<_> {
+            Ok(existing_amount.unwrap_or_default() + amount)
+        },
+    )?;
     Ok(())
 }
 
@@ -59,14 +54,10 @@ pub fn store_unbond_wait_list(
 pub fn remove_unbond_wait_list(
     storage: &mut dyn Storage,
     batch_id: Vec<u64>,
-    sender_address: Addr,
+    sender_addr: &Addr,
 ) -> StdResult<()> {
-    let addr = to_vec(&sender_address)?;
-    let mut position_indexer: Bucket<Uint128> =
-        Bucket::multilevel(storage, &[PREFIX_WAIT_MAP, &addr]);
     for b in batch_id {
-        let batch = to_vec(&b)?;
-        position_indexer.remove(&batch);
+        UNBOND_WAITLIST.remove(storage, (sender_addr, b.into()));
     }
     Ok(())
 }
@@ -74,47 +65,39 @@ pub fn remove_unbond_wait_list(
 pub fn read_unbond_wait_list(
     storage: &dyn Storage,
     batch_id: u64,
-    sender_addr: String,
+    sender_addr: &Addr,
 ) -> StdResult<Uint128> {
-    let vec = to_vec(&sender_addr)?;
-    let res: ReadonlyBucket<Uint128> =
-        ReadonlyBucket::multilevel(storage, &[PREFIX_WAIT_MAP, &vec]);
-    let batch = to_vec(&batch_id)?;
-    res.load(&batch)
+    UNBOND_WAITLIST.load(storage, (sender_addr, batch_id.into()))
 }
 
-pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: String) -> StdResult<UnbondRequest> {
-    let vec = to_vec(&sender_addr)?;
-    let mut requests: UnbondRequest = vec![];
-
-    let res: ReadonlyBucket<Uint128> =
-        ReadonlyBucket::multilevel(storage, &[PREFIX_WAIT_MAP, &vec]);
-    let _un: Vec<_> = res
-        .range(None, None, Order::Ascending)
+pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<UnbondRequest> {
+    let sender_requests: Vec<_> = UNBOND_WAITLIST
+        .prefix(sender_addr)
+        .range(storage, None, None, Order::Ascending)
         .map(|item| {
-            let (k, value) = item.unwrap();
-            let user_batch: u64 = from_slice(&k).unwrap();
-            requests.push((user_batch, value))
+            let (k, v) = item.unwrap();
+            let batch_id = deserialize_key::<u64>(k).unwrap();
+            (batch_id, v)
         })
         .collect();
-    Ok(requests)
+    Ok(sender_requests)
 }
 
-pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: String) -> StdResult<Vec<u64>> {
-    let vec = to_vec(&sender_addr)?;
-    let mut deprecated_batches: Vec<u64> = vec![];
-    let res: ReadonlyBucket<Uint128> =
-        ReadonlyBucket::multilevel(storage, &[PREFIX_WAIT_MAP, &vec]);
-    let _un: Vec<_> = res
-        .range(None, None, Order::Ascending)
-        .map(|item| {
+pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<Vec<u64>> {
+    let deprecated_batches: Vec<u64> = UNBOND_WAITLIST
+        .prefix(sender_addr)
+        .range(storage, None, None, Order::Ascending)
+        .filter_map(|item| {
             let (k, _) = item.unwrap();
-            let user_batch: u64 = from_slice(&k).unwrap();
-            let history = read_unbond_history(storage, user_batch);
-            if let Ok(h) = history {
+            let batch_id = deserialize_key::<u64>(k).unwrap();
+            if let Ok(h) = read_unbond_history(storage, batch_id) {
                 if h.released {
-                    deprecated_batches.push(user_batch);
+                    Some(batch_id)
+                } else {
+                    None
                 }
+            } else {
+                None
             }
         })
         .collect();
@@ -125,134 +108,95 @@ pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: String) -> StdResu
 /// This needs to be called after process withdraw rate function.
 /// If the batch is released, this will return user's requested
 /// amount proportional to withdraw rate.
-pub fn get_finished_amount(storage: &dyn Storage, sender_addr: String) -> StdResult<Uint128> {
-    let vec = to_vec(&sender_addr)?;
-    let mut withdrawable_amount: Uint128 = Uint128::zero();
-    let res: ReadonlyBucket<Uint128> =
-        ReadonlyBucket::multilevel(storage, &[PREFIX_WAIT_MAP, &vec]);
-    let _un: Vec<_> = res
-        .range(None, None, Order::Ascending)
-        .map(|item| {
+pub fn get_finished_amount(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<Uint128> {
+    let withdrawable_amount = UNBOND_WAITLIST
+        .prefix(sender_addr)
+        .range(storage, None, None, Order::Ascending)
+        .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
-            let user_batch: u64 = from_slice(&k).unwrap();
-            let history = read_unbond_history(storage, user_batch);
-            if let Ok(h) = history {
+            let batch_id = deserialize_key::<u64>(k).unwrap();
+            if let Ok(h) = read_unbond_history(storage, batch_id) {
                 if h.released {
-                    withdrawable_amount += v * h.withdraw_rate;
+                    acc + v * h.withdraw_rate
+                } else {
+                    acc
                 }
+            } else {
+                acc
             }
-        })
-        .collect();
+        });
     Ok(withdrawable_amount)
 }
 
 /// Return the finished amount for all batches that has been before the given block time.
 pub fn query_get_finished_amount(
     storage: &dyn Storage,
-    sender_addr: String,
+    sender_addr: &Addr,
     block_time: u64,
 ) -> StdResult<Uint128> {
-    let vec = to_vec(&sender_addr)?;
-    let mut withdrawable_amount: Uint128 = Uint128::zero();
-    let res: ReadonlyBucket<Uint128> =
-        ReadonlyBucket::multilevel(storage, &[PREFIX_WAIT_MAP, &vec]);
-    let _un: Vec<_> = res
-        .range(None, None, Order::Ascending)
-        .map(|item| {
+    let withdrawable_amount = UNBOND_WAITLIST
+        .prefix(sender_addr)
+        .range(storage, None, None, Order::Ascending)
+        .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
-            let user_batch: u64 = from_slice(&k).unwrap();
-            let history = read_unbond_history(storage, user_batch);
-            if let Ok(h) = history {
+            let batch_id = deserialize_key::<u64>(k).unwrap();
+            if let Ok(h) = read_unbond_history(storage, batch_id) {
                 if h.time < block_time {
-                    withdrawable_amount += v * h.withdraw_rate;
+                    acc + v * h.withdraw_rate
+                } else {
+                    acc
                 }
+            } else {
+                acc
             }
-        })
-        .collect();
+        });
     Ok(withdrawable_amount)
 }
 
 /// Store valid validators
-pub fn store_white_validators(
-    storage: &mut dyn Storage,
-    validator_address: String,
-) -> StdResult<()> {
-    let vec = to_vec(&validator_address)?;
-    let value = to_vec(&true)?;
-    PrefixedStorage::new(storage, VALIDATORS).set(&vec, &value);
+pub fn store_white_validators(storage: &mut dyn Storage, validator_addr: &Addr) -> StdResult<()> {
+    VALIDATORS.save(storage, validator_addr, &true)?;
     Ok(())
 }
 
 /// Remove valid validators
-pub fn remove_white_validators(
-    storage: &mut dyn Storage,
-    validator_address: String,
-) -> StdResult<()> {
-    let vec = to_vec(&validator_address)?;
-    PrefixedStorage::new(storage, VALIDATORS).remove(&vec);
+pub fn remove_white_validators(storage: &mut dyn Storage, validator_addr: &Addr) -> StdResult<()> {
+    VALIDATORS.remove(storage, validator_addr);
     Ok(())
 }
 
 // Returns all validators
-pub fn read_validators(storage: &dyn Storage) -> StdResult<Vec<String>> {
-    let res = ReadonlyPrefixedStorage::new(storage, VALIDATORS);
-    let validators: Vec<String> = res
-        .range(None, None, Order::Ascending)
-        .map(|item| {
-            let (key, _) = item;
-            let sender: String = from_slice(&key).unwrap();
-            sender
-        })
-        .collect();
-    Ok(validators)
+pub fn read_validators(storage: &dyn Storage) -> StdResult<Vec<Addr>> {
+    VALIDATORS
+        .range(storage, None, None, Order::Ascending)
+        .map(|item| deserialize_key::<Addr>(item.unwrap().0))
+        .collect()
 }
 
 /// Check whether the validator is whitelisted.
-pub fn is_valid_validator(storage: &dyn Storage, validator_address: String) -> StdResult<bool> {
-    let vec = to_vec(&validator_address)?;
-    let res = ReadonlyPrefixedStorage::new(storage, VALIDATORS).get(&vec);
-    match res {
-        Some(_) => Ok(true),
-        None => Ok(false),
-    }
+pub fn is_valid_validator(storage: &dyn Storage, validator_addr: &Addr) -> StdResult<bool> {
+    let res = VALIDATORS.may_load(storage, validator_addr)?;
+    Ok(res.is_some())
 }
 
 /// Read whitelisted validators
-pub fn read_valid_validators(storage: &dyn Storage) -> StdResult<Vec<String>> {
-    let res = ReadonlyPrefixedStorage::new(storage, VALIDATORS);
-    let validators: Vec<String> = res
-        .range(None, None, Order::Ascending)
-        .map(|item| {
-            let (key, _) = item;
-            let sender: String = from_slice(&key).unwrap();
-            sender
-        })
-        .collect();
-    Ok(validators)
+/// Todo: remove me, same as read_validators
+pub fn read_valid_validators(storage: &dyn Storage) -> StdResult<Vec<Addr>> {
+    read_validators(storage)
 }
 
-/// Store unbond history map
-/// Hashmap<batch_id, <UnbondHistory>>
 pub fn store_unbond_history(
     storage: &mut dyn Storage,
     batch_id: u64,
     history: UnbondHistory,
 ) -> StdResult<()> {
-    let vec = batch_id.to_be_bytes().to_vec();
-    let value: Vec<u8> = to_vec(&history)?;
-    PrefixedStorage::new(storage, UNBOND_HISTORY_MAP).set(&vec, &value);
-    Ok(())
+    UNBOND_HISTORY.save(storage, batch_id.into(), &history)
 }
 
 pub fn read_unbond_history(storage: &dyn Storage, epoc_id: u64) -> StdResult<UnbondHistory> {
-    let vec = epoc_id.to_be_bytes().to_vec();
-    let res = ReadonlyPrefixedStorage::new(storage, UNBOND_HISTORY_MAP).get(&vec);
-    match res {
-        Some(data) => from_slice(&data),
-        None => Err(StdError::generic_err(
-            "Burn requests not found for the specified time period",
-        )),
-    }
+    UNBOND_HISTORY
+        .load(storage, epoc_id.into())
+        .map_err(|_| StdError::generic_err("Burn requests not found for the specified time period"))
 }
 
 // settings for pagination
@@ -266,24 +210,20 @@ pub fn all_unbond_history(
     start: Option<u64>,
     limit: Option<u32>,
 ) -> StdResult<Vec<UnbondHistory>> {
-    let vec = convert(start);
-
-    let lim = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let res = ReadonlyPrefixedStorage::new(storage, UNBOND_HISTORY_MAP)
-        .range(vec.as_deref(), None, Order::Ascending)
-        .take(lim)
+    let start = U64Key::from(start.unwrap_or_default());
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let res = UNBOND_HISTORY
+        .range(
+            storage,
+            Some(Bound::Exclusive(start.into())),
+            None,
+            Order::Ascending,
+        )
+        .take(limit)
         .map(|item| {
-            let history: UnbondHistory = from_slice(&item.1).unwrap();
+            let history: UnbondHistory = item.unwrap().1;
             Ok(history)
         })
         .collect();
     res
-}
-
-fn convert(start_after: Option<u64>) -> Option<Vec<u8>> {
-    start_after.map(|idx| {
-        let mut v = idx.to_be_bytes().to_vec();
-        v.push(1);
-        v
-    })
 }

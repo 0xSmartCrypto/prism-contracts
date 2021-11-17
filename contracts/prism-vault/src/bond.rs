@@ -69,14 +69,14 @@ pub fn _execute_bond(
     // validator must be whitelisted
 
     let unwrapped_validator = match validator {
-        Some(v) => v.clone(),
+        Some(v) => deps.api.addr_validate(v)?,
         None => {
             let validators = read_valid_validators(deps.storage)?;
             let idx = env.block.time.nanos() as usize % validators.len();
             validators[idx].clone()
         }
     };
-    let is_valid = is_valid_validator(deps.storage, unwrapped_validator.clone())?;
+    let is_valid = is_valid_validator(deps.storage, &unwrapped_validator)?;
     if !is_valid {
         return Err(StdError::generic_err(
             "The chosen validator is currently not supported",
@@ -146,7 +146,7 @@ pub fn _execute_bond(
         mint_amount_with_fee,
         vec![
             SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
-                validator: unwrapped_validator,
+                validator: unwrapped_validator.into_string(),
                 amount: payment.clone(),
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {

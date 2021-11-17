@@ -7,7 +7,7 @@ use cosmwasm_std::{
 };
 
 use crate::state::{read_config, store_config, Config};
-use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
 
 use cw20::Cw20ExecuteMsg;
@@ -175,9 +175,4 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     };
 
     Ok(resp)
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
-    Ok(Response::default())
 }
