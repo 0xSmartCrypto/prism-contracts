@@ -3,17 +3,16 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     attr, to_binary, Addr, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, WasmMsg,
+    StdError, StdResult, Uint128, WasmMsg,
 };
 
-use crate::state::{read_config, store_config, Config};
+use crate::state::{Config, CONFIG};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
-use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
 
+use astroport::asset::{Asset, AssetInfo, PairInfo};
+use astroport::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
+use astroport::querier::{query_balance, query_pair_info, query_token_balance};
 use cw20::Cw20ExecuteMsg;
-use terraswap::asset::{Asset, AssetInfo, PairInfo};
-use terraswap::pair::{Cw20HookMsg as TerraswapCw20HookMsg, ExecuteMsg as TerraswapExecuteMsg};
-use terraswap::querier::{query_balance, query_pair_info, query_token_balance};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -22,139 +21,247 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
-    store_config(
-        deps.storage,
-        &Config {
-            distribution_contract: msg.distribution_contract,
-            terraswap_factory: msg.terraswap_factory,
-            prism_token: msg.prism_token,
-            base_denom: msg.base_denom,
-            owner: msg.owner,
-        },
-    )?;
+    let config = Config {
+        distribution_contract: deps.api.addr_validate(&msg.distribution_contract)?,
+        astroport_factory: deps.api.addr_validate(&msg.astroport_factory)?,
+        prism_token: deps.api.addr_validate(&msg.prism_token)?,
+        prism_base_pair: deps.api.addr_validate(&msg.prism_base_pair)?,
+        base_denom: msg.base_denom,
+    };
+
+    CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(
-    deps: DepsMut,
-    env: Env,
-    _info: MessageInfo,
-    msg: ExecuteMsg,
-) -> StdResult<Response> {
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
-        ExecuteMsg::Convert { asset_token } => convert(deps, env, asset_token),
-        ExecuteMsg::Distribute {} => distribute(deps, env),
+        ExecuteMsg::ConvertAndSend { assets, receiver } => {
+            convert_and_send(deps, env, info, assets, receiver)
+        }
+        ExecuteMsg::Distribute { asset_tokens } => distribute(deps, env, asset_tokens),
+        ExecuteMsg::BaseSwapHook { receiver } => base_swap_hook(deps, env, info, receiver),
     }
 }
 
-/// Convert
-/// Anyone can execute convert function to swap
-/// asset token => collateral token
-/// collateral token => PRISM token
-pub fn convert(deps: DepsMut, env: Env, asset_token: String) -> StdResult<Response> {
-    let config: Config = read_config(deps.storage)?;
-    let terraswap_factory_raw = config.terraswap_factory;
+pub fn convert_and_send(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    assets: Vec<Asset>,
+    receiver: Option<String>,
+) -> StdResult<Response> {
+    let config: Config = CONFIG.load(deps.storage)?;
 
-    let pair_info: PairInfo = query_pair_info(
-        &deps.querier,
-        Addr::unchecked(terraswap_factory_raw.to_string()),
-        &[
-            AssetInfo::NativeToken {
-                denom: config.base_denom.to_string(),
-            },
-            AssetInfo::Token {
-                contract_addr: asset_token.to_string(),
-            },
-        ],
-    )?;
+    let receiver: String = receiver.unwrap_or(info.sender.to_string());
 
-    let messages: Vec<CosmosMsg>;
-    if config.prism_token == asset_token {
-        // collateral token => prism token
-        let amount = query_balance(
+    let mut messages: Vec<CosmosMsg> = vec![];
+    let mut need_hook: bool = false;
+    for asset in assets {
+        // add transfer from message
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: asset.info.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                owner: info.sender.to_string(),
+                amount: asset.amount,
+                recipient: env.contract.address.to_string(),
+            })?,
+            funds: vec![],
+        }));
+
+        // try to query pair with $PRISM
+        let prism_pair_info_res: StdResult<PairInfo> = query_pair_info(
             &deps.querier,
-            env.contract.address,
-            config.base_denom.to_string(),
-        )?;
-        let swap_asset = Asset {
-            info: AssetInfo::NativeToken {
-                denom: config.base_denom.clone(),
-            },
-            amount,
+            config.astroport_factory.clone(),
+            &[
+                AssetInfo::Token {
+                    contract_addr: config.prism_token.clone(),
+                },
+                asset.info.clone(),
+            ],
+        );
+
+        // if direct $PRISM pair does not exist, use base pair and send ust back to contract to swap it
+        let (pair_addr, to): (String, Option<String>) = match prism_pair_info_res {
+            Ok(pair_info) => (pair_info.contract_addr.to_string(), Some(receiver.clone())),
+            Err(_) => {
+                let base_pair_info: PairInfo = query_pair_info(
+                    &deps.querier,
+                    config.astroport_factory.clone(),
+                    &[
+                        AssetInfo::NativeToken {
+                            denom: config.base_denom.to_string(),
+                        },
+                        asset.info.clone(),
+                    ],
+                )?;
+                // because we are swaping to base denom,
+                // we will need to call the hook to perform base->$PRISM swap
+                need_hook = true;
+
+                (base_pair_info.contract_addr.to_string(), None)
+            }
         };
 
-        // deduct tax first
-        let amount = (swap_asset.deduct_tax(&deps.querier)?).amount;
-        messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: pair_info.contract_addr,
-            msg: to_binary(&TerraswapExecuteMsg::Swap {
+        // create swap msg
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: asset.info.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: pair_addr.to_string(),
+                amount: asset.amount,
+                msg: to_binary(&PairCw20HookMsg::Swap {
+                    max_spread: None,
+                    belief_price: None,
+                    to,
+                })?,
+            })?,
+            funds: vec![],
+        }));
+    }
+
+    if need_hook {
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            msg: to_binary(&ExecuteMsg::BaseSwapHook {
+                receiver: Some(receiver),
+            })?,
+            funds: vec![],
+        }))
+    }
+
+    Ok(Response::new()
+        .add_messages(messages)
+        .add_attributes(vec![attr("action", "convert_and_send")]))
+}
+
+pub fn distribute(deps: DepsMut, env: Env, asset_tokens: Vec<String>) -> StdResult<Response> {
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    let mut messages: Vec<CosmosMsg> = vec![];
+    let mut need_hook: bool = false;
+    for asset in asset_tokens {
+        let asset_addr: Addr = deps.api.addr_validate(&asset)?;
+        let asset_info = AssetInfo::Token {
+            contract_addr: asset_addr.clone(),
+        };
+
+        let asset_balance: Uint128 =
+            query_token_balance(&deps.querier, asset_addr, env.contract.address.clone())?;
+
+        // try to query pair with $PRISM
+        let prism_pair_info_res: StdResult<PairInfo> = query_pair_info(
+            &deps.querier,
+            config.astroport_factory.clone(),
+            &[
+                AssetInfo::Token {
+                    contract_addr: config.prism_token.clone(),
+                },
+                asset_info.clone(),
+            ],
+        );
+
+        // if direct $PRISM pair does not exist, use base pair and send ust back to contract to swap it
+        let (pair_addr, to): (String, Option<String>) = match prism_pair_info_res {
+            Ok(pair_info) => (
+                pair_info.contract_addr.to_string(),
+                Some(config.distribution_contract.to_string()),
+            ),
+            Err(_) => {
+                let base_pair_info: PairInfo = query_pair_info(
+                    &deps.querier,
+                    config.astroport_factory.clone(),
+                    &[
+                        AssetInfo::NativeToken {
+                            denom: config.base_denom.to_string(),
+                        },
+                        asset_info.clone(),
+                    ],
+                )?;
+                // because we are swaping to base denom,
+                // we will need to call the hook to perform base->$PRISM swap
+                need_hook = true;
+
+                (base_pair_info.contract_addr.to_string(), None)
+            }
+        };
+
+        // create swap msg
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: asset_info.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: pair_addr.to_string(),
+                amount: asset_balance,
+                msg: to_binary(&PairCw20HookMsg::Swap {
+                    max_spread: None,
+                    belief_price: None,
+                    to,
+                })?,
+            })?,
+            funds: vec![],
+        }));
+    }
+
+    if need_hook {
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            msg: to_binary(&ExecuteMsg::BaseSwapHook { receiver: None })?,
+            funds: vec![],
+        }))
+    }
+
+    Ok(Response::new()
+        .add_messages(messages)
+        .add_attributes(vec![attr("action", "distribute")]))
+}
+
+pub fn base_swap_hook(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    receiver: Option<String>,
+) -> StdResult<Response> {
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    if info.sender != env.contract.address {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    let receiver: String = receiver.unwrap_or(config.distribution_contract.to_string());
+
+    let amount = query_balance(
+        &deps.querier,
+        env.contract.address,
+        config.base_denom.to_string(),
+    )?;
+    let swap_asset = Asset {
+        info: AssetInfo::NativeToken {
+            denom: config.base_denom.clone(),
+        },
+        amount,
+    };
+
+    // deduct tax first
+    let amount = (swap_asset.deduct_tax(&deps.querier)?).amount;
+
+    Ok(Response::new()
+        .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: config.prism_base_pair.to_string(),
+            msg: to_binary(&PairExecuteMsg::Swap {
                 offer_asset: Asset {
                     amount,
                     ..swap_asset
                 },
                 max_spread: None,
                 belief_price: None,
-                to: None,
+                to: Some(receiver),
             })?,
             funds: vec![Coin {
                 denom: config.base_denom,
                 amount,
             }],
-        })];
-    } else {
-        // asset token => collateral token
-        let amount = query_token_balance(
-            &deps.querier,
-            Addr::unchecked(asset_token.to_string()),
-            env.contract.address,
-        )?;
-
-        messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: asset_token.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: pair_info.contract_addr,
-                amount,
-                msg: to_binary(&TerraswapCw20HookMsg::Swap {
-                    max_spread: None,
-                    belief_price: None,
-                    to: None,
-                })?,
-            })?,
-            funds: vec![],
-        })];
-    }
-
-    Ok(Response::new().add_messages(messages).add_attributes(vec![
-        attr("action", "convert"),
-        attr("asset_token", asset_token.as_str()),
-    ]))
-}
-
-// Anyone can execute send function to receive staking token rewards
-pub fn distribute(deps: DepsMut, env: Env) -> StdResult<Response> {
-    let config: Config = read_config(deps.storage)?;
-    let amount = query_token_balance(
-        &deps.querier,
-        Addr::unchecked(config.prism_token.to_string()),
-        env.contract.address,
-    )?;
-
-    Ok(Response::new()
-        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.prism_token.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: config.distribution_contract.to_string(),
-                amount,
-                msg: to_binary(&GovCw20HookMsg::DepositReward {})?,
-            })?,
-            funds: vec![],
-        })])
-        .add_attributes(vec![
-            attr("action", "distribute"),
-            attr("amount", amount.to_string()),
-        ]))
+        }))
+        .add_attribute("action", "base_swap_hook"))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -165,14 +272,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
-    let state = read_config(deps.storage)?;
-    let resp = ConfigResponse {
-        distribution_contract: state.distribution_contract,
-        terraswap_factory: state.terraswap_factory,
-        prism_token: state.prism_token,
-        base_denom: state.base_denom,
-        owner: state.owner,
-    };
+    let config: Config = CONFIG.load(deps.storage)?;
 
-    Ok(resp)
+    config.as_res()
 }
