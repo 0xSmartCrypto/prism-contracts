@@ -18,6 +18,7 @@ use cw20::Cw20ReceiveMsg;
 
 use crate::xprism::{
     claim_redeemed_prism, mint_xprism, query_prism_withdraw_orders, redeem_xprism,
+    TOTAL_PENDING_WITHDRAW,
 };
 use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{
@@ -52,6 +53,8 @@ pub fn instantiate(
 
     config_store(deps.storage).save(&config)?;
     store_last_poll_id(deps.storage, 1u64)?;
+
+    TOTAL_PENDING_WITHDRAW.save(deps.storage, &(Uint128::zero(), Uint128::zero()))?;
 
     Ok(Response::default())
 }

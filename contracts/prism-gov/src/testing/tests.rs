@@ -2888,10 +2888,16 @@ fn mint_xprism() {
     mock_post_initialize(deps.as_mut());
 
     // start with 0 xprism supply
-    deps.querier.with_token_balances(&[(
-        &VOTING_TOKEN.to_string(),
-        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
-    )]);
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
+        ),
+        (
+            &PRISM_TOKEN.to_string(),
+            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000000u128))], // prism is already in contract balance when executing hook
+        ),
+    ]);
 
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: TEST_VOTER.to_string(),
@@ -2942,7 +2948,7 @@ fn mint_xprism() {
             &PRISM_TOKEN.to_string(),
             &[(
                 &MOCK_CONTRACT_ADDR.to_string(),
-                &Uint128::from(1000000u128 + 100u128), // deposit + 100 reward
+                &Uint128::from(1000000u128 + 100u128 + 1000000u128), // first deposit + 100 reward + second deposit
             )],
         ),
     ]);
@@ -3024,7 +3030,7 @@ fn redeem_xprism() {
             &PRISM_TOKEN.to_string(),
             &[(
                 &MOCK_CONTRACT_ADDR.to_string(),
-                &Uint128::from(1000000u128 + 1000000u128), // er = 1:2
+                &Uint128::from(1000000u128 + 1000000u128), // add 1000000 rewards
             )],
         ),
     ]);
@@ -3035,7 +3041,7 @@ fn redeem_xprism() {
         vec![
             attr("action", "redeem_xprism"),
             attr("total_redeemed", "500000"),
-            attr("prism_queued", "1000000"), // 500000 * 2000000 / 1000000
+            attr("prism_queued", "1500000"), // 500000 * (2000000 - 500000) / (1000000 - 500000)
         ]
     );
     assert!(res.messages.is_empty());
