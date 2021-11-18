@@ -5,12 +5,13 @@ use cosmwasm_std::{
     StdResult, Storage, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
-use cw_storage_plus::{Bound, Map};
+use cw_storage_plus::{Bound, Item, Map};
 use prism_protocol::{common::OrderBy, gov::PrismWithdrawOrdersResponse};
 use std::convert::TryInto;
 
 // map (address, return_date) -> (xprism_amt, prism_amt)
 pub const WITHDRAW_ORDERS: Map<(&[u8], &[u8]), (Uint128, Uint128)> = Map::new("withdraw_orders");
+pub const TOTAL_PENDING_WITHDRAW: Item<(Uint128, Uint128)> = Item::new("total_pending_withdraw");
 
 const MAX_ORDER_WITHDRAW_PER_TX: usize = 50usize;
 
@@ -24,10 +25,14 @@ pub fn mint_xprism(
     let prism_token = deps.api.addr_humanize(&cfg.prism_token)?;
     let xprism_token = deps.api.addr_humanize(&cfg.xprism_token.unwrap())?;
 
-    let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address.clone())?;
-    let xprism_amt = query_supply(&deps.querier, xprism_token.clone())?;
+    let (pending_xprism, pending_prism) = TOTAL_PENDING_WITHDRAW.load(deps.storage)?;
 
-    let xprism_to_mint = if xprism_amt.is_zero() {
+    let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address.clone())?
+        - amount
+        - pending_prism;
+    let xprism_amt = query_supply(&deps.querier, xprism_token.clone())? - pending_xprism;
+
+    let xprism_to_mint = if prism_amt.is_zero() {
         amount
     } else {
         amount.multiply_ratio(xprism_amt, prism_amt)
@@ -58,8 +63,11 @@ pub fn redeem_xprism(
     let prism_token = deps.api.addr_humanize(&cfg.prism_token)?;
     let xprism_token = deps.api.addr_humanize(&cfg.xprism_token.unwrap())?;
 
-    let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address.clone())?;
-    let xprism_amt = query_supply(&deps.querier, xprism_token.clone())?;
+    let (pending_xprism, pending_prism) = TOTAL_PENDING_WITHDRAW.load(deps.storage)?;
+
+    let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address.clone())?
+        - pending_prism;
+    let xprism_amt = query_supply(&deps.querier, xprism_token.clone())? - pending_xprism;
 
     let prism_to_return = amount.multiply_ratio(prism_amt, xprism_amt);
 
@@ -69,6 +77,10 @@ pub fn redeem_xprism(
         deps.storage,
         (sender.as_bytes(), &end_time.to_be_bytes()),
         &(amount, prism_to_return),
+    )?;
+    TOTAL_PENDING_WITHDRAW.save(
+        deps.storage,
+        &(pending_xprism + amount, pending_prism + prism_to_return),
     )?;
 
     Ok(Response::new().add_attributes(vec![
