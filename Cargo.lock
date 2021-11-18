@@ -595,26 +595,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fair-launch"
-version = "0.1.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cosmwasm-storage",
- "cw-storage-plus",
- "cw20",
- "hex",
- "lazy_static",
- "prism-protocol",
- "schemars",
- "serde",
- "serde_json",
- "terra-cosmwasm",
- "terraswap",
- "thiserror",
-]
-
-[[package]]
 name = "fallible-iterator"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -982,6 +962,26 @@ dependencies = [
  "serde",
  "terra-cosmwasm",
  "terraswap",
+]
+
+[[package]]
+name = "prism-fair-launch"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-storage-plus",
+ "cw20",
+ "hex",
+ "lazy_static",
+ "prism-protocol",
+ "schemars",
+ "serde",
+ "serde_json",
+ "terra-cosmwasm",
+ "terraswap",
+ "thiserror",
 ]
 
 [[package]]

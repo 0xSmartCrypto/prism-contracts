@@ -1,9 +1,9 @@
 [package]
-name = "fair-launch"
+name = "prism-fair-launch"
 version = "0.1.0"
 authors = []
 edition = "2018"
-description = "fair launch for tokens"
+description = "Fair launch for PRISM tokens"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
