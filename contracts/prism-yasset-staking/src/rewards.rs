@@ -130,6 +130,7 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
             || asset_info.to_string() == cfg.prism_token.to_string()
         {
             // re-implement into_msg here because life is cruel
+            // should never be native
             let msg = match &asset_info {
                 AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: contract_addr.to_string(),
@@ -147,6 +148,16 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
 
             messages.push(msg);
         } else {
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: asset_info.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: cfg.collector.to_string(),
+                    amount: claim_asset.amount,
+                    expires: None,
+                })?,
+                funds: vec![],
+            }));
+
             assets_to_swap.push(claim_asset.clone());
         }
 

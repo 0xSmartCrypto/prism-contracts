@@ -9,6 +9,7 @@ use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
 use crate::testing::mock_querier::mock_dependencies;
+use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::{
     Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
@@ -766,5 +767,109 @@ fn test_claim_rewards() {
             .unwrap(),
             funds: vec![],
         }))]
+    )
+}
+
+#[test]
+fn test_claim_rewards_xprism_mode() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "alice0000".to_string(),
+        amount: Uint128::from(1000000u128),
+        msg: to_binary(&Cw20HookMsg::Bond {
+            mode: Some(StakingMode::XPrism),
+        })
+        .unwrap(),
+    });
+    let yluna_info = mock_info("yluna0000", &[]);
+    execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
+
+    // deposit 100 reward
+    let msg = ExecuteMsg::DepositRewards {
+        assets: vec![Asset {
+            amount: Uint128::from(100u128),
+            info: AssetInfo::Token {
+                contract_addr: Addr::unchecked("yluna0000".to_string()),
+            },
+        }],
+    };
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let res: RewardInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::RewardInfo {
+                staker_addr: "alice0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: "alice0000".to_string(),
+            staked_amount: Uint128::from(1000000u128),
+            staking_mode: Some(StakingMode::XPrism),
+            rewards: vec![
+                Asset {
+                    info: AssetInfo::Token {
+                        contract_addr: Addr::unchecked("pluna0000".to_string())
+                    },
+                    amount: Uint128::from(0u128)
+                },
+                Asset {
+                    info: AssetInfo::Token {
+                        contract_addr: Addr::unchecked("yluna0000".to_string())
+                    },
+                    amount: Uint128::from(90u128)
+                }
+            ]
+        }
+    );
+
+    let msg = ExecuteMsg::ClaimRewards {};
+
+    let info = mock_info("alice0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "claim_rewards"),
+            attr("claimed_asset", "90yluna0000"),
+        ]
+    );
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "yluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: "collector0000".to_string(),
+                    amount: Uint128::from(90u128),
+                    expires: None,
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "collector0000".to_string(),
+                msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
+                    assets: vec![Asset {
+                        info: AssetInfo::Token {
+                            contract_addr: Addr::unchecked("yluna0000")
+                        },
+                        amount: Uint128::from(90u128),
+                    }],
+                    receiver: Some("alice0000".to_string()),
+                })
+                .unwrap(),
+                funds: vec![],
+            }))
+        ]
     )
 }
