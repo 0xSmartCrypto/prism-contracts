@@ -4,7 +4,7 @@ use cosmwasm_std::{DepsMut, Env, MessageInfo, Response, StdResult, Storage, Uint
 use cw_storage_plus::Bound;
 use prism_protocol::common::OrderBy;
 use std::convert::TryInto;
-use terraswap::asset::{Asset, AssetInfo};
+use astroport::asset::{Asset, AssetInfo};
 
 // seconds in a day, make time discrete per day
 pub const TIME_UNIT: u64 = 60 * 60 * 24;

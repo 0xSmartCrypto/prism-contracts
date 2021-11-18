@@ -417,24 +417,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cw20-legacy"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d27b11827323369993519abb494f3ae9b6aac4d716d058bea5e181b9b0074b7"
-dependencies = [
- "cosmwasm-std",
- "cosmwasm-storage",
- "cw-storage-plus",
- "cw0",
- "cw2",
- "cw20",
- "cw20-base",
- "schemars",
- "serde",
- "thiserror",
-]
-
-[[package]]
 name = "darling"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -953,6 +935,7 @@ dependencies = [
 name = "prism-collector"
 version = "2.0.0"
 dependencies = [
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
@@ -961,7 +944,6 @@ dependencies = [
  "schemars",
  "serde",
  "terra-cosmwasm",
- "terraswap",
 ]
 
 [[package]]
@@ -1004,6 +986,7 @@ dependencies = [
 name = "prism-launch-pool"
 version = "1.0.0"
 dependencies = [
+ "astroport",
  "cosmwasm-std",
  "cosmwasm-storage",
  "cw-storage-plus",
@@ -1015,7 +998,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "terraswap",
 ]
 
 [[package]]
@@ -1036,6 +1018,7 @@ dependencies = [
 name = "prism-protocol"
 version = "1.0.0"
 dependencies = [
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
@@ -1043,21 +1026,19 @@ dependencies = [
  "schemars",
  "serde",
  "terra-cosmwasm",
- "terraswap",
 ]
 
 [[package]]
 name = "prism-vault"
 version = "1.0.0"
 dependencies = [
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
  "cosmwasm-vm",
  "cw-storage-plus",
  "cw20",
- "cw20-base",
- "cw20-legacy",
  "prism-protocol",
  "rand 0.5.6",
  "schemars",
@@ -1065,13 +1046,13 @@ dependencies = [
  "signed_integer",
  "snafu",
  "terra-cosmwasm",
- "terraswap",
 ]
 
 [[package]]
 name = "prism-yasset-staking"
 version = "1.0.0"
 dependencies = [
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
@@ -1081,7 +1062,6 @@ dependencies = [
  "schemars",
  "serde",
  "terra-cosmwasm",
- "terraswap",
 ]
 
 [[package]]

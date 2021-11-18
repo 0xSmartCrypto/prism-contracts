@@ -7,7 +7,7 @@ use crate::state::{
     read_tmp_poll_id, store_last_poll_id, Config,
 };
 use crate::voting::{
-    deposit_reward, query_voting_tokens, stake_voting_tokens, withdraw_voting_tokens,
+    query_voting_tokens, stake_voting_tokens, withdraw_voting_tokens,
 };
 
 use cosmwasm_std::{
@@ -131,7 +131,6 @@ pub fn receive_cw20(
         }
     } else if config.prism_token == sender_raw {
         match from_binary(&cw20_msg.msg) {
-            Ok(Cw20HookMsg::DepositReward {}) => deposit_reward(deps, cw20_msg.amount),
             Ok(Cw20HookMsg::MintXprism {}) => {
                 mint_xprism(deps, env, cw20_msg.sender, cw20_msg.amount)
             }

@@ -104,13 +104,6 @@ fn compute_locked_balance(
     Ok(Uint128::from(max_locked))
 }
 
-pub fn deposit_reward(_deps: DepsMut, amount: Uint128) -> StdResult<Response> {
-    return Ok(Response::new().add_attributes(vec![
-        attr("action", "deposit_reward"),
-        attr("amount", amount.to_string()),
-    ]));
-}
-
 fn send_tokens(
     deps: DepsMut,
     asset_token: &CanonicalAddr,

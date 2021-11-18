@@ -26,8 +26,8 @@ use prism_protocol::vault::{
     WhitelistedValidatorsResponse, WithdrawableUnbondedResponse,
 };
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
-use terraswap::asset::{Asset, AssetInfo};
-use terraswap::querier::query_token_balance;
+use astroport::asset::{Asset, AssetInfo};
+use astroport::querier::query_token_balance;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -358,23 +358,24 @@ pub fn deposit_airdrop_rewards(
     let yluna_staking_addr = conf
         .yluna_staking
         .expect("the reward contract must have been registered");
+    let astrport_token_addr = deps.api.addr_validate(&airdrop_token_contract)?;
 
     let amount = query_token_balance(
         &deps.querier,
-        Addr::unchecked(airdrop_token_contract.clone()),
+        astrport_token_addr.clone(),
         env.contract.address,
     )?;
 
     let airdrop_reward = Asset {
         info: AssetInfo::Token {
-            contract_addr: airdrop_token_contract.clone(),
+            contract_addr: astrport_token_addr.clone(),
         },
         amount,
     };
 
     Ok(Response::new().add_messages(vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: airdrop_token_contract.clone(),
+            contract_addr: astrport_token_addr.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
                 spender: yluna_staking_addr.clone(),
                 amount,

@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::testing::{mock_env, mock_info};
-use terraswap::asset::{Asset, AssetInfo};
+use astroport::asset::{Asset, AssetInfo};
 
 use crate::contract::{execute, instantiate, query};
 use crate::unbond::execute_unbond;
@@ -18,7 +18,6 @@ use prism_protocol::vault::{
 };
 
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
-use cw20_legacy::msg::ExecuteMsg::{Burn, Mint};
 use prism_protocol::vault::Cw20HookMsg::Unbond;
 use prism_protocol::vault::ExecuteMsg::{CheckSlashing, Receive, UpdateConfig, UpdateParams};
 
@@ -946,7 +945,7 @@ pub fn proper_receive() {
             assert_eq!(contract_addr, &cluna_contract);
             assert_eq!(
                 msg,
-                &to_binary(&Burn {
+                &to_binary(&Cw20ExecuteMsg::Burn {
                     amount: Uint128::new(10)
                 })
                 .unwrap()
@@ -1077,7 +1076,7 @@ pub fn proper_unbond() {
             assert_eq!(contract_addr, &cluna_contract);
             assert_eq!(
                 msg,
-                &to_binary(&Burn {
+                &to_binary(&Cw20ExecuteMsg::Burn {
                     amount: Uint128::new(5)
                 })
                 .unwrap()
@@ -1117,7 +1116,7 @@ pub fn proper_unbond() {
             assert_eq!(contract_addr, &cluna_contract);
             assert_eq!(
                 msg,
-                &to_binary(&Burn {
+                &to_binary(&Cw20ExecuteMsg::Burn {
                     amount: Uint128::new(2)
                 })
                 .unwrap()
@@ -1548,7 +1547,7 @@ pub fn proper_slashing() {
             assert_eq!(contract_addr, &cluna_contract);
             assert_eq!(
                 msg,
-                &to_binary(&Mint {
+                &to_binary(&Cw20ExecuteMsg::Mint {
                     recipient: info.sender.to_string(),
                     amount: Uint128::new(1111)
                 })
@@ -2534,7 +2533,7 @@ pub fn proper_recovery_fee() {
             funds: _,
         }) => assert_eq!(
             msg,
-            &to_binary(&Mint {
+            &to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: bob.clone(),
                 amount: mint_amount_with_fee
             })
@@ -2926,7 +2925,7 @@ fn proper_deposit_airdrop_reward() {
                 msg: to_binary(&StakingExecuteMsg::DepositRewards {
                     assets: vec![Asset {
                         info: AssetInfo::Token {
-                            contract_addr: "airdrop_token".to_string(),
+                            contract_addr: Addr::unchecked("airdrop_token"),
                         },
                         amount: Uint128::from(1000u128)
                     }],

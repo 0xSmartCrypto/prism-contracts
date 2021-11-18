@@ -1,9 +1,10 @@
+use std::fmt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
-use terraswap::asset::{Asset, AssetInfo};
+use astroport::asset::{Asset, AssetInfo};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -15,6 +16,8 @@ pub struct InstantiateMsg {
     pub cluna_token: String,
     pub yluna_token: String,
     pub pluna_token: String,
+    pub prism_token: String,
+    pub withdraw_fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -60,7 +63,7 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
     /// Bond yLuna to start receiving luna staking rewards
-    Bond { mode: Option<String> },
+    Bond { mode: Option<StakingMode> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -82,6 +85,8 @@ pub struct ConfigResponse {
     pub cluna_token: String,
     pub yluna_token: String,
     pub pluna_token: String,
+    pub prism_token: String,
+    pub withdraw_fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -95,11 +100,24 @@ pub struct PoolInfoResponse {
 pub struct RewardInfoResponse {
     pub staker_addr: String,
     pub staked_amount: Uint128,
-    pub staker_mode: Option<String>,
+    pub staking_mode: Option<StakingMode>,
     pub rewards: Vec<Asset>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardAssetWhitelistResponse {
     pub assets: Vec<AssetInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StakingMode {
+    XPrism,
+    Default,
+}
+
+impl fmt::Display for StakingMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }

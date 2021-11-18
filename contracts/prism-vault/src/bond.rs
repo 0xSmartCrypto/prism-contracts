@@ -7,8 +7,7 @@ use cosmwasm_std::{
     attr, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Response, StakingMsg, StdError,
     StdResult, SubMsg, Uint128, WasmMsg,
 };
-use cw20::Cw20ExecuteMsg;
-use cw20_base::msg::ExecuteMsg as TokenMsg;
+use cw20::Cw20ExecuteMsg as TokenMsg;
 use prism_protocol::vault::State;
 
 pub fn execute_bond_split(
@@ -151,7 +150,7 @@ pub fn _execute_bond(
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: token_address,
-                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                msg: to_binary(&TokenMsg::Mint {
                     recipient: sender.to_string(),
                     amount: mint_amount_with_fee,
                 })?,

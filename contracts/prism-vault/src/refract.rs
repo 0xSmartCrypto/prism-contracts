@@ -2,7 +2,7 @@ use crate::state::CONFIG;
 use cosmwasm_std::{
     to_binary, CosmosMsg, DepsMut, MessageInfo, Response, StdResult, Uint128, WasmMsg,
 };
-use cw20_base::msg::ExecuteMsg as TokenMsg;
+use cw20::Cw20ExecuteMsg as TokenMsg;
 
 pub fn split(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Response> {
     let config = CONFIG.load(deps.storage)?;
