@@ -2,6 +2,7 @@ use cosmwasm_std::{
     attr, to_binary, CosmosMsg, DepsMut, MessageInfo, Response, StdError, StdResult, Uint128,
     WasmMsg,
 };
+use prism_protocol::yasset_staking::StakingMode;
 
 use crate::rewards::compute_all_rewards;
 use crate::state::{BOND_AMOUNTS, CONFIG, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
@@ -12,7 +13,7 @@ pub fn bond(
     deps: DepsMut,
     staker_addr: String,
     amount: Uint128,
-    mode: Option<String>,
+    mode: Option<StakingMode>,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
     let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
@@ -46,7 +47,7 @@ pub fn bond(
         attr("action", "bond"),
         attr("staker_addr", staker_addr.as_str()),
         attr("amount", amount.to_string()),
-        attr("mode", mode.unwrap_or("default".to_string())),
+        attr("mode", mode.unwrap_or(StakingMode::Default).to_string()),
     ]))
 }
 
@@ -89,20 +90,38 @@ pub fn unbond(
     TOTAL_BOND_AMOUNT.save(deps.storage, &(bond_total - unbonded_amt))?;
     BOND_AMOUNTS.save(deps.storage, staker_addr.as_bytes(), &bond_info)?;
 
-    // TODO: charge fee if xprism mode
+    let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = vec![];
 
-    Ok(Response::new()
-        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_token,
+    let staking_mode = bond_info.mode.unwrap_or(StakingMode::Default);
+    let withdraw_fee: Uint128 = if staking_mode == StakingMode::XPrism {
+        let fee: Uint128 = unbonded_amt * cfg.withdraw_fee;
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: cfg.yluna_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: staker_addr.to_string(),
                 amount: unbonded_amt,
             })?,
             funds: vec![],
-        })])
-        .add_attributes(vec![
-            attr("action", "unbond"),
-            attr("staker_addr", staker_addr.as_str()),
-            attr("amount", unbonded_amt.to_string()),
-        ]))
+        }));
+
+        fee
+    } else {
+        Uint128::zero()
+    };
+
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: cfg.yluna_token.to_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Transfer {
+            recipient: staker_addr.to_string(),
+            amount: unbonded_amt - withdraw_fee,
+        })?,
+        funds: vec![],
+    }));
+
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "unbond"),
+        attr("staker_addr", staker_addr.as_str()),
+        attr("amount", unbonded_amt.to_string()),
+        attr("withdraw_fee", withdraw_fee.to_string()),
+    ]))
 }
