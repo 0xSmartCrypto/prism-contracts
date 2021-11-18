@@ -1027,6 +1027,7 @@ dependencies = [
  "prism-protocol",
  "schemars",
  "serde",
+ "terra-cosmwasm",
  "thiserror",
 ]
 

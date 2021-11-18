@@ -172,3 +172,8 @@ pub fn pair_key(asset_infos: &[AssetInfo; 2]) -> Vec<u8> {
 
     [asset_infos[0].as_bytes(), asset_infos[1].as_bytes()].concat()
 }
+
+pub fn is_existing_pair(storage: &dyn Storage, asset_infos: &[AssetInfo; 2]) -> bool {
+    let key = pair_key(asset_infos);
+    PAIRS.may_load(storage, &key).unwrap().is_some()
+}
