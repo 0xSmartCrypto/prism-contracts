@@ -56,9 +56,7 @@ impl WasmMockQuerier {
                         let res = self
                             .astroport_sim_querier
                             .sim_responses
-                            .get(contract_addr)
-                            .unwrap()
-                            .get(&offer_asset.info.to_string())
+                            .get(&(contract_addr.to_string(), offer_asset.info.to_string()))
                             .unwrap();
                         SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
                     }
@@ -66,9 +64,7 @@ impl WasmMockQuerier {
                         let res = self
                             .astroport_sim_querier
                             .reverse_sim_responses
-                            .get(contract_addr)
-                            .unwrap()
-                            .get(&ask_asset.info.to_string())
+                            .get(&(contract_addr.to_string(), ask_asset.info.to_string()))
                             .unwrap();
                         SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
                     }
@@ -83,10 +79,10 @@ impl WasmMockQuerier {
 
 #[derive(Clone, Default)]
 pub struct AstroportSimQuerier {
-    // pair_addr -> AssetInfo (str) -> SimulationResponse
-    sim_responses: HashMap<String, HashMap<String, SimulationResponse>>,
-    // pair_addr -> AssetInfo (str) -> ReverseSimulationResponse
-    reverse_sim_responses: HashMap<String, HashMap<String, ReverseSimulationResponse>>,
+    // (pair_addr, asset) -> SimulationResponse
+    sim_responses: HashMap<(String, String), SimulationResponse>,
+    // (pair_addr, asset) -> ReverseSimulationResponse
+    reverse_sim_responses: HashMap<(String, String), ReverseSimulationResponse>,
 }
 
 impl AstroportSimQuerier {
@@ -94,24 +90,20 @@ impl AstroportSimQuerier {
         &mut self,
         pair_addr: &str,
         offer_asset: &AssetInfo,
-        sim_response: SimulationResponse,
+        response: SimulationResponse,
     ) {
         self.sim_responses
-            .entry(pair_addr.to_string())
-            .or_insert(HashMap::new())
-            .insert(offer_asset.to_string(), sim_response);
+            .insert((pair_addr.to_string(), offer_asset.to_string()), response);
     }
 
     fn update_reverse_sim_response(
         &mut self,
         pair_addr: &str,
-        offer_asset: &AssetInfo,
-        reverse_sim_response: ReverseSimulationResponse,
+        ask_asset: &AssetInfo,
+        response: ReverseSimulationResponse,
     ) {
         self.reverse_sim_responses
-            .entry(pair_addr.to_string())
-            .or_insert(HashMap::new())
-            .insert(offer_asset.to_string(), reverse_sim_response);
+            .insert((pair_addr.to_string(), ask_asset.to_string()), response);
     }
 }
 

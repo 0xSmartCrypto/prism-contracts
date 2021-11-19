@@ -89,9 +89,8 @@ pub fn verify_execute_response(
     protocol_fee_amount: &Uint128,
     order_id: u32,
 ) {
-
     let excess_amount = return_asset.amount.checked_sub(ask_asset.amount).unwrap();
-    let mut num_msgs = 3;    
+    let mut num_msgs = 3;
     if excess_amount > Uint128::zero() {
         num_msgs = num_msgs + 1;
     }
@@ -143,7 +142,7 @@ pub fn verify_execute_response(
         }
     }
     idx = idx + 1;
-    
+
     // send requested ask to bidder
     assert_eq!(
         res.messages[idx],
@@ -1486,8 +1485,7 @@ pub fn test_execute_order_not_found() {
     assert!(matches!(res, StdError::NotFound { .. }));
 }
 
-
-/* 
+/*
 test_execute_yluna_prism_no_excess:
     - no excess fee available to send to executer
 */
@@ -1573,7 +1571,7 @@ pub fn test_execute_yluna_prism_no_excess() {
     );
 }
 
-/* 
+/*
 test_execute_yluna_prism_no_protocol_fee:
     - no protocol fee available to send to fee collector
 */
