@@ -3,26 +3,26 @@
   "title": "ConfigResponse",
   "type": "object",
   "required": [
+    "astroport_factory",
     "base_denom",
     "distribution_contract",
-    "owner",
-    "prism_token",
-    "terraswap_factory"
+    "prism_base_pair",
+    "prism_token"
   ],
   "properties": {
+    "astroport_factory": {
+      "type": "string"
+    },
     "base_denom": {
       "type": "string"
     },
     "distribution_contract": {
       "type": "string"
     },
-    "owner": {
+    "prism_base_pair": {
       "type": "string"
     },
     "prism_token": {
-      "type": "string"
-    },
-    "terraswap_factory": {
       "type": "string"
     }
   }

@@ -1,18 +1,19 @@
+use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Coin, CosmosMsg, Decimal, MemoryStorage, OwnedDeps, StdError,
-    SubMsg, Uint128, WasmMsg,
+    attr, from_binary, to_binary, Addr, Coin, CosmosMsg, Decimal, MemoryStorage, OwnedDeps,
+    StdError, SubMsg, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use terra_cosmwasm::create_swap_msg;
-use terraswap::asset::{Asset, AssetInfo};
 
 use crate::contract::{execute, instantiate, query};
 use crate::testing::mock_querier::mock_dependencies;
+use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::{
     Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardAssetWhitelistResponse, RewardInfoResponse,
+    RewardAssetWhitelistResponse, RewardInfoResponse, StakingMode,
 };
 
 use super::mock_querier::WasmMockQuerier;
@@ -27,6 +28,8 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
         cluna_token: "cluna0000".to_string(),
         yluna_token: "yluna0000".to_string(),
         pluna_token: "pluna0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        withdraw_fee: Decimal::percent(1),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -49,20 +52,8 @@ fn test_bond() {
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(err, StdError::generic_err("unauthorized"));
 
-    // invalid mode
-    let inv_msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: "alice0000".to_string(),
-        amount: Uint128::from(1000000u128),
-        msg: to_binary(&Cw20HookMsg::Bond {
-            mode: Some("adsf".to_string()),
-        })
-        .unwrap(),
-    });
-    let info = mock_info("yluna0000", &[]);
-    let err = execute(deps.as_mut(), mock_env(), info.clone(), inv_msg).unwrap_err();
-    assert_eq!(err, StdError::generic_err("unregistered staking mode"));
-
     // valid token and mode
+    let info = mock_info("yluna0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.attributes,
@@ -70,7 +61,7 @@ fn test_bond() {
             attr("action", "bond"),
             attr("staker_addr", "alice0000"),
             attr("amount", "1000000"),
-            attr("mode", "default")
+            attr("mode", "Default")
         ]
     );
 
@@ -91,7 +82,7 @@ fn test_bond() {
         RewardInfoResponse {
             staker_addr: "alice0000".to_string(),
             staked_amount: Uint128::from(1000000u128),
-            staker_mode: None,
+            staking_mode: None,
             ..res
         }
     );
@@ -132,6 +123,7 @@ fn test_unbond() {
             attr("action", "unbond"),
             attr("staker_addr", "alice0000".to_string()),
             attr("amount", "500001"),
+            attr("withdraw_fee", "0"),
         ]
     );
     assert_eq!(
@@ -156,6 +148,7 @@ fn test_unbond() {
             attr("action", "unbond"),
             attr("staker_addr", "alice0000".to_string()),
             attr("amount", "499999"),
+            attr("withdraw_fee", "0"),
         ]
     );
     assert_eq!(
@@ -197,7 +190,7 @@ fn test_change_bond_mode() {
         sender: "alice0000".to_string(),
         amount: Uint128::from(2000000u128),
         msg: to_binary(&Cw20HookMsg::Bond {
-            mode: Some("xprism".to_string()),
+            mode: Some(StakingMode::XPrism),
         })
         .unwrap(),
     });
@@ -226,7 +219,7 @@ fn test_change_bond_mode() {
             attr("action", "bond"),
             attr("staker_addr", "alice0000"),
             attr("amount", "2000000"),
-            attr("mode", "xprism")
+            attr("mode", "XPrism")
         ]
     );
 
@@ -246,7 +239,7 @@ fn test_change_bond_mode() {
         RewardInfoResponse {
             staker_addr: "alice0000".to_string(),
             staked_amount: Uint128::from(2000000u128),
-            staker_mode: Some("xprism".to_string()),
+            staking_mode: Some(StakingMode::XPrism),
             ..res
         }
     );
@@ -381,13 +374,13 @@ fn test_deposit_minted_pyluna_hook() {
                 assets: vec![
                     Asset {
                         info: AssetInfo::Token {
-                            contract_addr: "yluna0000".to_string(),
+                            contract_addr: Addr::unchecked("yluna0000".to_string()),
                         },
                         amount: Uint128::from(1000000u128),
                     },
                     Asset {
                         info: AssetInfo::Token {
-                            contract_addr: "pluna0000".to_string(),
+                            contract_addr: Addr::unchecked("pluna0000".to_string()),
                         },
                         amount: Uint128::from(1000000u128),
                     },
@@ -413,10 +406,10 @@ fn test_whitelist() {
         RewardAssetWhitelistResponse {
             assets: vec![
                 AssetInfo::Token {
-                    contract_addr: "pluna0000".to_string()
+                    contract_addr: Addr::unchecked("pluna0000".to_string())
                 },
                 AssetInfo::Token {
-                    contract_addr: "yluna0000".to_string()
+                    contract_addr: Addr::unchecked("yluna0000".to_string())
                 }
             ]
         }
@@ -426,7 +419,7 @@ fn test_whitelist() {
 
     let msg = ExecuteMsg::WhitelistRewardAsset {
         asset: AssetInfo::Token {
-            contract_addr: "mir0000".to_string(),
+            contract_addr: Addr::unchecked("mir0000".to_string()),
         },
     };
 
@@ -454,13 +447,13 @@ fn test_whitelist() {
         RewardAssetWhitelistResponse {
             assets: vec![
                 AssetInfo::Token {
-                    contract_addr: "pluna0000".to_string()
+                    contract_addr: Addr::unchecked("pluna0000".to_string())
                 },
                 AssetInfo::Token {
-                    contract_addr: "yluna0000".to_string()
+                    contract_addr: Addr::unchecked("yluna0000".to_string())
                 },
                 AssetInfo::Token {
-                    contract_addr: "mir0000".to_string()
+                    contract_addr: Addr::unchecked("mir0000".to_string())
                 }
             ]
         }
@@ -489,7 +482,7 @@ fn test_internal_deposit_rewards() {
         assets: vec![Asset {
             amount: Uint128::from(100u128),
             info: AssetInfo::Token {
-                contract_addr: "mir0000".to_string(),
+                contract_addr: Addr::unchecked("mir0000".to_string()),
             },
         }],
     };
@@ -508,13 +501,13 @@ fn test_internal_deposit_rewards() {
             Asset {
                 amount: Uint128::from(1000u128),
                 info: AssetInfo::Token {
-                    contract_addr: "yluna0000".to_string(),
+                    contract_addr: Addr::unchecked("yluna0000".to_string()),
                 },
             },
             Asset {
                 amount: Uint128::from(1000u128),
                 info: AssetInfo::Token {
-                    contract_addr: "pluna0000".to_string(),
+                    contract_addr: Addr::unchecked("pluna0000".to_string()),
                 },
             },
         ],
@@ -598,7 +591,7 @@ fn test_internal_deposit_rewards() {
         assets: vec![Asset {
             amount: Uint128::from(5000u128),
             info: AssetInfo::Token {
-                contract_addr: "yluna0000".to_string(),
+                contract_addr: Addr::unchecked("yluna0000".to_string()),
             },
         }],
     };
@@ -644,7 +637,7 @@ fn test_external_deposit_rewards() {
 
     let msg = ExecuteMsg::WhitelistRewardAsset {
         asset: AssetInfo::Token {
-            contract_addr: "mir0000".to_string(),
+            contract_addr: Addr::unchecked("mir0000".to_string()),
         },
     };
     let info = mock_info("gov0000", &[]);
@@ -656,7 +649,7 @@ fn test_external_deposit_rewards() {
         assets: vec![Asset {
             amount: Uint128::from(1000u128),
             info: AssetInfo::Token {
-                contract_addr: "mir0000".to_string(),
+                contract_addr: Addr::unchecked("mir0000".to_string()),
             },
         }],
     };
@@ -706,7 +699,7 @@ fn test_claim_rewards() {
         assets: vec![Asset {
             amount: Uint128::from(100u128),
             info: AssetInfo::Token {
-                contract_addr: "yluna0000".to_string(),
+                contract_addr: Addr::unchecked("yluna0000".to_string()),
             },
         }],
     };
@@ -729,17 +722,17 @@ fn test_claim_rewards() {
         RewardInfoResponse {
             staker_addr: "alice0000".to_string(),
             staked_amount: Uint128::from(1000000u128),
-            staker_mode: None,
+            staking_mode: None,
             rewards: vec![
                 Asset {
                     info: AssetInfo::Token {
-                        contract_addr: "pluna0000".to_string()
+                        contract_addr: Addr::unchecked("pluna0000".to_string())
                     },
                     amount: Uint128::from(0u128)
                 },
                 Asset {
                     info: AssetInfo::Token {
-                        contract_addr: "yluna0000".to_string()
+                        contract_addr: Addr::unchecked("yluna0000".to_string())
                     },
                     amount: Uint128::from(90u128)
                 }
@@ -774,5 +767,109 @@ fn test_claim_rewards() {
             .unwrap(),
             funds: vec![],
         }))]
+    )
+}
+
+#[test]
+fn test_claim_rewards_xprism_mode() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "alice0000".to_string(),
+        amount: Uint128::from(1000000u128),
+        msg: to_binary(&Cw20HookMsg::Bond {
+            mode: Some(StakingMode::XPrism),
+        })
+        .unwrap(),
+    });
+    let yluna_info = mock_info("yluna0000", &[]);
+    execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
+
+    // deposit 100 reward
+    let msg = ExecuteMsg::DepositRewards {
+        assets: vec![Asset {
+            amount: Uint128::from(100u128),
+            info: AssetInfo::Token {
+                contract_addr: Addr::unchecked("yluna0000".to_string()),
+            },
+        }],
+    };
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let res: RewardInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::RewardInfo {
+                staker_addr: "alice0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: "alice0000".to_string(),
+            staked_amount: Uint128::from(1000000u128),
+            staking_mode: Some(StakingMode::XPrism),
+            rewards: vec![
+                Asset {
+                    info: AssetInfo::Token {
+                        contract_addr: Addr::unchecked("pluna0000".to_string())
+                    },
+                    amount: Uint128::from(0u128)
+                },
+                Asset {
+                    info: AssetInfo::Token {
+                        contract_addr: Addr::unchecked("yluna0000".to_string())
+                    },
+                    amount: Uint128::from(90u128)
+                }
+            ]
+        }
+    );
+
+    let msg = ExecuteMsg::ClaimRewards {};
+
+    let info = mock_info("alice0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "claim_rewards"),
+            attr("claimed_asset", "90yluna0000"),
+        ]
+    );
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "yluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: "collector0000".to_string(),
+                    amount: Uint128::from(90u128),
+                    expires: None,
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "collector0000".to_string(),
+                msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
+                    assets: vec![Asset {
+                        info: AssetInfo::Token {
+                            contract_addr: Addr::unchecked("yluna0000")
+                        },
+                        amount: Uint128::from(90u128),
+                    }],
+                    receiver: Some("alice0000".to_string()),
+                })
+                .unwrap(),
+                funds: vec![],
+            }))
+        ]
     )
 }

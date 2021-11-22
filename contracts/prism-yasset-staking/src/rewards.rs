@@ -7,10 +7,11 @@ use crate::state::{
     RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS,
 };
 
+use astroport::asset::{Asset, AssetInfo};
 use cw20::Cw20ExecuteMsg;
-use prism_protocol::yasset_staking::RewardInfoResponse;
+use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
+use prism_protocol::yasset_staking::{RewardInfoResponse, StakingMode};
 use terra_cosmwasm::TerraMsgWrapper;
-use terraswap::asset::{Asset, AssetInfo};
 
 // deposit whitelisted reward assets
 pub fn deposit_rewards(
@@ -40,7 +41,7 @@ pub fn deposit_rewards(
         {
             if env.contract.address != info.sender {
                 messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: token_addr.clone(),
+                    contract_addr: token_addr.to_string(),
                     msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
                         owner: info.sender.to_string(),
                         recipient: env.contract.address.to_string(),
@@ -87,13 +88,17 @@ pub fn deposit_rewards(
 
 // claim all available rewards
 pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<TerraMsgWrapper>> {
+    let cfg = CONFIG.load(deps.storage)?;
     let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
     let bond_info = BOND_AMOUNTS
         .load(deps.storage, info.sender.to_string().as_bytes())
         .map_err(|_| StdError::generic_err("no tokens bonded"))?;
 
+    let staking_mode = bond_info.mode.unwrap_or(StakingMode::Default);
+
     let mut messages = vec![];
     let mut attributes = vec![];
+    let mut assets_to_swap: Vec<Asset> = vec![];
     for asset_info in whitelisted_assets {
         let mut reward_info = compute_asset_rewards(
             deps.storage,
@@ -121,25 +126,53 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
             continue;
         }
 
-        // re-implement into_msg here because life is cruel
-        // TODO: cleanup we dont need native
-        let msg = match &asset_info {
-            AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: contract_addr.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: info.sender.to_string(),
+        if staking_mode == StakingMode::Default
+            || asset_info.to_string() == cfg.prism_token.to_string()
+        {
+            // re-implement into_msg here because life is cruel
+            // should never be native
+            let msg = match &asset_info {
+                AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: contract_addr.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                        recipient: info.sender.to_string(),
+                        amount: claim_asset.amount,
+                    })?,
+                    funds: vec![],
+                }),
+                AssetInfo::NativeToken { .. } => CosmosMsg::Bank(BankMsg::Send {
+                    to_address: info.sender.to_string(),
+                    amount: vec![claim_asset.deduct_tax(&deps.querier)?],
+                }),
+            };
+
+            messages.push(msg);
+        } else {
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: asset_info.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: cfg.collector.to_string(),
                     amount: claim_asset.amount,
+                    expires: None,
                 })?,
                 funds: vec![],
-            }),
-            AssetInfo::NativeToken { .. } => CosmosMsg::Bank(BankMsg::Send {
-                to_address: info.sender.to_string(),
-                amount: vec![claim_asset.deduct_tax(&deps.querier)?],
-            }),
-        };
+            }));
 
-        messages.push(msg);
+            assets_to_swap.push(claim_asset.clone());
+        }
+
         attributes.push(attr("claimed_asset", format!("{}", &claim_asset)));
+    }
+
+    if !assets_to_swap.is_empty() {
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: cfg.collector.to_string(),
+            msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
+                receiver: Some(info.sender.to_string()),
+                assets: assets_to_swap,
+            })?,
+            funds: vec![],
+        }))
     }
 
     Ok(Response::new()
@@ -247,7 +280,7 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInf
     Ok(RewardInfoResponse {
         staker_addr,
         staked_amount: bond_info.bond_amount,
-        staker_mode: bond_info.mode,
+        staking_mode: bond_info.mode,
         rewards,
     })
 }

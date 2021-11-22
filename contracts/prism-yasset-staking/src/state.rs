@@ -1,9 +1,10 @@
+use prism_protocol::yasset_staking::StakingMode;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Decimal, Uint128};
+use astroport::asset::AssetInfo;
+use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_storage_plus::{Item, Map};
-use terraswap::asset::AssetInfo;
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const WHITELISTED_ASSETS: Item<Vec<AssetInfo>> = Item::new("whitelisted_assets");
@@ -16,20 +17,22 @@ pub const BOND_AMOUNTS: Map<&[u8], BondInfo> = Map::new("bond_amounts");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub vault: String,
-    pub gov: String,
-    pub collector: String,
+    pub vault: Addr,
+    pub gov: Addr,
+    pub collector: Addr,
     pub reward_denom: String,
     pub protocol_fee: Decimal,
-    pub cluna_token: String,
-    pub yluna_token: String,
-    pub pluna_token: String,
+    pub cluna_token: Addr,
+    pub yluna_token: Addr,
+    pub pluna_token: Addr,
+    pub prism_token: Addr,
+    pub withdraw_fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct BondInfo {
     pub bond_amount: Uint128,
-    pub mode: Option<String>,
+    pub mode: Option<StakingMode>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]

@@ -16,11 +16,9 @@ use crate::staking::{bond, unbond};
 use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
 
 use crate::swaps::{deposit_minted_pyluna_hook, luna_to_pyluna_hook, process_delegator_rewards};
+use astroport::asset::AssetInfo;
 use cw20::Cw20ReceiveMsg;
 use terra_cosmwasm::TerraMsgWrapper;
-use terraswap::asset::AssetInfo;
-
-const ALLOWED_STAKING_MODES: &'static [&str] = &["xprism"];
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -32,14 +30,16 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
-            vault: msg.vault,
-            gov: msg.gov,
-            collector: msg.collector,
+            vault: deps.api.addr_validate(&msg.vault)?,
+            gov: deps.api.addr_validate(&msg.gov)?,
+            collector: deps.api.addr_validate(&msg.collector)?,
             reward_denom: msg.reward_denom,
             protocol_fee: msg.protocol_fee,
-            cluna_token: msg.cluna_token,
-            yluna_token: msg.yluna_token.clone(),
-            pluna_token: msg.pluna_token.clone(),
+            cluna_token: deps.api.addr_validate(&msg.cluna_token)?,
+            yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
+            pluna_token: deps.api.addr_validate(&msg.pluna_token)?,
+            prism_token: deps.api.addr_validate(&msg.prism_token)?,
+            withdraw_fee: msg.withdraw_fee,
         },
     )?;
 
@@ -48,10 +48,10 @@ pub fn instantiate(
         deps.storage,
         &vec![
             AssetInfo::Token {
-                contract_addr: msg.pluna_token.clone(),
+                contract_addr: deps.api.addr_validate(&msg.pluna_token)?,
             },
             AssetInfo::Token {
-                contract_addr: msg.yluna_token.clone(),
+                contract_addr: deps.api.addr_validate(&msg.yluna_token)?,
             },
         ],
     )?;
@@ -93,11 +93,6 @@ pub fn receive_cw20(
                 return Err(StdError::generic_err("unauthorized"));
             }
 
-            let m = mode.clone();
-            if m.is_some() && !ALLOWED_STAKING_MODES.contains(&m.unwrap().as_str()) {
-                return Err(StdError::generic_err("unregistered staking mode"));
-            }
-
             bond(deps, cw20_msg.sender, cw20_msg.amount, mode)
         }
     }
@@ -123,14 +118,16 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let cfg = CONFIG.load(deps.storage)?;
 
     Ok(ConfigResponse {
-        vault: cfg.vault,
-        gov: cfg.gov,
-        collector: cfg.collector,
+        vault: cfg.vault.to_string(),
+        gov: cfg.gov.to_string(),
+        collector: cfg.collector.to_string(),
         reward_denom: cfg.reward_denom,
         protocol_fee: cfg.protocol_fee,
-        cluna_token: cfg.cluna_token,
-        yluna_token: cfg.yluna_token,
-        pluna_token: cfg.pluna_token,
+        cluna_token: cfg.cluna_token.to_string(),
+        yluna_token: cfg.yluna_token.to_string(),
+        pluna_token: cfg.pluna_token.to_string(),
+        prism_token: cfg.prism_token.to_string(),
+        withdraw_fee: cfg.withdraw_fee,
     })
 }
 

@@ -13,9 +13,13 @@
           "type": "object",
           "properties": {
             "mode": {
-              "type": [
-                "string",
-                "null"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StakingMode"
+                },
+                {
+                  "type": "null"
+                }
               ]
             }
           }
@@ -23,5 +27,14 @@
       },
       "additionalProperties": false
     }
-  ]
+  ],
+  "definitions": {
+    "StakingMode": {
+      "type": "string",
+      "enum": [
+        "x_prism",
+        "default"
+      ]
+    }
+  }
 }

@@ -5,7 +5,7 @@ use cosmwasm_std::{
     QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, Validator, WasmQuery,
 };
 use cosmwasm_storage::to_length_prefixed;
-use cw20_legacy::state::{MinterData, TokenInfo};
+use cw20::{TokenInfoResponse};
 use std::collections::HashMap;
 
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg};
@@ -217,16 +217,11 @@ impl WasmMockQuerier {
                         for balance in balances {
                             total_supply += *balance.1;
                         }
-                        let api: MockApi = MockApi::default();
-                        let token_inf: TokenInfo = TokenInfo {
+                        let token_inf: TokenInfoResponse = TokenInfoResponse {
                             name: "bluna".to_string(),
                             symbol: "BLUNA".to_string(),
                             decimals: 6,
                             total_supply,
-                            mint: Some(MinterData {
-                                minter: api.addr_canonicalize("hub").unwrap(),
-                                cap: None,
-                            }),
                         };
                         SystemResult::Ok(ContractResult::Ok(to_binary(&token_inf).unwrap()))
                     }

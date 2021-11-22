@@ -1,15 +1,16 @@
+use astroport::factory::PairType;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use astroport::asset::{AssetInfo, PairInfo};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_binary, from_slice, to_binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
+    from_binary, from_slice, to_binary, Addr, Coin, ContractResult, Decimal, OwnedDeps, Querier,
     QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use cw20::BalanceResponse;
 use std::collections::HashMap;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
-use terraswap::asset::{AssetInfo, PairInfo};
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -30,7 +31,7 @@ pub struct WasmMockQuerier {
     base: MockQuerier<TerraQueryWrapper>,
     token_querier: TokenQuerier,
     tax_querier: TaxQuerier,
-    terraswap_factory_querier: TerraswapFactoryQuerier,
+    factory_querier: FactoryQuerier,
 }
 
 #[derive(Clone, Default)]
@@ -87,13 +88,13 @@ pub(crate) fn caps_to_map(caps: &[(&String, &Uint128)]) -> HashMap<String, Uint1
 }
 
 #[derive(Clone, Default)]
-pub struct TerraswapFactoryQuerier {
+pub struct FactoryQuerier {
     pairs: HashMap<String, String>,
 }
 
-impl TerraswapFactoryQuerier {
+impl FactoryQuerier {
     pub fn new(pairs: &[(&String, &String)]) -> Self {
-        TerraswapFactoryQuerier {
+        FactoryQuerier {
             pairs: pairs_to_map(pairs),
         }
     }
@@ -163,10 +164,11 @@ impl WasmMockQuerier {
             {
                 QueryMsg::Pair { asset_infos } => {
                     let key = asset_infos[0].to_string() + asset_infos[1].to_string().as_str();
-                    match self.terraswap_factory_querier.pairs.get(&key) {
+                    match self.factory_querier.pairs.get(&key) {
                         Some(v) => SystemResult::Ok(ContractResult::from(to_binary(&PairInfo {
-                            contract_addr: v.to_string(),
-                            liquidity_token: "liquidity".to_string(),
+                            pair_type: PairType::Xyk {},
+                            contract_addr: Addr::unchecked(v),
+                            liquidity_token: Addr::unchecked("liquidity".to_string()),
                             asset_infos: [
                                 AssetInfo::NativeToken {
                                     denom: "uusd".to_string(),
@@ -225,7 +227,7 @@ impl WasmMockQuerier {
             base,
             token_querier: TokenQuerier::default(),
             tax_querier: TaxQuerier::default(),
-            terraswap_factory_querier: TerraswapFactoryQuerier::default(),
+            factory_querier: FactoryQuerier::default(),
         }
     }
 
@@ -240,7 +242,7 @@ impl WasmMockQuerier {
     }
 
     // configure the terraswap pair
-    pub fn with_terraswap_pairs(&mut self, pairs: &[(&String, &String)]) {
-        self.terraswap_factory_querier = TerraswapFactoryQuerier::new(pairs);
+    pub fn with_pairs(&mut self, pairs: &[(&String, &String)]) {
+        self.factory_querier = FactoryQuerier::new(pairs);
     }
 }

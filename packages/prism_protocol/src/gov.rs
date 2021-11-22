@@ -67,8 +67,6 @@ pub enum Cw20HookMsg {
         link: Option<String>,
         execute_msg: Option<PollExecuteMsg>,
     },
-    /// Deposit PRISM rewards, increasing PRISM/xPRISM ratio
-    DepositReward {},
 
     MintXprism {},
     RedeemXprism {},

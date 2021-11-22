@@ -1,12 +1,12 @@
 use crate::state::CONFIG;
+use astroport::asset::{Asset, AssetInfo};
+use astroport::querier::{query_balance, query_token_balance};
 use cosmwasm_std::{
     attr, to_binary, Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
 };
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::ExecuteMsg;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
-use terraswap::asset::{Asset, AssetInfo};
-use terraswap::querier::{query_balance, query_token_balance};
 
 /// 1. Swap all native tokens to uluna
 /// 2. Use the uluna to mint pluna and yluna
@@ -64,7 +64,7 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
     Ok(Response::new()
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: cfg.vault,
+                contract_addr: cfg.vault.to_string(),
                 msg: to_binary(&VaultExecuteMsg::BondSplit { validator: None })?,
                 funds: vec![Coin {
                     denom: cfg.reward_denom,

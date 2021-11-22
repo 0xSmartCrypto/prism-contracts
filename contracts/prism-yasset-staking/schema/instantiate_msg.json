@@ -7,9 +7,11 @@
     "collector",
     "gov",
     "pluna_token",
+    "prism_token",
     "protocol_fee",
     "reward_denom",
     "vault",
+    "withdraw_fee",
     "yluna_token"
   ],
   "properties": {
@@ -25,6 +27,9 @@
     "pluna_token": {
       "type": "string"
     },
+    "prism_token": {
+      "type": "string"
+    },
     "protocol_fee": {
       "$ref": "#/definitions/Decimal"
     },
@@ -33,6 +38,9 @@
     },
     "vault": {
       "type": "string"
+    },
+    "withdraw_fee": {
+      "$ref": "#/definitions/Decimal"
     },
     "yluna_token": {
       "type": "string"

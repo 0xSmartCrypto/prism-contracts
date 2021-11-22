@@ -13,8 +13,8 @@ use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
 };
 use std::cmp::min;
-use terraswap::asset::{Asset, AssetInfo};
-use terraswap::querier::{query_balance, query_token_balance};
+use astroport::asset::{Asset, AssetInfo};
+use astroport::querier::{query_balance, query_token_balance};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
