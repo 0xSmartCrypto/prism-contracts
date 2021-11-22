@@ -30,3 +30,4 @@ thiserror = { version = "1.0.20" }
 cosmwasm-schema = "0.16.0"
 serde_json = "1.0"
 terra-cosmwasm = "2.0.0"
+prism-common = { path = "../../packages/prism_common", default-features = false, version = "1.0.0"}

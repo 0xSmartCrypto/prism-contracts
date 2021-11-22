@@ -1,6 +1,6 @@
-use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockQuerier};
+use cosmwasm_std::testing::{mock_env, mock_info, MockApi};
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, MemoryStorage, OwnedDeps, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, MemoryStorage, OwnedDeps, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 
@@ -8,11 +8,10 @@ use crate::contract::{
     deposit, instantiate, post_initialize, query_deposit_info, withdraw, withdraw_tokens,
 };
 use crate::error::ContractError;
-use crate::testing::mock_querier::mock_dependencies;
+use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::fair_launch::{DepositResponse, InstantiateMsg, LaunchConfig};
-use terra_cosmwasm::TerraQueryWrapper;
 
-pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, MockQuerier<TerraQueryWrapper>>) {
+pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let msg = InstantiateMsg {
         owner: "owner0001".to_string(),
         token: "prism0001".to_string(),
@@ -24,7 +23,7 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, MockQuerier<TerraQueryW
     instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 }
 
-pub fn post_init(deps: &mut OwnedDeps<MemoryStorage, MockApi, MockQuerier<TerraQueryWrapper>>) {
+pub fn post_init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let info = mock_info("owner0001", &[]);
     let env = mock_env();
     let launch_config = LaunchConfig {
@@ -188,6 +187,9 @@ fn proper_withdraw() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
     post_init(&mut deps);
+
+    let caps = [(&"uusd".to_string(), &Uint128::from(10u128))];
+    deps.querier.with_tax(Decimal::percent(5u64), &caps);
 
     let mut info = mock_info("addr0001", &[]);
     let mut env = mock_env();

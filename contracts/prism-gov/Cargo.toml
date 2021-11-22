@@ -46,3 +46,4 @@ hex = "0.4"
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
+prism-common = { path = "../../packages/prism_common", default-features = false, version = "1.0.0"}

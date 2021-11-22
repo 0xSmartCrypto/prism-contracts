@@ -6,8 +6,8 @@ use cosmwasm_std::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::testing::{mock_env, mock_info};
 use astroport::asset::{Asset, AssetInfo};
+use cosmwasm_std::testing::{mock_env, mock_info};
 
 use crate::contract::{execute, instantiate, query};
 use crate::unbond::execute_unbond;
@@ -21,7 +21,6 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use prism_protocol::vault::Cw20HookMsg::Unbond;
 use prism_protocol::vault::ExecuteMsg::{CheckSlashing, Receive, UpdateConfig, UpdateParams};
 
-use super::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use crate::math::decimal_division;
 use crate::state::{
     all_unbond_history, get_finished_amount, get_unbond_batches, get_unbond_requests,
@@ -29,6 +28,7 @@ use crate::state::{
     read_validators, remove_unbond_wait_list, remove_white_validators, store_unbond_history,
     store_unbond_wait_list, store_white_validators, Parameters, CONFIG,
 };
+use prism_common::testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use prism_protocol::airdrop::ExecuteMsg::FabricateClaim;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
@@ -3214,11 +3214,7 @@ fn proper_unbond_storage() -> StdResult<()> {
     assert_eq!(unbond_batches[0], 1);
 
     // remove block1 from addr1 and verify that it's gone via unbond_requests
-    remove_unbond_wait_list(
-        deps.as_mut().storage,
-        unbond_batches,
-        &addr1,
-    )?;
+    remove_unbond_wait_list(deps.as_mut().storage, unbond_batches, &addr1)?;
     let unbond_requests = get_unbond_requests(deps.as_ref().storage, &addr1)?;
     assert_eq!(unbond_requests.len(), 1);
     assert_eq!(unbond_requests[0], (2u64, amount1 + amount2));

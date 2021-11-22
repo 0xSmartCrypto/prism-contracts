@@ -8,15 +8,13 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
-use crate::testing::mock_querier::mock_dependencies;
+use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::{
     Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
     RewardAssetWhitelistResponse, RewardInfoResponse, StakingMode,
 };
-
-use super::mock_querier::WasmMockQuerier;
 
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let msg = InstantiateMsg {
@@ -347,7 +345,7 @@ fn test_deposit_minted_pyluna_hook() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
 
-    deps.querier.with_balances(&[
+    deps.querier.with_token_balances(&[
         (
             &"yluna0000".to_string(),
             &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000000u128))],

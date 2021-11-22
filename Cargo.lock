@@ -940,7 +940,22 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
  "cw20",
+ "prism-common",
  "prism-protocol",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+]
+
+[[package]]
+name = "prism-common"
+version = "1.0.0"
+dependencies = [
+ "astroport",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw20",
  "schemars",
  "serde",
  "terra-cosmwasm",
@@ -957,6 +972,7 @@ dependencies = [
  "cw20",
  "hex",
  "lazy_static",
+ "prism-common",
  "prism-protocol",
  "schemars",
  "serde",
@@ -977,6 +993,7 @@ dependencies = [
  "cw-storage-plus",
  "cw20",
  "hex",
+ "prism-common",
  "prism-protocol",
  "schemars",
  "serde",
@@ -1039,6 +1056,7 @@ dependencies = [
  "cosmwasm-vm",
  "cw-storage-plus",
  "cw20",
+ "prism-common",
  "prism-protocol",
  "rand 0.5.6",
  "schemars",
@@ -1058,6 +1076,7 @@ dependencies = [
  "cosmwasm-storage",
  "cw-storage-plus",
  "cw20",
+ "prism-common",
  "prism-protocol",
  "schemars",
  "serde",
