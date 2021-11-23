@@ -43,3 +43,4 @@ astroport = { path = "../../packages/astroport", default-features = false, versi
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
 terra-cosmwasm = "2.0.0"
+prism-common = { path = "../../packages/prism_common", default-features = false, version = "1.0.0"}

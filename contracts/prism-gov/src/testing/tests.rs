@@ -3,14 +3,13 @@ use crate::state::{
     bank_read, bank_store, config_read, poll_store, poll_voter_read, poll_voter_store, Config,
     Poll, VotingTokenManager,
 };
-use crate::testing::mock_querier::mock_dependencies;
-
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     attr, coins, from_binary, to_binary, Addr, Api, CanonicalAddr, ContractResult, CosmosMsg,
     Decimal, DepsMut, Env, Reply, ReplyOn, Response, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use prism_common::testing::mock_querier::mock_dependencies;
 use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PollExecuteMsg, PollResponse,

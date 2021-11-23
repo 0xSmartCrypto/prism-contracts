@@ -1,4 +1,3 @@
-use super::mock_querier::mock_dependencies;
 use crate::contract::{execute, instantiate, query_config};
 use astroport::asset::{Asset, AssetInfo};
 use astroport::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
@@ -7,6 +6,7 @@ use cosmwasm_std::{
     attr, to_binary, Addr, Coin, CosmosMsg, Decimal, StdError, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
+use prism_common::testing::mock_querier::mock_dependencies;
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg};
 
 #[test]
