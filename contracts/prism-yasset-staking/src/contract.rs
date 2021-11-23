@@ -137,6 +137,5 @@ pub fn query_pool_info(deps: Deps, asset_token: String) -> StdResult<PoolInfoRes
     Ok(PoolInfoResponse {
         asset_token,
         reward_index: pool_info.reward_index,
-        pending_reward: pool_info.pending_reward,
     })
 }

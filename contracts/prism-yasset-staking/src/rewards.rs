@@ -3,6 +3,7 @@ use cosmwasm_std::{
     StdError, StdResult, Storage, Uint128, WasmMsg,
 };
 
+use crate::querier::query_vault_bond_amount;
 use crate::state::{
     RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS,
 };
@@ -23,6 +24,15 @@ pub fn deposit_rewards(
     let cfg = CONFIG.load(deps.storage)?;
     let total_bond_amount = TOTAL_BOND_AMOUNT.load(deps.storage)?;
     let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+
+    let vault_bond_amount = query_vault_bond_amount(&deps.querier, cfg.vault)?;
+    // if total_bond_amount is zero it means that all yLuna is circulating and not staked
+    // vault_bond amount can only be zero if total_bond_amount is also zero (no yLuna can exist with not luna on vault)
+    let stakers_portion = if total_bond_amount.is_zero() {
+        Decimal::zero()
+    } else {
+        Decimal::from_ratio(total_bond_amount, vault_bond_amount)
+    };
 
     let mut messages = vec![];
     for asset in assets {
@@ -55,29 +65,26 @@ pub fn deposit_rewards(
                 .load(deps.storage, &asset.info.to_string().as_bytes())
                 .unwrap_or_default();
 
-            let protocol_fee_amount = asset.amount * cfg.protocol_fee;
-            let mut reward_amount = asset.amount - protocol_fee_amount;
+            let stakers_portion_amount = asset.amount * stakers_portion;
+            let protocol_fee_amount = stakers_portion_amount * cfg.protocol_fee;
+            let reward_amount = stakers_portion_amount.checked_sub(protocol_fee_amount)?;
 
+            // send the difference to collector
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: token_addr.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: cfg.collector.to_string(),
-                    amount: protocol_fee_amount,
+                    amount: asset.amount.checked_sub(reward_amount)?,
                 })?,
                 funds: vec![],
             }));
 
-            if total_bond_amount.is_zero() {
-                pool_info.pending_reward += reward_amount;
-            } else {
-                reward_amount += pool_info.pending_reward;
+            if !total_bond_amount.is_zero() {
                 let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond_amount);
-
                 pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
-                pool_info.pending_reward = Uint128::zero();
-            }
 
-            POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
+                POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
+            }
         }
     }
 

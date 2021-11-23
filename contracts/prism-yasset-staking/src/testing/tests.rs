@@ -475,6 +475,8 @@ fn test_internal_deposit_rewards() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
 
+    deps.querier.with_vault_state(&Uint128::from(2000000u128));
+
     // try non whitelisted asset
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![Asset {
@@ -519,7 +521,7 @@ fn test_internal_deposit_rewards() {
                 contract_addr: "yluna0000".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: "collector0000".to_string(),
-                    amount: Uint128::from(100u128), // 10% of 1k
+                    amount: Uint128::from(1000u128), // everything sent to collector
                 })
                 .unwrap(),
                 funds: vec![],
@@ -528,7 +530,7 @@ fn test_internal_deposit_rewards() {
                 contract_addr: "pluna0000".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: "collector0000".to_string(),
-                    amount: Uint128::from(100u128), // 10% of 1k
+                    amount: Uint128::from(1000u128), // everything sent to collector
                 })
                 .unwrap(),
                 funds: vec![],
@@ -536,49 +538,10 @@ fn test_internal_deposit_rewards() {
         ]
     );
 
-    let res: PoolInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            mock_env(),
-            QueryMsg::PoolInfo {
-                asset_token: "yluna0000".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        res,
-        PoolInfoResponse {
-            asset_token: "yluna0000".to_string(),
-            reward_index: Decimal::zero(),
-            pending_reward: Uint128::from(900u128), // 90% of 1k
-        }
-    );
-    let res: PoolInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            mock_env(),
-            QueryMsg::PoolInfo {
-                asset_token: "pluna0000".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        res,
-        PoolInfoResponse {
-            asset_token: "pluna0000".to_string(),
-            reward_index: Decimal::zero(),
-            pending_reward: Uint128::from(900u128), // 90% of 1k
-        }
-    );
-
     // bond yluna
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "alice0000".to_string(),
-        amount: Uint128::from(1000000u128),
+        amount: Uint128::from(1000000u128), // now 50% of the total yLuna is staked
         msg: to_binary(&Cw20HookMsg::Bond { mode: None }).unwrap(),
     });
     let yluna_info = mock_info("yluna0000", &[]);
@@ -600,7 +563,7 @@ fn test_internal_deposit_rewards() {
             contract_addr: "yluna0000".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "collector0000".to_string(),
-                amount: Uint128::from(500u128), // 10% of 5k
+                amount: Uint128::from(2750u128), // 10% of 50% of 5k + 50% of 2500
             })
             .unwrap(),
             funds: vec![],
@@ -622,8 +585,7 @@ fn test_internal_deposit_rewards() {
         res,
         PoolInfoResponse {
             asset_token: "yluna0000".to_string(),
-            reward_index: Decimal::from_ratio(5400u128, 1000000u128), // (0.9k + 4.5k) / 1000000
-            pending_reward: Uint128::zero(), // pending reward consumed and added to the index
+            reward_index: Decimal::from_ratio(2250u128, 1000000u128), // ((50% of 5k) - 250) / 1000000
         }
     );
 }
@@ -670,7 +632,7 @@ fn test_external_deposit_rewards() {
                 contract_addr: "mir0000".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: "collector0000".to_string(),
-                    amount: Uint128::from(100u128), // 10% of 1k
+                    amount: Uint128::from(1000u128), // everything, because no bonded yLuna
                 })
                 .unwrap(),
                 funds: vec![],
@@ -683,6 +645,8 @@ fn test_external_deposit_rewards() {
 fn test_claim_rewards() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
+
+    deps.querier.with_vault_state(&Uint128::from(1000000u128));
 
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "alice0000".to_string(),
@@ -772,6 +736,8 @@ fn test_claim_rewards() {
 fn test_claim_rewards_xprism_mode() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
+
+    deps.querier.with_vault_state(&Uint128::from(1000000u128));
 
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "alice0000".to_string(),

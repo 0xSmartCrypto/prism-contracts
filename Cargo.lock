@@ -956,6 +956,7 @@ dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",
  "cw20",
+ "prism-protocol",
  "schemars",
  "serde",
  "terra-cosmwasm",

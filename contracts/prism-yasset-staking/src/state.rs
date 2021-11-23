@@ -37,7 +37,6 @@ pub struct BondInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PoolInfo {
-    pub pending_reward: Uint128, // not distributed amount due to zero bonding
     pub reward_index: Decimal,
 }
 
