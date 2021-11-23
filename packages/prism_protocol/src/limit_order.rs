@@ -13,6 +13,7 @@ pub struct InstantiateMsg {
     pub order_fee: Decimal,
     pub min_fee_value: Uint128,
     pub executor_fee_portion: Decimal,
+    pub excess_collector_addr: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -71,6 +72,7 @@ pub struct ConfigResponse {
     pub order_fee: Decimal,
     pub min_fee_value: Uint128,
     pub executor_fee_portion: Decimal,
+    pub excess_collector_addr: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -78,6 +80,7 @@ pub struct OrderResponse {
     pub order_id: u64,
     pub bidder_addr: String,
     pub pair_addr: String,
+    pub inter_pair_addr: Option<String>,
     pub offer_asset: Asset,
     pub ask_asset: Asset,
 }

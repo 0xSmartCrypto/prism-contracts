@@ -16,6 +16,12 @@
     "bidder_addr": {
       "type": "string"
     },
+    "inter_pair_addr": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "offer_asset": {
       "$ref": "#/definitions/Asset"
     },

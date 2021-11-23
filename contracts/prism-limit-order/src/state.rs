@@ -23,6 +23,7 @@ pub struct Config {
     pub order_fee: Decimal,
     pub min_fee_value: Uint128,
     pub executor_fee_portion: Decimal,
+    pub excess_collactor_addr: Addr,
 }
 
 impl Config {
@@ -36,6 +37,7 @@ impl Config {
             order_fee: self.order_fee,
             min_fee_value: self.min_fee_value,
             executor_fee_portion: self.executor_fee_portion,
+            excess_collector_addr: self.excess_collactor_addr.to_string(),
         };
         Ok(res)
     }
@@ -46,6 +48,7 @@ pub struct OrderInfo {
     pub order_id: u64,
     pub bidder_addr: Addr,
     pub pair_addr: Addr,
+    pub inter_pair_addr: Option<Addr>,
     pub offer_asset: Asset,
     pub ask_asset: Asset,
 }
@@ -56,6 +59,7 @@ impl OrderInfo {
             order_id: self.order_id,
             bidder_addr: self.bidder_addr.to_string(),
             pair_addr: self.pair_addr.to_string(),
+            inter_pair_addr: self.inter_pair_addr.clone().map(|pair| pair.to_string()),
             offer_asset: self.offer_asset.clone(),
             ask_asset: self.ask_asset.clone(),
         };
@@ -166,7 +170,7 @@ fn calc_range_end(start_after: Option<u64>) -> Option<Vec<u8>> {
     start_after.map(|id| id.to_be_bytes().to_vec())
 }
 
-pub fn pair_key(asset_infos: &[AssetInfo; 2]) -> Vec<u8> {
+pub fn generate_pair_key(asset_infos: &[AssetInfo; 2]) -> Vec<u8> {
     let mut asset_infos = asset_infos.to_vec();
     asset_infos.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
 
@@ -174,6 +178,6 @@ pub fn pair_key(asset_infos: &[AssetInfo; 2]) -> Vec<u8> {
 }
 
 pub fn is_existing_pair(storage: &dyn Storage, asset_infos: &[AssetInfo; 2]) -> bool {
-    let key = pair_key(asset_infos);
+    let key = generate_pair_key(asset_infos);
     PAIRS.may_load(storage, &key).unwrap().is_some()
 }

@@ -4,6 +4,7 @@
   "type": "object",
   "required": [
     "base_denom",
+    "excess_collector_addr",
     "executor_fee_portion",
     "fee_collector_addr",
     "min_fee_value",
@@ -14,6 +15,9 @@
   ],
   "properties": {
     "base_denom": {
+      "type": "string"
+    },
+    "excess_collector_addr": {
       "type": "string"
     },
     "executor_fee_portion": {

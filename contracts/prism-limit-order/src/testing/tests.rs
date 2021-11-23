@@ -28,6 +28,7 @@ const PLUNA_ADDR: &str = "pluna_0001";
 const YLUNA_ADDR: &str = "yluna_0001";
 const PRISM_UST_PAIR_ADDR: &str = "prism_ust_pair_0001";
 const FEE_COLLECTOR_ADDR: &str = "fee_coll_0001";
+const EXCESS_COLLECTOR_ADDR: &str = "excess_coll_0001";
 
 // helper to successfully init
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) -> StdResult<Response> {
@@ -39,6 +40,7 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) -> St
         order_fee: Decimal::from_str("0.05").unwrap(),
         min_fee_value: Uint128::from(100u128),
         executor_fee_portion: Decimal::from_str("0.25").unwrap(),
+        excess_collector_addr: EXCESS_COLLECTOR_ADDR.to_string(),
     };
     let info = mock_info(OWNER_ADDR, &[]);
     instantiate(deps.as_mut(), mock_env(), info, msg)
@@ -158,7 +160,7 @@ pub fn verify_execute_response(
     );
     idx = idx + 1;
 
-    // send excess ask to executor
+    // send excess ask to excess collector
     if excess_amount > Uint128::zero() {
         assert_eq!(
             res.messages[idx],
@@ -166,7 +168,7 @@ pub fn verify_execute_response(
                 contract_addr: ask_asset.info.to_string(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: EXECUTOR_ADDR.to_string().clone(),
+                    recipient: EXCESS_COLLECTOR_ADDR.to_string().clone(),
                     amount: excess_amount,
                 })
                 .unwrap(),
@@ -252,6 +254,7 @@ fn proper_initialization() {
             order_fee: Decimal::from_str("0.05").unwrap(),
             min_fee_value: Uint128::from(100u128),
             executor_fee_portion: Decimal::from_str("0.25").unwrap(),
+            excess_collector_addr: EXCESS_COLLECTOR_ADDR.to_string(),
         }
     );
 }
@@ -487,6 +490,94 @@ fn test_submit_order() {
 }
 
 #[test]
+fn test_submit_order_with_inter_pair() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps).unwrap();
+
+    // register 2 pairs
+    //      1. ust -> prism
+    //      2. prism -> yluna
+    // then submit an order for ust -> yluna
+    let asset_infos_1 = [
+        AssetInfo::NativeToken {
+            denom: "uusd".to_string(),
+        },
+        AssetInfo::Token {
+            contract_addr: Addr::unchecked(PRISM_ADDR),
+        },
+    ];
+    let pair_addr_1 = get_pair_addr(&asset_infos_1);
+    add_trading_pair(&mut deps, &asset_infos_1, OWNER_ADDR).unwrap();
+
+    let asset_infos_2 = [
+        AssetInfo::Token {
+            contract_addr: Addr::unchecked(PRISM_ADDR),
+        },
+        AssetInfo::Token {
+            contract_addr: Addr::unchecked(YLUNA_ADDR),
+        },
+    ];
+    let pair_addr_2 = get_pair_addr(&asset_infos_2);
+    add_trading_pair(&mut deps, &asset_infos_2, OWNER_ADDR).unwrap();
+
+    let assets: [Asset; 2] = [
+        Asset {
+            info: asset_infos_1[0].clone(),
+            amount: Uint128::from(1_000u128),
+        },
+        Asset {
+            info: asset_infos_2[1].clone(),
+            amount: Uint128::from(1_000u128),
+        },
+    ];
+    let funds = vec![Coin::new(1_000u128, "uusd")];
+    let res = submit_order(&mut deps, &assets, USER1_ADDR, &funds).unwrap();
+    assert!(res.messages.is_empty());
+    assert_eq!(
+        res.attributes,
+        vec![
+            Attribute {
+                key: "action".to_string(),
+                value: "submit_order".to_string()
+            },
+            Attribute {
+                key: "order_id".to_string(),
+                value: "1".to_string()
+            },
+            Attribute {
+                key: "bidder_addr".to_string(),
+                value: USER1_ADDR.to_string()
+            },
+            Attribute {
+                key: "offer_asset".to_string(),
+                value: "1000uusd".to_string()
+            },
+            Attribute {
+                key: "ask_asset".to_string(),
+                value: "1000yluna_0001".to_string()
+            }
+        ]
+    );
+
+    let res = query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::Order { order_id: 1u64 },
+    )
+    .unwrap();
+    let order_response = from_binary::<OrderResponse>(&res).unwrap();
+    let expected_order_response = OrderResponse {
+        order_id: 1u64,
+        bidder_addr: USER1_ADDR.to_string(),
+        pair_addr: pair_addr_2,
+        offer_asset: assets[0].clone(),
+        ask_asset: assets[1].clone(),
+        inter_pair_addr: Some(pair_addr_1),
+    };
+    assert_eq!(order_response, expected_order_response);
+}
+
+#[test]
 fn test_cancel_order() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps).unwrap();
@@ -696,6 +787,7 @@ fn test_query_orders() {
         pair_addr: pair_addr,
         offer_asset: assets[0].clone(),
         ask_asset: assets[1].clone(),
+        inter_pair_addr: None,
     };
     assert_eq!(order_response, expected_order_response);
 
@@ -1487,7 +1579,7 @@ pub fn test_execute_order_not_found() {
 
 /*
 test_execute_yluna_prism_no_excess:
-    - no excess fee available to send to executer
+    - no excess fee available
 */
 #[test]
 pub fn test_execute_yluna_prism_no_excess() {
@@ -1587,6 +1679,7 @@ pub fn test_execute_yluna_prism_no_protocol_fee() {
         order_fee: Decimal::from_str("0.05").unwrap(),
         min_fee_value: Uint128::from(100u128),
         executor_fee_portion: Decimal::one(),
+        excess_collector_addr: EXCESS_COLLECTOR_ADDR.to_string(),
     };
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -1665,4 +1758,170 @@ pub fn test_execute_yluna_prism_no_protocol_fee() {
         &protocol_fee_amount,
         1u32,
     );
+}
+
+#[test]
+pub fn test_execute_with_inter_pair() {
+    let mut deps = mock_dependencies(&[]);
+    let info = mock_info(OWNER_ADDR, &[]);
+    let msg = InstantiateMsg {
+        base_denom: "uusd".to_string(),
+        prism_token: PRISM_ADDR.to_string(),
+        fee_collector_addr: FEE_COLLECTOR_ADDR.to_string(),
+        prism_ust_pair: PRISM_UST_PAIR_ADDR.to_string(),
+        order_fee: Decimal::from_str("0.05").unwrap(),
+        min_fee_value: Uint128::from(100u128),
+        executor_fee_portion: Decimal::one(),
+        excess_collector_addr: EXCESS_COLLECTOR_ADDR.to_string(),
+    };
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let info = mock_info(EXECUTOR_ADDR, &[]);
+
+    let offer_asset_info = AssetInfo::NativeToken {
+        denom: "uusd".to_string(),
+    };
+    let ask_asset_info = AssetInfo::Token {
+        contract_addr: Addr::unchecked(YLUNA_ADDR),
+    };
+    let prism_asset_info = AssetInfo::Token {
+        contract_addr: Addr::unchecked(PRISM_ADDR),
+    };
+    let offer_asset = Asset {
+        info: offer_asset_info.clone(),
+        amount: Uint128::from(1000u128),
+    };
+    let ask_asset = Asset {
+        info: ask_asset_info.clone(),
+        amount: Uint128::from(1000u128),
+    };
+
+    let assets = [offer_asset.clone(), ask_asset.clone()];
+
+    let asset_infos_1 = [offer_asset_info.clone(), prism_asset_info.clone()];
+    let asset_infos_2 = [prism_asset_info.clone(), ask_asset_info.clone()];
+
+    // add trading pairs
+    add_trading_pair(&mut deps, &asset_infos_1, OWNER_ADDR).unwrap();
+    add_trading_pair(&mut deps, &asset_infos_2, OWNER_ADDR).unwrap();
+
+    let pair_1 = get_pair_addr(&asset_infos_1);
+    let pair_2 = get_pair_addr(&asset_infos_2);
+    // configure astroport to return 500 for the offered UST
+    deps.querier.with_astroport_sim_response(
+        &pair_1,
+        &offer_asset_info,
+        SimulationResponse {
+            return_amount: Uint128::from(500u128),
+            spread_amount: Uint128::zero(),
+            commission_amount: Uint128::zero(),
+        },
+    );
+
+    // configure astroport to return sufficient fee value
+    deps.querier.with_astroport_sim_response(
+        PRISM_UST_PAIR_ADDR,
+        &prism_asset_info,
+        SimulationResponse {
+            return_amount: Uint128::from(100u128),
+            spread_amount: Uint128::zero(),
+            commission_amount: Uint128::zero(),
+        },
+    );
+
+    // configure astroport to return sufficient final swap value with 10 excess
+    deps.querier.with_astroport_sim_response(
+        &pair_2,
+        &prism_asset_info,
+        SimulationResponse {
+            return_amount: Uint128::from(1000u128),
+            spread_amount: Uint128::zero(),
+            commission_amount: Uint128::zero(),
+        },
+    );
+
+    // successful submit
+    let funds = vec![Coin::new(1000, "uusd")];
+    submit_order(&mut deps, &assets, USER1_ADDR, &funds).unwrap();
+
+    // successful execution
+    let msg = ExecuteMsg::ExecuteOrder { order_id: 1 };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            Attribute {
+                key: "action".to_string(),
+                value: "execute_order".to_string()
+            },
+            Attribute {
+                key: "order_id".to_string(),
+                value: "1".to_string()
+            },
+            Attribute {
+                key: "executor_fee_amount".to_string(),
+                value: "25".to_string()
+            },
+            Attribute {
+                key: "protocol_fee_amount".to_string(),
+                value: "0".to_string()
+            },
+            Attribute {
+                key: "excess_amount".to_string(),
+                value: "0".to_string()
+            }
+        ]
+    );
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: pair_1.to_string(),
+                funds: vec![Coin {
+                    denom: "uusd".to_string(),
+                    amount: Uint128::from(1000u128),
+                }],
+                msg: to_binary(&PairExecuteMsg::Swap {
+                    offer_asset: offer_asset.clone(),
+                    to: None,
+                    belief_price: None,
+                    max_spread: None,
+                })
+                .unwrap(),
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: PRISM_ADDR.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: pair_2.to_string(),
+                    amount: Uint128::from(475u128), // 500 - 25
+                    msg: to_binary(&PairCw20HookMsg::Swap {
+                        to: None,
+                        belief_price: None,
+                        max_spread: None,
+                    })
+                    .unwrap(),
+                })
+                .unwrap(),
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: ask_asset.info.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: USER1_ADDR.to_string(),
+                    amount: ask_asset.amount,
+                })
+                .unwrap(),
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: PRISM_ADDR.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: EXECUTOR_ADDR.to_string().clone(),
+                    amount: Uint128::from(25u128),
+                })
+                .unwrap(),
+            }))
+        ]
+    )
 }

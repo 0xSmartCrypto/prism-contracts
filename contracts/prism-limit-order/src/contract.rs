@@ -7,7 +7,7 @@ use cosmwasm_std::{
 
 use crate::order::{cancel_order, execute_order, submit_order};
 use crate::query::{query_config, query_last_order_id, query_order, query_orders};
-use crate::state::{pair_key, Config, CONFIG, LAST_ORDER_ID, PAIRS};
+use crate::state::{generate_pair_key, Config, CONFIG, LAST_ORDER_ID, PAIRS};
 use astroport::asset::AssetInfo;
 use prism_protocol::limit_order::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
@@ -30,6 +30,7 @@ pub fn instantiate(
         min_fee_value: msg.min_fee_value,
         order_fee: msg.order_fee,
         executor_fee_portion: msg.executor_fee_portion,
+        excess_collactor_addr: deps.api.addr_validate(msg.excess_collector_addr.as_str())?,
     };
 
     CONFIG.save(deps.storage, &config)?;
@@ -157,7 +158,7 @@ pub fn add_pair(
         ));
     }
 
-    let pair_key = pair_key(&asset_infos);
+    let pair_key = generate_pair_key(&asset_infos);
     if PAIRS.may_load(deps.storage, &pair_key)?.is_some() {
         return Err(StdError::generic_err("pair already exists"));
     }

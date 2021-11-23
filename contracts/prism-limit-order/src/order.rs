@@ -12,7 +12,7 @@ use astroport::pair::{
 use astroport::querier::{reverse_simulate, simulate};
 
 use crate::state::{
-    pair_key, remove_order, store_new_order, Config, OrderInfo, CONFIG, ORDERS, PAIRS,
+    generate_pair_key, remove_order, store_new_order, Config, OrderInfo, CONFIG, ORDERS, PAIRS,
 };
 
 pub fn submit_order(
@@ -22,11 +22,33 @@ pub fn submit_order(
     offer_asset: Asset,
     ask_asset: Asset,
 ) -> StdResult<Response> {
-    // check if the pair exists and get the pair address
-    let pair_key = pair_key(&[offer_asset.info.clone(), ask_asset.info.clone()]);
-    let pair_addr: Addr = PAIRS
-        .load(deps.storage, &pair_key)
-        .map_err(|_| StdError::generic_err("the 2 assets provided are not supported"))?;
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    let pair_key = generate_pair_key(&[offer_asset.info.clone(), ask_asset.info.clone()]);
+    let (pair_addr, inter_pair_addr): (Addr, Option<Addr>) =
+        match PAIRS.load(deps.storage, &pair_key) {
+            Ok(pair_addr) => (pair_addr, None),
+            Err(_) => {
+                let prism_asset_info = AssetInfo::Token {
+                    contract_addr: config.prism_token,
+                };
+                let inter_pair_key =
+                    generate_pair_key(&[offer_asset.info.clone(), prism_asset_info.clone()]);
+                let ask_pair_key =
+                    generate_pair_key(&[prism_asset_info.clone(), ask_asset.info.clone()]);
+
+                let inter_pair: StdResult<Addr> = PAIRS.load(deps.storage, &inter_pair_key);
+                let ask_pair: StdResult<Addr> = PAIRS.load(deps.storage, &ask_pair_key);
+
+                if inter_pair.is_err() || ask_pair.is_err() {
+                    return Err(StdError::generic_err(
+                        "the 2 assets provided are not supported",
+                    ));
+                }
+
+                (ask_pair.unwrap(), Some(inter_pair.unwrap()))
+            }
+        };
 
     let mut messages: Vec<CosmosMsg> = vec![];
 
@@ -48,7 +70,8 @@ pub fn submit_order(
     let mut new_order = OrderInfo {
         order_id: 0u64, // provisional
         bidder_addr: deps.api.addr_validate(info.sender.as_str())?,
-        pair_addr: pair_addr,
+        pair_addr,
+        inter_pair_addr,
         offer_asset: offer_asset.clone(),
         ask_asset: ask_asset.clone(),
     };
@@ -92,11 +115,28 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
         contract_addr: config.prism_token,
     };
 
+    let mut messages: Vec<CosmosMsg> = vec![];
+
+    // if inter pair exists, we first swap the offer asset for $PRISM
+    let offer_asset = if let Some(inter_pair_addr) = &order.inter_pair_addr {
+        messages.push(create_astro_swap_msg(&order.offer_asset, &inter_pair_addr)?);
+
+        let simul_res: SimulationResponse =
+            simulate(&deps.querier, inter_pair_addr.clone(), &order.offer_asset)?;
+
+        Asset {
+            info: prism_asset_info.clone(),
+            amount: simul_res.return_amount,
+        }
+    } else {
+        order.offer_asset.clone()
+    };
+
     let (offer_asset, return_asset, prism_fee_amount) =
         if order.ask_asset.info.equal(&prism_asset_info) {
             // if the ask asset $PRISM, take the fee from the ask_asset
             let simul_res: SimulationResponse =
-                simulate(&deps.querier, order.pair_addr.clone(), &order.offer_asset)?;
+                simulate(&deps.querier, order.pair_addr.clone(), &offer_asset)?;
             let prism_fee_asset = Asset {
                 info: prism_asset_info.clone(),
                 amount: simul_res.return_amount * config.order_fee,
@@ -118,18 +158,18 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                     reverse_simulate(&deps.querier, &config.prism_ust_pair, &min_fee_asset)?;
 
                 (
-                    order.offer_asset.clone(),
+                    offer_asset.clone(),
                     Asset {
                         info: prism_asset_info.clone(),
                         amount: simul_res
                             .return_amount
-                            .checked_sub(buy_prism_fee_simul_res.offer_amount)?, // TODO: if the order is too small, this might fail
+                            .checked_sub(buy_prism_fee_simul_res.offer_amount)?,
                     },
                     buy_prism_fee_simul_res.offer_amount,
                 )
             } else {
                 (
-                    order.offer_asset.clone(),
+                    offer_asset.clone(),
                     Asset {
                         info: prism_asset_info.clone(),
                         amount: simul_res
@@ -139,11 +179,11 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                     prism_fee_asset.amount,
                 )
             }
-        } else if order.offer_asset.info.equal(&prism_asset_info) {
+        } else if offer_asset.info.equal(&prism_asset_info) {
             // if the ask asset is not $PRISM, take the fee from the offer_asset
             let prism_fee_asset = Asset {
                 info: prism_asset_info.clone(),
-                amount: order.offer_asset.amount * config.order_fee,
+                amount: offer_asset.amount * config.order_fee,
             };
             let sell_prism_fee_simul_res: SimulationResponse = simulate(
                 &deps.querier,
@@ -165,8 +205,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                     (
                         Asset {
                             info: prism_asset_info.clone(),
-                            amount: order
-                                .offer_asset
+                            amount: offer_asset
                                 .amount
                                 .checked_sub(buy_prism_fee_simul_res.offer_amount)?,
                         },
@@ -176,10 +215,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                     (
                         Asset {
                             info: prism_asset_info.clone(),
-                            amount: order
-                                .offer_asset
-                                .amount
-                                .checked_sub(prism_fee_asset.amount)?,
+                            amount: offer_asset.amount.checked_sub(prism_fee_asset.amount)?,
                         },
                         prism_fee_asset.amount,
                     )
@@ -204,41 +240,8 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
         return Err(StdError::generic_err("insufficient return amount"));
     }
 
-    let mut messages: Vec<CosmosMsg> = vec![];
-
     // create swap message
-    match offer_asset.clone().info {
-        AssetInfo::Token { contract_addr } => {
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: contract_addr.to_string(),
-                funds: vec![],
-                msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: order.pair_addr.to_string(),
-                    amount: offer_asset.clone().amount,
-                    msg: to_binary(&PairCw20HookMsg::Swap {
-                        to: None,
-                        belief_price: None,
-                        max_spread: None,
-                    })?,
-                })?,
-            }));
-        }
-        AssetInfo::NativeToken { denom } => {
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: order.pair_addr.to_string(),
-                funds: vec![Coin {
-                    denom,
-                    amount: offer_asset.amount,
-                }],
-                msg: to_binary(&PairExecuteMsg::Swap {
-                    offer_asset,
-                    belief_price: None,
-                    max_spread: None,
-                    to: None,
-                })?,
-            }));
-        }
-    };
+    messages.push(create_astro_swap_msg(&offer_asset, &order.pair_addr)?);
 
     // send asset to bidder
     messages.push(
@@ -248,14 +251,14 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
             .into_msg(&deps.querier, order.bidder_addr.clone())?,
     );
 
-    // send excess to executor
+    // send excess to excess collector
     let excess_amount: Uint128 = return_asset.amount.checked_sub(order.ask_asset.amount)?;
     if excess_amount > Uint128::zero() {
         let excess_asset = Asset {
             amount: excess_amount,
             info: order.ask_asset.info.clone(),
         };
-        messages.push(excess_asset.into_msg(&deps.querier, info.sender.clone())?);
+        messages.push(excess_asset.into_msg(&deps.querier, config.excess_collactor_addr.clone())?);
     }
 
     // send fee to executor
@@ -292,4 +295,37 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
         attr("protocol_fee_amount", protocol_fee_asset.amount.to_string()),
         attr("excess_amount", excess_amount.to_string()),
     ]))
+}
+
+fn create_astro_swap_msg(offer_asset: &Asset, pair_addr: &Addr) -> StdResult<CosmosMsg> {
+    let msg: CosmosMsg = match &offer_asset.info {
+        AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: contract_addr.to_string(),
+            funds: vec![],
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: pair_addr.to_string(),
+                amount: offer_asset.amount,
+                msg: to_binary(&PairCw20HookMsg::Swap {
+                    to: None,
+                    belief_price: None,
+                    max_spread: None,
+                })?,
+            })?,
+        }),
+        AssetInfo::NativeToken { denom } => CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: pair_addr.to_string(),
+            funds: vec![Coin {
+                denom: denom.to_string(),
+                amount: offer_asset.amount,
+            }],
+            msg: to_binary(&PairExecuteMsg::Swap {
+                offer_asset: offer_asset.clone(),
+                belief_price: None,
+                max_spread: None,
+                to: None,
+            })?,
+        }),
+    };
+
+    Ok(msg)
 }
