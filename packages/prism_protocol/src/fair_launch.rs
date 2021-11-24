@@ -1,4 +1,4 @@
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Decimal, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +18,8 @@ pub struct InstantiateMsg {
     pub owner: String,
     pub token: String,
     pub base_denom: String,
+    pub withdraw_threshold: Uint128,
+    pub withdraw_fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -27,6 +29,7 @@ pub enum ExecuteMsg {
     Withdraw { amount: Option<Uint128> },
     WithdrawTokens {},
     PostInitialize { launch_config: LaunchConfig },
+    AdminWithdraw {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -34,6 +37,16 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     Config {},
     DepositInfo { address: String },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ConfigResponse {
+    pub owner: String,
+    pub token: String,
+    pub launch_config: Option<LaunchConfig>,
+    pub base_denom: String,
+    pub withdraw_fee: Decimal,
+    pub withdraw_threshold: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

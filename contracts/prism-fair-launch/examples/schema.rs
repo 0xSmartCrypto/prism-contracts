@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 use prism_protocol::fair_launch::{
-    DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg,
+    ConfigResponse, DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg,
 };
 
 fn main() {
@@ -17,4 +17,5 @@ fn main() {
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(LaunchConfig), &out_dir);
     export_schema(&schema_for!(DepositResponse), &out_dir);
+    export_schema(&schema_for!(ConfigResponse), &out_dir);
 }

@@ -23,4 +23,10 @@ pub enum ContractError {
 
     #[error("Invalid withdraw tokens: {reason}")]
     InvalidWithdrawTokens { reason: String },
+
+    #[error("Invalid admin withdraw: {reason}")]
+    InvalidAdminWithdraw { reason: String },
+
+    #[error("Fee can not be bigger than 1")]
+    InvalidFee {},
 }

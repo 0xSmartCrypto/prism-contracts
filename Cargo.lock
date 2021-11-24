@@ -965,20 +965,16 @@ dependencies = [
 name = "prism-fair-launch"
 version = "0.1.0"
 dependencies = [
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
- "cosmwasm-storage",
  "cw-storage-plus",
  "cw20",
  "hex",
- "lazy_static",
  "prism-common",
  "prism-protocol",
  "schemars",
  "serde",
- "serde_json",
- "terra-cosmwasm",
- "terraswap",
  "thiserror",
 ]
 
@@ -1566,20 +1562,6 @@ dependencies = [
  "cosmwasm-std",
  "schemars",
  "serde",
-]
-
-[[package]]
-name = "terraswap"
-version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96f2c2a6371e9ddf2c942368e64645cc3e8fc2855da70c8c6bed238dcdd5522f"
-dependencies = [
- "cosmwasm-std",
- "cosmwasm-storage",
- "cw20",
- "schemars",
- "serde",
- "terra-cosmwasm",
 ]
 
 [[package]]
