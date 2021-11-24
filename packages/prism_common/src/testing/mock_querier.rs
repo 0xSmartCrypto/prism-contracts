@@ -8,8 +8,9 @@ use cw20::TokenInfoResponse;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use astroport::asset::{AssetInfo, PairInfo};
+use astroport::asset::{Asset, AssetInfo, PairInfo};
 use astroport::factory::PairType;
+use astroport::pair::{ReverseSimulationResponse, SimulationResponse};
 use cw20::BalanceResponse as Cw20BalanceResponse;
 use prism_protocol::vault::StateResponse as VaultStateResponse;
 use prism_protocol::yasset_staking::RewardAssetWhitelistResponse;
@@ -65,6 +66,7 @@ pub struct WasmMockQuerier {
     tax_querier: TaxQuerier,
     factory_querier: FactoryQuerier,
     vault_state_querier: VaultStateQuerier,
+    astroport_sim_querier: AstroportSimQuerier,
 }
 
 impl Querier for WasmMockQuerier {
@@ -91,6 +93,8 @@ pub enum QueryMsg {
     TokenInfo {},
     State {},
     RewardAssetWhitelist {},
+    Simulation { offer_asset: Asset },
+    ReverseSimulation { ask_asset: Asset },
 }
 
 impl WasmMockQuerier {
@@ -239,10 +243,26 @@ impl WasmMockQuerier {
                                 AssetInfo::Token {
                                     contract_addr: Addr::unchecked("pluna0000"),
                                 },
-                            ]
+                            ],
                         })
                         .unwrap(),
                     )),
+                    QueryMsg::Simulation { offer_asset } => {
+                        let res = self
+                            .astroport_sim_querier
+                            .sim_responses
+                            .get(&(contract_addr.to_string(), offer_asset.info.to_string()))
+                            .unwrap();
+                        SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
+                    }
+                    QueryMsg::ReverseSimulation { ask_asset } => {
+                        let res = self
+                            .astroport_sim_querier
+                            .reverse_sim_responses
+                            .get(&(contract_addr.to_string(), ask_asset.info.to_string()))
+                            .unwrap();
+                        SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
+                    }
                 }
             }
             _ => self.base.handle_query(request),
@@ -320,6 +340,36 @@ impl VaultStateQuerier {
     }
 }
 
+#[derive(Clone, Default)]
+pub struct AstroportSimQuerier {
+    // (pair_addr, asset) -> SimulationResponse
+    sim_responses: HashMap<(String, String), SimulationResponse>,
+    // (pair_addr, asset) -> ReverseSimulationResponse
+    reverse_sim_responses: HashMap<(String, String), ReverseSimulationResponse>,
+}
+
+impl AstroportSimQuerier {
+    fn update_sim_response(
+        &mut self,
+        pair_addr: &str,
+        offer_asset: &AssetInfo,
+        response: SimulationResponse,
+    ) {
+        self.sim_responses
+            .insert((pair_addr.to_string(), offer_asset.to_string()), response);
+    }
+
+    fn update_reverse_sim_response(
+        &mut self,
+        pair_addr: &str,
+        ask_asset: &AssetInfo,
+        response: ReverseSimulationResponse,
+    ) {
+        self.reverse_sim_responses
+            .insert((pair_addr.to_string(), ask_asset.to_string()), response);
+    }
+}
+
 impl WasmMockQuerier {
     pub fn new(base: MockQuerier<TerraQueryWrapper>) -> Self {
         WasmMockQuerier {
@@ -328,6 +378,7 @@ impl WasmMockQuerier {
             tax_querier: TaxQuerier::default(),
             factory_querier: FactoryQuerier::default(),
             vault_state_querier: VaultStateQuerier::default(),
+            astroport_sim_querier: AstroportSimQuerier::default(),
         }
     }
 
@@ -351,5 +402,28 @@ impl WasmMockQuerier {
 
     pub fn with_vault_state(&mut self, total_bond_amount: &Uint128) {
         self.vault_state_querier = VaultStateQuerier::new(total_bond_amount);
+    }
+
+    pub fn with_astroport_sim_response(
+        &mut self,
+        pair_addr: &str,
+        offer_asset: &AssetInfo,
+        sim_response: SimulationResponse,
+    ) {
+        self.astroport_sim_querier
+            .update_sim_response(pair_addr, offer_asset, sim_response)
+    }
+
+    pub fn with_astroport_reverse_sim_response(
+        &mut self,
+        pair_addr: &str,
+        ask_asset: &AssetInfo,
+        reverse_sim_response: ReverseSimulationResponse,
+    ) {
+        self.astroport_sim_querier.update_reverse_sim_response(
+            pair_addr,
+            ask_asset,
+            reverse_sim_response,
+        )
     }
 }
