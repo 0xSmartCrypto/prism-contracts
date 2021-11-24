@@ -1015,6 +1015,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-limit-order"
+version = "1.0.0"
+dependencies = [
+ "astroport",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20",
+ "prism-protocol",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+ "thiserror",
+]
+
+[[package]]
 name = "prism-lp-staking"
 version = "1.0.0"
 dependencies = [
