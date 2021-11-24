@@ -3,10 +3,7 @@ use crate::math::decimal_division;
 use crate::state::{
     is_valid_validator, read_valid_validators, CONFIG, CURRENT_BATCH, PARAMETERS, STATE,
 };
-use cosmwasm_std::{
-    attr, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Response, StakingMsg, StdError,
-    StdResult, SubMsg, Uint128, WasmMsg,
-};
+use cosmwasm_std::{Addr, CosmosMsg, DepsMut, Env, MessageInfo, Response, StakingMsg, StdError, StdResult, SubMsg, Uint128, WasmMsg, attr, to_binary};
 use cw20::Cw20ExecuteMsg as TokenMsg;
 use prism_protocol::vault::State;
 
@@ -68,7 +65,7 @@ pub fn _execute_bond(
     // validator must be whitelisted
 
     let unwrapped_validator = match validator {
-        Some(v) => deps.api.addr_validate(v)?,
+        Some(v) => Addr::unchecked(v),
         None => {
             let validators = read_valid_validators(deps.storage)?;
             let idx = env.block.time.nanos() as usize % validators.len();
