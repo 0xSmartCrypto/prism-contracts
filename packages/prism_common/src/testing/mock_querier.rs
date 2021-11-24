@@ -8,16 +8,16 @@ use cw20::TokenInfoResponse;
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use astroport::asset::{AssetInfo, PairInfo};
+use astroport::factory::PairType;
 use cw20::BalanceResponse as Cw20BalanceResponse;
+use prism_protocol::vault::StateResponse as VaultStateResponse;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use terra_cosmwasm::{
     ExchangeRateItem, ExchangeRatesResponse, TaxCapResponse, TaxRateResponse, TerraQuery,
     TerraQueryWrapper, TerraRoute,
 };
-use prism_protocol::vault::StateResponse as VaultStateResponse;
-use astroport::asset::{AssetInfo, PairInfo};
-use astroport::factory::PairType;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
 pub const MOCK_CONTRACT_ADDR: &str = "cosmos2contract";
 
@@ -171,27 +171,15 @@ impl WasmMockQuerier {
                         }
                     }
                     QueryMsg::TokenInfo {} => {
-                        let balances: &HashMap<String, Uint128> =
-                            match self.token_querier.balances.get(contract_addr) {
-                                Some(balances) => balances,
-                                None => {
-                                    return SystemResult::Err(SystemError::InvalidRequest {
-                                        error: format!(
-                                            "No balance info exists for the contract {}",
-                                            contract_addr
-                                        ),
-                                        request: msg.as_slice().into(),
-                                    })
-                                }
-                            };
                         let mut total_supply = Uint128::zero();
-
-                        for balance in balances {
-                            total_supply += *balance.1;
+                        if let Some(balances) = self.token_querier.balances.get(contract_addr) {
+                            for balance in balances {
+                                total_supply += *balance.1;
+                            }
                         }
                         let token_inf: TokenInfoResponse = TokenInfoResponse {
-                            name: "bluna".to_string(),
-                            symbol: "BLUNA".to_string(),
+                            name: "pLuna".to_string(),
+                            symbol: "pLUNA".to_string(),
                             decimals: 6,
                             total_supply,
                         };
@@ -228,20 +216,18 @@ impl WasmMockQuerier {
                             to_binary(&Cw20BalanceResponse { balance }).unwrap(),
                         ))
                     }
-                    QueryMsg::State {} => {
-                        SystemResult::Ok(ContractResult::Ok(
-                            to_binary(&VaultStateResponse {
-                                exchange_rate: Decimal::one(),
-                                total_bond_amount: self.vault_state_querier.total_bond_amount,
-                                last_index_modification: 0u64,
-                                prev_vault_balance: Uint128::zero(),
-                                actual_unbonded_amount: Uint128::zero(),
-                                last_unbonded_time: 0u64,
-                                last_processed_batch: 0u64,
-                                
-                            }).unwrap(),
-                        ))
-                    }
+                    QueryMsg::State {} => SystemResult::Ok(ContractResult::Ok(
+                        to_binary(&VaultStateResponse {
+                            exchange_rate: Decimal::one(),
+                            total_bond_amount: self.vault_state_querier.total_bond_amount,
+                            last_index_modification: 0u64,
+                            prev_vault_balance: Uint128::zero(),
+                            actual_unbonded_amount: Uint128::zero(),
+                            last_unbonded_time: 0u64,
+                            last_processed_batch: 0u64,
+                        })
+                        .unwrap(),
+                    )),
                 }
             }
             _ => self.base.handle_query(request),

@@ -3,7 +3,10 @@ use crate::math::decimal_division;
 use crate::state::{
     is_valid_validator, read_valid_validators, CONFIG, CURRENT_BATCH, PARAMETERS, STATE,
 };
-use cosmwasm_std::{Addr, CosmosMsg, DepsMut, Env, MessageInfo, Response, StakingMsg, StdError, StdResult, SubMsg, Uint128, WasmMsg, attr, to_binary};
+use cosmwasm_std::{
+    attr, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Response, StakingMsg, StdError,
+    StdResult, SubMsg, Uint128, WasmMsg,
+};
 use cw20::Cw20ExecuteMsg as TokenMsg;
 use prism_protocol::vault::State;
 
