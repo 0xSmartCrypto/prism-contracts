@@ -19,6 +19,8 @@ use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 
 use crate::bond::{execute_bond, execute_bond_split};
 use crate::refract::{merge, split};
+use astroport::asset::{Asset, AssetInfo};
+use astroport::querier::query_token_balance;
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, TokenInfoResponse};
 use prism_protocol::vault::{
     AllHistoryResponse, Config, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
@@ -26,8 +28,6 @@ use prism_protocol::vault::{
     WhitelistedValidatorsResponse, WithdrawableUnbondedResponse,
 };
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
-use astroport::asset::{Asset, AssetInfo};
-use astroport::querier::query_token_balance;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -488,20 +488,30 @@ fn query_params(deps: Deps) -> StdResult<Parameters> {
 }
 
 pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
-    let token_address = CONFIG
+    let cluna_address = CONFIG
         .load(deps.storage)?
         .cluna_contract
+        .expect("cluna contract must have been registered");
+    let pluna_address = CONFIG
+        .load(deps.storage)?
+        .pluna_contract
         .expect("pluna contract must have been registered");
 
-    let token_info: TokenInfoResponse =
+    let cluna_token_info: TokenInfoResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: token_address,
+            contract_addr: cluna_address,
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
 
-    // TODO: we have to add the amount of yluna/pluna IMPORTANT
+    let pluna_token_info: TokenInfoResponse =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: pluna_address,
+            msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
+        }))?;
 
-    Ok(token_info.total_supply)
+    // pLuna and yLuna supply must always be the same, so no reason to query yLuna supply
+
+    Ok(cluna_token_info.total_supply + pluna_token_info.total_supply)
 }
 
 fn query_unbond_requests(deps: Deps, address: String) -> StdResult<UnbondRequestsResponse> {

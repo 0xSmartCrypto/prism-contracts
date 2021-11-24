@@ -8,16 +8,16 @@ use cw20::TokenInfoResponse;
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use astroport::asset::{AssetInfo, PairInfo};
+use astroport::factory::PairType;
 use cw20::BalanceResponse as Cw20BalanceResponse;
+use prism_protocol::vault::StateResponse as VaultStateResponse;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use terra_cosmwasm::{
     ExchangeRateItem, ExchangeRatesResponse, TaxCapResponse, TaxRateResponse, TerraQuery,
     TerraQueryWrapper, TerraRoute,
 };
-
-use astroport::asset::{AssetInfo, PairInfo};
-use astroport::factory::PairType;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
 pub const MOCK_CONTRACT_ADDR: &str = "cosmos2contract";
 
@@ -63,6 +63,7 @@ pub struct WasmMockQuerier {
     token_querier: TokenQuerier,
     tax_querier: TaxQuerier,
     factory_querier: FactoryQuerier,
+    vault_state_querier: VaultStateQuerier,
 }
 
 impl Querier for WasmMockQuerier {
@@ -87,6 +88,7 @@ pub enum QueryMsg {
     Pair { asset_infos: [AssetInfo; 2] },
     Balance { address: String },
     TokenInfo {},
+    State {},
 }
 
 impl WasmMockQuerier {
@@ -169,27 +171,15 @@ impl WasmMockQuerier {
                         }
                     }
                     QueryMsg::TokenInfo {} => {
-                        let balances: &HashMap<String, Uint128> =
-                            match self.token_querier.balances.get(contract_addr) {
-                                Some(balances) => balances,
-                                None => {
-                                    return SystemResult::Err(SystemError::InvalidRequest {
-                                        error: format!(
-                                            "No balance info exists for the contract {}",
-                                            contract_addr
-                                        ),
-                                        request: msg.as_slice().into(),
-                                    })
-                                }
-                            };
                         let mut total_supply = Uint128::zero();
-
-                        for balance in balances {
-                            total_supply += *balance.1;
+                        if let Some(balances) = self.token_querier.balances.get(contract_addr) {
+                            for balance in balances {
+                                total_supply += *balance.1;
+                            }
                         }
                         let token_inf: TokenInfoResponse = TokenInfoResponse {
-                            name: "bluna".to_string(),
-                            symbol: "BLUNA".to_string(),
+                            name: "pLuna".to_string(),
+                            symbol: "pLUNA".to_string(),
                             decimals: 6,
                             total_supply,
                         };
@@ -226,6 +216,18 @@ impl WasmMockQuerier {
                             to_binary(&Cw20BalanceResponse { balance }).unwrap(),
                         ))
                     }
+                    QueryMsg::State {} => SystemResult::Ok(ContractResult::Ok(
+                        to_binary(&VaultStateResponse {
+                            exchange_rate: Decimal::one(),
+                            total_bond_amount: self.vault_state_querier.total_bond_amount,
+                            last_index_modification: 0u64,
+                            prev_vault_balance: Uint128::zero(),
+                            actual_unbonded_amount: Uint128::zero(),
+                            last_unbonded_time: 0u64,
+                            last_processed_batch: 0u64,
+                        })
+                        .unwrap(),
+                    )),
                 }
             }
             _ => self.base.handle_query(request),
@@ -290,6 +292,19 @@ pub(crate) fn pairs_to_map(pairs: &[(&String, &String)]) -> HashMap<String, Stri
     pairs_map
 }
 
+#[derive(Clone, Default)]
+pub struct VaultStateQuerier {
+    total_bond_amount: Uint128,
+}
+
+impl VaultStateQuerier {
+    pub fn new(total_bond_amount: &Uint128) -> Self {
+        VaultStateQuerier {
+            total_bond_amount: *total_bond_amount,
+        }
+    }
+}
+
 impl WasmMockQuerier {
     pub fn new(base: MockQuerier<TerraQueryWrapper>) -> Self {
         WasmMockQuerier {
@@ -297,6 +312,7 @@ impl WasmMockQuerier {
             token_querier: TokenQuerier::default(),
             tax_querier: TaxQuerier::default(),
             factory_querier: FactoryQuerier::default(),
+            vault_state_querier: VaultStateQuerier::default(),
         }
     }
 
@@ -316,5 +332,9 @@ impl WasmMockQuerier {
 
     pub fn with_pairs(&mut self, pairs: &[(&String, &String)]) {
         self.factory_querier = FactoryQuerier::new(pairs);
+    }
+
+    pub fn with_vault_state(&mut self, total_bond_amount: &Uint128) {
+        self.vault_state_querier = VaultStateQuerier::new(total_bond_amount);
     }
 }

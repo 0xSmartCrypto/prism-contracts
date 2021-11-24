@@ -93,7 +93,6 @@ pub struct ConfigResponse {
 pub struct PoolInfoResponse {
     pub asset_token: String,
     pub reward_index: Decimal,
-    pub pending_reward: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
