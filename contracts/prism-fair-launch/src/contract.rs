@@ -1,15 +1,16 @@
 use crate::error::ContractError;
 use crate::state::{Config, CONFIG, DEPOSITS, TOTAL_DEPOSIT};
 
+use astroport::asset::{Asset, AssetInfo};
+use astroport::querier::query_balance;
 use cosmwasm_std::{
-    entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Uint128, WasmMsg,
+    attr, entry_point, to_binary, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    Response, StdResult, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use prism_protocol::fair_launch::{
-    DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg,
+    ConfigResponse, DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg,
 };
-use terraswap::asset::{Asset, AssetInfo};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -17,12 +18,17 @@ pub fn instantiate(
     _env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
+    if msg.withdraw_fee > Decimal::one() {
+        return Err(ContractError::InvalidFee {});
+    }
     let cfg = Config {
-        owner: msg.owner,
-        token: msg.token,
+        owner: deps.api.addr_validate(&msg.owner)?,
+        token: deps.api.addr_validate(&msg.token)?,
         launch_config: None,
         base_denom: msg.base_denom,
+        withdraw_threshold: msg.withdraw_threshold,
+        withdraw_fee: msg.withdraw_fee,
     };
     TOTAL_DEPOSIT.save(deps.storage, &Uint128::zero())?;
     CONFIG.save(deps.storage, &cfg)?;
@@ -43,6 +49,7 @@ pub fn execute(
         ExecuteMsg::PostInitialize { launch_config } => {
             post_initialize(deps, env, info, launch_config)
         }
+        ExecuteMsg::AdminWithdraw {} => admin_withdraw(deps, env, info),
     }
 }
 
@@ -74,7 +81,7 @@ pub fn post_initialize(
 
     Ok(
         Response::new().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.token.clone(),
+            contract_addr: cfg.token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
                 owner: info.sender.to_string(),
                 recipient: env.contract.address.to_string(),
@@ -113,7 +120,7 @@ pub fn deposit(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, C
         Ok(curr + coin.amount)
     })?;
 
-    Ok(Response::new())
+    Ok(Response::new().add_attribute("action", "deposit"))
 }
 
 pub fn withdraw(
@@ -124,7 +131,9 @@ pub fn withdraw(
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     let launch_config = cfg.launch_config.unwrap();
-    if env.block.time.seconds() >= launch_config.phase2_end {
+    let current_time = env.block.time.seconds();
+
+    if current_time >= launch_config.phase2_end {
         return Err(ContractError::InvalidWithdraw {
             reason: "withdraw period is over".to_string(),
         });
@@ -160,25 +169,40 @@ pub fn withdraw(
         }
     };
 
-    let withdraw_asset = Asset {
+    DEPOSITS.save(deps.storage, &info.sender, &(cur_deposit - withdraw_amount))?;
+
+    TOTAL_DEPOSIT.update(deps.storage, |curr| -> StdResult<Uint128> {
+        Ok(curr - withdraw_amount)
+    })?;
+
+    let mut withdraw_asset = Asset {
         info: AssetInfo::NativeToken {
             denom: cfg.base_denom,
         },
         amount: withdraw_amount,
     };
 
-    DEPOSITS.save(
-        deps.storage,
-        &info.sender,
-        &(cur_deposit - withdraw_asset.amount),
-    )?;
+    // to prevent massive withdraw on phase 2, charge fee
+    let withdraw_fee_amount =
+        if current_time > launch_config.phase2_start && withdraw_amount > cfg.withdraw_threshold {
+            let withdraw_fee_amount = withdraw_amount * cfg.withdraw_fee;
+            withdraw_asset.amount -= withdraw_fee_amount;
 
-    TOTAL_DEPOSIT.update(deps.storage, |curr| -> StdResult<Uint128> {
-        Ok(curr - withdraw_asset.amount)
-    })?;
+            withdraw_amount
+        } else {
+            Uint128::zero()
+        };
 
-    let msg = withdraw_asset.into_msg(&deps.querier, info.sender)?;
-    Ok(Response::new().add_message(msg))
+    let tax_amount = withdraw_asset.compute_tax(&deps.querier)?;
+    let msg = withdraw_asset
+        .clone()
+        .into_msg(&deps.querier, info.sender)?;
+    Ok(Response::new().add_message(msg).add_attributes(vec![
+        attr("action", "withdraw"),
+        attr("withdraw_amount", withdraw_asset.amount.to_string()),
+        attr("withdraw_fee", withdraw_fee_amount.to_string()),
+        attr("tax_amount", tax_amount.to_string()),
+    ]))
 }
 
 pub fn withdraw_tokens(
@@ -211,21 +235,48 @@ pub fn withdraw_tokens(
         },
         amount,
     };
-    Ok(Response::new().add_message(to_send.into_msg(&deps.querier, info.sender)?))
+    Ok(Response::new()
+        .add_message(to_send.into_msg(&deps.querier, info.sender)?)
+        .add_attributes(vec![
+            attr("action", "withdraw_tokens"),
+            attr("withdraw_amount", amount.to_string()),
+        ]))
 }
 
-pub fn query_config(deps: Deps) -> StdResult<Config> {
-    CONFIG.load(deps.storage)
-}
+pub fn admin_withdraw(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    let launch_cfg = cfg.launch_config.unwrap();
 
-pub fn query_deposit_info(deps: Deps, address: String) -> StdResult<DepositResponse> {
-    let addr = deps.api.addr_validate(&address)?;
-    Ok(DepositResponse {
-        address_deposit: DEPOSITS
-            .load(deps.storage, &addr)
-            .unwrap_or(Uint128::zero()),
-        total_deposit: TOTAL_DEPOSIT.load(deps.storage)?,
-    })
+    if info.sender.as_str() != cfg.owner.as_str() {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if env.block.time.seconds() < launch_cfg.phase2_end {
+        return Err(ContractError::InvalidAdminWithdraw {
+            reason: "cannot withdraw funds yet".to_string(),
+        });
+    }
+
+    let balance = query_balance(&deps.querier, env.contract.address, cfg.base_denom.clone())?;
+
+    let withdraw_asset = Asset {
+        info: AssetInfo::NativeToken {
+            denom: cfg.base_denom,
+        },
+        amount: balance,
+    };
+
+    let tax_amount = withdraw_asset.compute_tax(&deps.querier)?;
+    let msg = withdraw_asset.into_msg(&deps.querier, info.sender)?;
+    Ok(Response::new().add_message(msg).add_attributes(vec![
+        attr("action", "admin_withdraw"),
+        attr("withdraw_amount", balance.to_string()),
+        attr("tax_amount", tax_amount.to_string()),
+    ]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -234,4 +285,21 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::DepositInfo { address } => to_binary(&query_deposit_info(deps, address)?),
     }
+}
+
+pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    cfg.as_res()
+}
+
+pub fn query_deposit_info(deps: Deps, address: String) -> StdResult<DepositResponse> {
+    let addr = deps.api.addr_validate(&address)?;
+
+    Ok(DepositResponse {
+        address_deposit: DEPOSITS
+            .load(deps.storage, &addr)
+            .unwrap_or(Uint128::zero()),
+        total_deposit: TOTAL_DEPOSIT.load(deps.storage)?,
+    })
 }

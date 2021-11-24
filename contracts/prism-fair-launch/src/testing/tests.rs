@@ -16,6 +16,8 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
         owner: "owner0001".to_string(),
         token: "prism0001".to_string(),
         base_denom: "uusd".to_string(),
+        withdraw_fee: Decimal::percent(1),
+        withdraw_threshold: Uint128::from(100000000u128),
     };
 
     let info = mock_info("owner0001", &[]);
@@ -291,7 +293,7 @@ fn proper_withdraw() {
     );
 
     // successful deposit again
-    info.funds = vec![Coin::new(1_000, "uusd")];
+    info.funds = vec![Coin::new(200_000_000, "uusd")];
     let res = deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
@@ -305,6 +307,29 @@ fn proper_withdraw() {
     )
     .unwrap();
     assert_eq!(res.messages.len(), 1);
+
+    // big withdraw, should charge withdraw fee
+    let res = withdraw(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        Some(Uint128::from(101_000_000u128)),
+    )
+    .unwrap();
+    let msg = &res.messages[0].msg;
+    match msg {
+        CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+            assert_eq!(to_address, info.sender.as_str());
+            assert_eq!(
+                amount[0],
+                Coin {
+                    denom: "uusd".to_string(),
+                    amount: Uint128::from(99989990u128) // 101_000_000 * 99% - tax_cap
+                }
+            );
+        }
+        _ => panic!("Unexpected message: {:?}", msg),
+    };
 
     // fast forward to after phase 2, withdraws not allowed
     env.block.time = env.block.time.plus_seconds(100);
