@@ -496,6 +496,10 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
         .load(deps.storage)?
         .pluna_contract
         .expect("pluna contract must have been registered");
+    let yluna_address = CONFIG
+        .load(deps.storage)?
+        .yluna_contract
+        .expect("yluna contract must have been registered");
 
     let cluna_token_info: TokenInfoResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
@@ -503,15 +507,19 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
 
+    // query pLuna and yLuna supply and use the minimum of the two values
     let pluna_token_info: TokenInfoResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: pluna_address,
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
+    let yluna_token_info: TokenInfoResponse =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: yluna_address,
+            msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
+        }))?;
 
-    // pLuna and yLuna supply must always be the same, so no reason to query yLuna supply
-
-    Ok(cluna_token_info.total_supply + pluna_token_info.total_supply)
+    Ok(cluna_token_info.total_supply + pluna_token_info.total_supply.min(yluna_token_info.total_supply))
 }
 
 fn query_unbond_requests(deps: Deps, address: String) -> StdResult<UnbondRequestsResponse> {
