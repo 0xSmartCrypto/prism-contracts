@@ -1,20 +1,26 @@
 use crate::state::{
-    Config, DistributionStatus, RewardInfo, BOND_AMOUNTS, CONFIG, DISTRIBUTION_STATUS, REWARD_INFO,
+    Config, DistributionStatus, RewardInfo, BOND_AMOUNTS, CONFIG, DISTRIBUTION_STATUS,
+    PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST,
 };
 use crate::vest::{claim_withdrawn_rewards, withdraw_rewards};
+use astroport::asset::{Asset, AssetInfo};
+use astroport::querier::{query_balance, query_token_balance};
 use cosmwasm_std::{
     entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QueryRequest, Response, StdError, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
+    MessageInfo, Order, QueryRequest, Response, StdError, StdResult, Storage, Uint128, WasmMsg,
+    WasmQuery,
 };
 use cw20::Cw20ReceiveMsg;
 use cw20_base::msg::ExecuteMsg as TokenMsg;
-use prism_protocol::launch_pool::{Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
+use prism_protocol::launch_pool::{
+    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, VestingStatusResponse,
+};
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
+    RewardAssetWhitelistResponse,
 };
 use std::cmp::min;
-use astroport::asset::{Asset, AssetInfo};
-use astroport::querier::{query_balance, query_token_balance};
+use std::convert::TryInto;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -24,10 +30,10 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
     let cfg = Config {
-        owner: msg.owner,
-        prism_token: msg.prism_token,
-        yluna_staking: msg.yluna_staking,
-        yluna_token: msg.yluna_token,
+        owner: deps.api.addr_validate(&msg.owner)?,
+        prism_token: deps.api.addr_validate(&msg.prism_token)?,
+        yluna_staking: deps.api.addr_validate(&msg.yluna_staking)?,
+        yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
         distribution_schedule: msg.distribution_schedule,
     };
 
@@ -35,6 +41,7 @@ pub fn instantiate(
         return Err(StdError::generic_err("invalid distribution schedule"));
     }
     CONFIG.save(deps.storage, &cfg)?;
+    DISTRIBUTION_STATUS.save(deps.storage, &DistributionStatus::default())?;
     Ok(Response::new())
 }
 
@@ -48,6 +55,42 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::AdminWithdrawRewards {} => admin_withdraw_rewards(deps, env, info),
         ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
             admin_send_withdrawn_rewards(deps, env, info, &original_balances)
+        }
+    }
+}
+
+pub fn receive_cw20(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    cw20_msg: Cw20ReceiveMsg,
+) -> StdResult<Response> {
+    let msg = cw20_msg.msg;
+
+    match from_binary(&msg)? {
+        Cw20HookMsg::Bond {} => {
+            let cfg = CONFIG.load(deps.storage)?;
+
+            // only yluna token contract can execute this message
+            if cfg.yluna_token != info.sender.to_string() {
+                return Err(StdError::generic_err("unauthorized"));
+            }
+
+            bond(deps, env, &cw20_msg.sender, cw20_msg.amount)
+        }
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::DistributionStatus {} => to_binary(&_update_reward_index(deps.storage, &env)?),
+        QueryMsg::RewardInfo { staker_addr } => {
+            to_binary(&_pull_pending_rewards(deps.storage, &staker_addr)?)
+        }
+        QueryMsg::VestingStatus { staker_addr } => {
+            to_binary(&query_vesting_status(deps, env, staker_addr)?)
         }
     }
 }
@@ -78,25 +121,31 @@ pub fn admin_withdraw_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> Std
         return Err(StdError::generic_err("unauthorized"));
     }
 
-    let whitelist: Vec<AssetInfo> = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: cfg.yluna_staking.clone(),
-        msg: to_binary(&StakingQueryMsg::Whitelist {})?,
-    }))?;
+    let whitelist_res: RewardAssetWhitelistResponse =
+        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: cfg.yluna_staking.to_string(),
+            msg: to_binary(&StakingQueryMsg::RewardAssetWhitelist {})?,
+        }))?;
 
     let mut balances = vec![];
-    for asset_info in whitelist {
+    for asset_info in whitelist_res.assets {
         balances.push(to_asset_balance(&deps, &env.contract.address, &asset_info)?);
     }
 
-    Ok(
-        Response::new().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+    Ok(Response::new().add_messages(vec![
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: cfg.yluna_staking.to_string(),
+            msg: to_binary(&StakingExecuteMsg::ClaimRewards {})?,
+            funds: vec![],
+        }),
+        CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.to_string(),
             msg: to_binary(&ExecuteMsg::AdminSendWithdrawnRewards {
                 original_balances: balances,
             })?,
             funds: vec![],
-        })),
-    )
+        }),
+    ]))
 }
 
 pub fn admin_send_withdrawn_rewards(
@@ -130,14 +179,22 @@ pub fn bond(deps: DepsMut, env: Env, sender: &String, amount: Uint128) -> StdRes
     update_reward_index(deps.storage, &env)?;
     pull_pending_rewards(deps.storage, &sender)?;
     let cfg = CONFIG.load(deps.storage)?;
-    let current_bound = BOND_AMOUNTS.load(deps.storage, sender.as_bytes())?;
+    let current_bound = BOND_AMOUNTS
+        .load(deps.storage, sender.as_bytes())
+        .unwrap_or_default();
     BOND_AMOUNTS.save(deps.storage, sender.as_bytes(), &(current_bound + amount))?;
+
+    DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
+        item.total_bond_amount += amount;
+
+        Ok(item)
+    })?;
 
     Ok(
         Response::new().add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_token,
+            contract_addr: cfg.yluna_token.to_string(),
             msg: to_binary(&TokenMsg::Send {
-                contract: cfg.yluna_staking,
+                contract: cfg.yluna_staking.to_string(),
                 amount,
                 msg: to_binary(&StakingHookMsg::Bond { mode: None })?,
             })?,
@@ -159,12 +216,14 @@ pub fn unbond(deps: DepsMut, env: Env, info: MessageInfo, amount: Uint128) -> St
 
     Ok(Response::new().add_messages(vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_staking,
-            msg: to_binary(&StakingExecuteMsg::Unbond { amount })?,
+            contract_addr: cfg.yluna_staking.to_string(),
+            msg: to_binary(&StakingExecuteMsg::Unbond {
+                amount: Some(amount),
+            })?,
             funds: vec![],
         }),
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_token,
+            contract_addr: cfg.yluna_token.to_string(),
             msg: to_binary(&TokenMsg::Transfer {
                 recipient: info.sender.to_string(),
                 amount,
@@ -202,7 +261,7 @@ pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<Distr
     let mut distribution_status = DISTRIBUTION_STATUS.load(storage)?;
     let (start, end, amount) = cfg.distribution_schedule;
     if env.block.time.seconds() < start {
-        return Err(StdError::generic_err("has not started distributing yet"));
+        return Ok(distribution_status);
     };
     let denom = end - start;
     let total_distribute =
@@ -228,39 +287,41 @@ pub fn update_reward_index(storage: &mut dyn Storage, env: &Env) -> StdResult<()
     DISTRIBUTION_STATUS.save(storage, &distribution_status)
 }
 
-pub fn receive_cw20(
-    deps: DepsMut,
+pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
+    let cfg: Config = CONFIG.load(deps.storage)?;
+
+    Ok(cfg.as_res())
+}
+
+pub fn query_vesting_status(
+    deps: Deps,
     env: Env,
-    info: MessageInfo,
-    cw20_msg: Cw20ReceiveMsg,
-) -> StdResult<Response> {
-    let msg = cw20_msg.msg;
+    staker_addr: String,
+) -> StdResult<VestingStatusResponse> {
+    let current_time = env.block.time.seconds();
 
-    match from_binary(&msg)? {
-        Cw20HookMsg::Bond {} => {
-            let cfg = CONFIG.load(deps.storage)?;
+    let mut can_withdraw = PENDING_WITHDRAW
+        .load(deps.storage, staker_addr.as_bytes())
+        .unwrap_or(Uint128::zero());
+    let mut scheduled_vests: Vec<(u64, Uint128)> = vec![];
 
-            // only yluna token contract can execute this message
-            if cfg.yluna_token != info.sender.to_string() {
-                return Err(StdError::generic_err("unauthorized"));
-            }
-
-            bond(deps, env, &cw20_msg.sender, cw20_msg.amount)
+    for item in SCHEDULED_VEST.prefix(staker_addr.as_bytes()).range(
+        deps.storage,
+        None,
+        None,
+        Order::Ascending,
+    ) {
+        let (key, unlocked) = item?;
+        let end_time = u64::from_be_bytes(key.try_into().unwrap());
+        scheduled_vests.push((end_time, unlocked));
+        if current_time < end_time {
+            break;
         }
+        can_withdraw += unlocked;
     }
-}
 
-pub fn query_config(deps: Deps) -> StdResult<Config> {
-    CONFIG.load(deps.storage)
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::DistributionStatus {} => to_binary(&_update_reward_index(deps.storage, &env)?),
-        QueryMsg::RewardInfo { staker_addr } => {
-            to_binary(&_pull_pending_rewards(deps.storage, &staker_addr)?)
-        }
-    }
+    Ok(VestingStatusResponse {
+        scheduled_vests,
+        withdrawable: can_withdraw,
+    })
 }

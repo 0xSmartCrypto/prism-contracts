@@ -12,6 +12,7 @@ use astroport::asset::{AssetInfo, PairInfo};
 use astroport::factory::PairType;
 use cw20::BalanceResponse as Cw20BalanceResponse;
 use prism_protocol::vault::StateResponse as VaultStateResponse;
+use prism_protocol::yasset_staking::RewardAssetWhitelistResponse;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use terra_cosmwasm::{
@@ -89,6 +90,7 @@ pub enum QueryMsg {
     Balance { address: String },
     TokenInfo {},
     State {},
+    RewardAssetWhitelist {},
 }
 
 impl WasmMockQuerier {
@@ -225,6 +227,19 @@ impl WasmMockQuerier {
                             actual_unbonded_amount: Uint128::zero(),
                             last_unbonded_time: 0u64,
                             last_processed_batch: 0u64,
+                        })
+                        .unwrap(),
+                    )),
+                    QueryMsg::RewardAssetWhitelist {} => SystemResult::Ok(ContractResult::Ok(
+                        to_binary(&RewardAssetWhitelistResponse {
+                            assets: vec![
+                                AssetInfo::Token {
+                                    contract_addr: Addr::unchecked("yluna0000"),
+                                },
+                                AssetInfo::Token {
+                                    contract_addr: Addr::unchecked("pluna0000"),
+                                },
+                            ]
                         })
                         .unwrap(),
                     )),
