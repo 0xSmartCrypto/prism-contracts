@@ -507,7 +507,7 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
 
-    // query pLuna and yLuna supply and use the max of the two values
+    // query pLuna and yLuna supply and use the minimum of the two values
     let pluna_token_info: TokenInfoResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: pluna_address,
@@ -519,7 +519,7 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
 
-    Ok(cluna_token_info.total_supply + pluna_token_info.total_supply.max(yluna_token_info.total_supply))
+    Ok(cluna_token_info.total_supply + pluna_token_info.total_supply.min(yluna_token_info.total_supply))
 }
 
 fn query_unbond_requests(deps: Deps, address: String) -> StdResult<UnbondRequestsResponse> {
