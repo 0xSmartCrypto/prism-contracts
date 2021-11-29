@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::Uint128;
 use cw20::Cw20ReceiveMsg;
 use astroport::asset::Asset;
 
@@ -49,7 +49,6 @@ pub enum Cw20HookMsg {
     Bond {},
 }
 
-/// We currently take no arguments for migrations
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MigrateMsg {}
 
@@ -59,12 +58,20 @@ pub enum QueryMsg {
     Config {},
     DistributionStatus {},
     RewardInfo { staker_addr: String },
+    VestingStatus { staker_addr: String },
 }
 
-// We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PoolInfoResponse {
-    pub asset_token: String,
-    pub reward_index: Decimal,
-    pub pending_reward: Uint128,
+pub struct ConfigResponse {
+    pub owner: String,
+    pub prism_token: String,
+    pub yluna_staking: String,
+    pub yluna_token: String,
+    pub distribution_schedule: (u64, u64, Uint128),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct VestingStatusResponse {
+    pub scheduled_vests: Vec<(u64, Uint128)>,
+    pub withdrawable: Uint128,
 }
