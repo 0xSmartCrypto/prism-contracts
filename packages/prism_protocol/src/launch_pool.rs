@@ -1,9 +1,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::Uint128;
-use cw20::Cw20ReceiveMsg;
 use astroport::asset::Asset;
+use cosmwasm_std::{Decimal, Uint128};
+use cw20::Cw20ReceiveMsg;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -25,10 +25,10 @@ pub enum ExecuteMsg {
     ////////////////////////
     /// Unbond yLUNA
     Unbond {
-        amount: Uint128,
+        amount: Option<Uint128>,
     },
     /// Withdraw $PRISM rewards
-    /// Starts 30 days vesting period
+    /// Starts 21 day vesting period
     WithdrawRewards {},
 
     ClaimWithdrawnRewards {},
@@ -50,9 +50,6 @@ pub enum Cw20HookMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MigrateMsg {}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
@@ -68,6 +65,20 @@ pub struct ConfigResponse {
     pub yluna_staking: String,
     pub yluna_token: String,
     pub distribution_schedule: (u64, u64, Uint128),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DistributionStatusResponse {
+    pub total_distributed: Uint128,
+    pub total_bond_amount: Uint128,
+    pub pending_reward: Uint128,
+    pub reward_index: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct RewardInfoResponse {
+    pub index: Decimal,
+    pub pending_reward: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
