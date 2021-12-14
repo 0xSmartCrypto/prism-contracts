@@ -1,3 +1,4 @@
+use std::fmt;
 use cosmwasm_std::{Binary, Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
@@ -61,7 +62,6 @@ pub enum ExecuteMsg {
 
     // updates the rewards that each user can claim via ClaimRewards
     UpdateRewards { },
-    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -75,15 +75,17 @@ pub enum QueryMsg {
     WithdrawableUnbonded { 
         address: String, 
     },
-    StakerInfo {
-        staker: String,
-        staking_token: Option<String>,
-    },
-    TokenStakersInfo {
-        staking_token: String,
-        start_after: Option<String>,
-        limit: Option<u32>,
-    },
+
+    // build this out later if needed
+    // StakerInfo {
+    //     staker: String,
+    //     staking_token: Option<String>,
+    // },
+    // TokenStakersInfo {
+    //     staking_token: String,
+    //     start_after: Option<String>,
+    //     limit: Option<u32>,
+    // },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -97,23 +99,20 @@ pub struct ConfigResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfoResponse {
-    //WIP
+    pub bond_amount: Uint128,
+    pub last_received: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct WithdrawableUnbondedResponse {
-    //WIP
-}
+// build these out later if needed
+// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+// pub struct StakerInfoResponse {
+//     // return for a specific 
+// }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct StakerInfoResponse {
-    //WIP
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TokenStakersInfoResponse {
-    //WIP
-}
+// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+// pub struct TokenStakersInfoResponse {
+//     //WIP
+// }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]

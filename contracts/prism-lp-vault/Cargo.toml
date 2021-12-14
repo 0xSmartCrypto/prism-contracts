@@ -1,10 +1,10 @@
 
 [package]
-name = "prism-astroport-lp"
+name = "prism-lp-vault"
 version = "1.0.0"
 authors = ["Prism"]
 edition = "2018"
-description = "Prism yAsset staking contract"
+description = "LP refracting contract"
 license = "Apache-2.0"
 
 exclude = [
