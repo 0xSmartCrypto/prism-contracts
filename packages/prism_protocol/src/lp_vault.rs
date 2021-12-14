@@ -70,10 +70,8 @@ pub enum QueryMsg {
     Config {},
 
     RewardInfo { 
-        stakerAddr: String, 
-    },
-    WithdrawableUnbonded { 
-        address: String, 
+        stakerAddr: String,
+        tokenAddr: String,
     },
 
     // build this out later if needed
@@ -95,12 +93,6 @@ pub struct ConfigResponse {
     pub gov: String,
     pub collector: String,
     pub collect_period: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct RewardInfoResponse {
-    pub bond_amount: Uint128,
-    pub last_received: u64,
 }
 
 // build these out later if needed

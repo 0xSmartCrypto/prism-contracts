@@ -1,5 +1,4 @@
-use prism_protocol::de::deserialize_key;
-use prism_protocol::lp_vault::{ConfigResponse, RewardInfoResponse, StakingMode};
+use prism_protocol::lp_vault::{ConfigResponse, StakingMode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -47,13 +46,5 @@ impl Config {
 pub struct RewardInfo {
     pub bond_amount: Uint128,
     pub last_received: u64, // we will lazily calculate the available rewards to be claimed when ClaimRewards is called by user
-}
-
-impl RewardInfo {
-    pub fn as_res(&self, staking_token: &Addr) -> RewardInfoResponse {
-        RewardInfoResponse {
-            bond_amount: self.bond_amount,
-            last_received: self.last_received,
-        }
-    }
+    pub staking_mode: Option<StakingMode>,
 }

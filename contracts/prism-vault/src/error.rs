@@ -10,7 +10,7 @@ pub enum ContractError {
     Unauthorized {},
 
     #[error("The provided token is not available for staking")]
-    InvalidLPToken {},
+    InvalidStakingToken {},
 
     #[error("This address does not have staked tokens")]
     NothingStaked {},
