@@ -7,13 +7,13 @@ use crate::state::{
 
 use prism_protocol::lp_vault::{ConfigResponse};
 
-pub fn query_config(deps: Deps) -> Result<ConfigResponse, ContractError> {
+pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     Ok(config.as_res()?)
 }
 
-pub fn query_reward_info(deps: Deps, staker: Addr, staking_token: Addr) -> StdResult<RewardInfo> {
+pub fn query_reward_info(deps: Deps, staker: String, staking_token: String) -> StdResult<RewardInfo> {
     let staker_raw: CanonicalAddr = deps.api.addr_canonicalize(staker.as_str())?;
     let staking_token_raw: CanonicalAddr = deps.api.addr_canonicalize(staking_token.as_str())?;
     let reward_info: RewardInfo = REWARD_INFO.load(deps.storage, (staker_raw.as_slice(), staking_token_raw.as_slice()))

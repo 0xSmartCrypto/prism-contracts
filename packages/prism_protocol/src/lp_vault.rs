@@ -69,7 +69,7 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     Config {},
 
-    RewardInfo { 
+    GetRewardInfo { 
         stakerAddr: String,
         tokenAddr: String,
     },
