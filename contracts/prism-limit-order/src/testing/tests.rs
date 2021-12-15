@@ -13,7 +13,7 @@ use cosmwasm_std::{
 use cw20::Cw20ExecuteMsg;
 use std::str::FromStr;
 
-use super::mock_querier::{mock_dependencies, WasmMockQuerier};
+use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::limit_order::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, LastOrderIdResponse, OrderBy, OrderResponse,
     OrdersResponse, QueryMsg,
