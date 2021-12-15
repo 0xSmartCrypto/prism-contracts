@@ -1,6 +1,6 @@
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_storage_plus::{Item, Map};
-use prism_protocol::launch_pool::ConfigResponse;
+use prism_protocol::launch_pool::{ConfigResponse, DistributionStatusResponse, RewardInfoResponse};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -13,16 +13,23 @@ pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");
 pub const SCHEDULED_VEST: Map<(&[u8], &[u8]), Uint128> = Map::new("scheduled_vest");
 pub const PENDING_WITHDRAW: Map<&[u8], Uint128> = Map::new("pending_withdraw");
 
-// seconds in a day, make time discrete per day
-pub const TIME_UNIT: u64 = 60 * 60 * 24;
-pub const REDEMPTION_TIME: u64 = TIME_UNIT * 21u64;
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct DistributionStatus {
     pub total_distributed: Uint128,
     pub total_bond_amount: Uint128,
     pub pending_reward: Uint128,
     pub reward_index: Decimal,
+}
+
+impl DistributionStatus {
+    pub fn as_res(&self) -> DistributionStatusResponse {
+        DistributionStatusResponse {
+            total_distributed: self.total_distributed,
+            total_bond_amount: self.total_bond_amount,
+            pending_reward: self.pending_reward,
+            reward_index: self.reward_index,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -50,4 +57,13 @@ impl Config {
 pub struct RewardInfo {
     pub index: Decimal,
     pub pending_reward: Uint128,
+}
+
+impl RewardInfo {
+    pub fn as_res(&self) -> RewardInfoResponse {
+        RewardInfoResponse {
+            index: self.index,
+            pending_reward: self.pending_reward,
+        }
+    }
 }

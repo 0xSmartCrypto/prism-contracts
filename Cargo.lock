@@ -401,22 +401,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cw20-base"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe3791e0f6b4a0a82b86541d48dcc67c2d607da8e5691a91b40b2c06ddf09c52"
-dependencies = [
- "cosmwasm-std",
- "cw-storage-plus",
- "cw0",
- "cw2",
- "cw20",
- "schemars",
- "serde",
- "thiserror",
-]
-
-[[package]]
 name = "darling"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1001,11 +985,11 @@ name = "prism-launch-pool"
 version = "1.0.0"
 dependencies = [
  "astroport",
+ "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
  "cw-storage-plus",
  "cw20",
- "cw20-base",
  "hex",
  "lazy_static",
  "prism-common",
@@ -1013,6 +997,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]
