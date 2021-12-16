@@ -53,7 +53,7 @@ pub fn execute(
 ) -> StdResult<Response> {
     match msg {
         //ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
-        ExecuteMsg::UpdateConfig { owner, vault, gov, collector, collect_period } => update_config(deps, env, info, owner, vault, gov, collector, collect_period),
+        ExecuteMsg::UpdateConfig { owner, vault, gov, collector, collect_period } => update_config(deps, env, info, owner, vault, gov, collector, collect_period), // should be contract restricted
         ExecuteMsg::Bond { mode } => bond(deps, env, info, mode),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
