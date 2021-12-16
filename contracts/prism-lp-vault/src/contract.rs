@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    Uint128,
+    Uint128, attr
 };
 
 use prism_protocol::lp_vault::{
@@ -12,7 +12,7 @@ use prism_protocol::lp_vault::{
 
 use crate::state::{Config, RewardInfo, CONFIG, REWARD_INFO, LAST_COLLECTED};
 use crate::query::{query_config, query_reward_info};
-use crate::execute::{update_config, bond, unbond, claim_rewards, calculate_fees, update_rewards};
+use crate::execute::{update_config, bond, unbond, claim_rewards, update_staking_mode, calculate_fees, update_rewards};
 
 use astroport::asset::AssetInfo;
 use cw20::Cw20ReceiveMsg;
@@ -21,27 +21,24 @@ use terra_cosmwasm::TerraMsgWrapper;
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
-    _info: MessageInfo,
+    env: Env,
+    info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
-    // CONFIG.save(
-    //     deps.storage,
-    //     &Config {
-    //         vault: deps.api.addr_validate(&msg.vault)?,
-    //         gov: deps.api.addr_validate(&msg.gov)?,
-    //         collector: deps.api.addr_validate(&msg.collector)?,
-    //         reward_denom: msg.reward_denom,
-    //         protocol_fee: msg.protocol_fee,
-    //         cluna_token: deps.api.addr_validate(&msg.cluna_token)?,
-    //         yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
-    //         pluna_token: deps.api.addr_validate(&msg.pluna_token)?,
-    //         prism_token: deps.api.addr_validate(&msg.prism_token)?,
-    //         withdraw_fee: msg.withdraw_fee,
-    //     },
-    // )?;
+    let sender = info.sender.clone();
+    let data = Config {
+        owner: sender.to_string(),
+        vault: msg.vault,
+        gov: msg.gov,
+        collector: msg.collector,
+        collect_period: msg.collect_period,
+    };
+    CONFIG.save(deps.storage, &data)?;
 
-    Ok(Response::default())
+    let init_collected: u64 = 0;
+    LAST_COLLECTED.save(deps.storage, &init_collected)?;
+
+    Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -54,11 +51,12 @@ pub fn execute(
     match msg {
         //ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
         ExecuteMsg::UpdateConfig { owner, vault, gov, collector, collect_period } => update_config(deps, env, info, owner, vault, gov, collector, collect_period), // should be contract restricted
-        ExecuteMsg::Bond { mode } => bond(deps, env, info, mode),
-        ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
-        ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
-        ExecuteMsg::CalculateFees {} => calculate_fees(deps, env, info), // should be contract restricted
-        ExecuteMsg::UpdateRewards {} => update_rewards(deps, env, info), // should be contract restricted
+        ExecuteMsg::Bond { token, mode } => bond(deps, env, info, token, mode),
+        ExecuteMsg::Unbond { token, amount } => unbond(deps, env, info, token, amount),
+        ExecuteMsg::ClaimRewards {token, } => claim_rewards(deps, env, info, token),
+        ExecuteMsg::UpdateStakingMode { token, mode } => update_staking_mode(deps, env, info, token, mode),
+        ExecuteMsg::CalculateFees {user, token, } => calculate_fees(deps, env, info, user, token), // should be contract restricted
+        ExecuteMsg::UpdateRewards {user, token} => update_rewards(deps, env, info, user, token), // should be contract restricted
     }
 }
 

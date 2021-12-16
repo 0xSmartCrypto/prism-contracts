@@ -43,13 +43,19 @@ pub enum ExecuteMsg {
     // Receives some amount of cw20 LP token from user
     // Attempts to put the LP token into an astro generator
     // On successful attempt, mints [y/p]LP and issues to user
-    Bond { mode: Option<StakingMode>,  },
+    Bond { token: String,
+           mode: Option<StakingMode>,  },
 
     // unbonds 
-    Unbond { amount: Option<Uint128>, },
+    Unbond { token: String,
+             amount: Option<Uint128>, },
 
     // withdraw rewards
-    ClaimRewards {},
+    ClaimRewards {token: String, },
+
+    // lets a user update their staking mode
+    UpdateStakingMode { token: String,
+                        mode: StakingMode,  },
 
     ////////////////////
     /// internal operations
@@ -58,10 +64,12 @@ pub enum ExecuteMsg {
     // runs on a fixed schedule (collect_period)
     // calculates AMM fees since last collection
     // burns corresponding number of LP tokens
-    CalculateFees { },
+    CalculateFees { user: String,
+                    token: String, },
 
     // updates the rewards that each user can claim via ClaimRewards
-    UpdateRewards { },
+    UpdateRewards { user: String,
+                    token: String, },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

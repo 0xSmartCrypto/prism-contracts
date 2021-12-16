@@ -46,5 +46,12 @@ impl Config {
 pub struct RewardInfo {
     pub bond_amount: Uint128,
     pub last_received: u64, // we will lazily calculate the available rewards to be claimed when ClaimRewards is called by user
+
+    // we will likely want to encapsulate this into its own reward data structure
+    pub pending_xprism_reward: Uint128,
+    pub pending_underlying_reward_1: Uint128,
+    pub pending_underlying_reward_2: Uint128,
+    pub pending_underlying_astro: Uint128,
+
     pub staking_mode: Option<StakingMode>,
 }
