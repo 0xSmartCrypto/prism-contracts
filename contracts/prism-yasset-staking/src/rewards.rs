@@ -31,7 +31,7 @@ pub fn deposit_rewards(
     let stakers_portion = if total_bond_amount.is_zero() {
         Decimal::zero()
     } else {
-        Decimal::from_ratio(total_bond_amount, vault_bond_amount)
+        Decimal::from_ratio(total_bond_amount, vault_bond_amount).min(Decimal::one())
     };
 
     let mut messages = vec![];
