@@ -2666,20 +2666,18 @@ pub fn proper_update_config() {
     let invalid_owner = "invalid_owner".to_string();
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
-    let yluna_contract = "yluna".to_string();
-    let pluna_contract = "pluna".to_string();
-    let cluna_contract = "cluna".to_string();
 
-    init(
-        deps.borrow_mut(),
-        owner.clone(),
-        yluna_staking,
-        cluna_contract,
-        yluna_contract,
-        pluna_contract,
-        validator.address.clone(),
-    );
+    let msg = InstantiateMsg {
+        epoch_period: 30,
+        underlying_coin_denom: "uluna".to_string(),
+        unbonding_period: 2,
+        peg_recovery_fee: Decimal::zero(),
+        er_threshold: Decimal::one(),
+        validator: validator.address.clone(),
+    };
+
+    let owner_info = mock_info(owner.as_str(), &[coin(1000000, "uluna")]);
+    instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
 
     // only the owner can call this message
     let update_config = UpdateConfig {

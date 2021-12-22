@@ -76,6 +76,9 @@ pub fn execute_update_config(
         })?;
     }
     if let Some(reward) = yluna_staking {
+        if conf.yluna_staking.is_some() {
+            return Err(StdError::generic_err("yluna_staking already set"));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.yluna_staking = Some(reward.clone());
             Ok(last_config)
@@ -88,6 +91,9 @@ pub fn execute_update_config(
     }
 
     if let Some(token) = cluna_contract {
+        if conf.cluna_contract.is_some() {
+            return Err(StdError::generic_err("cluna_contract already set"));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.cluna_contract = Some(token);
             Ok(last_config)
@@ -95,6 +101,9 @@ pub fn execute_update_config(
     }
 
     if let Some(token) = yluna_contract {
+        if conf.yluna_contract.is_some() {
+            return Err(StdError::generic_err("yluna_contract already set"));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.yluna_contract = Some(token);
             Ok(last_config)
@@ -102,6 +111,9 @@ pub fn execute_update_config(
     }
 
     if let Some(token) = pluna_contract {
+        if conf.pluna_contract.is_some() {
+            return Err(StdError::generic_err("pluna_contract already set"));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.pluna_contract = Some(token);
             Ok(last_config)
@@ -109,6 +121,11 @@ pub fn execute_update_config(
     }
 
     if let Some(airdrop) = airdrop_registry_contract {
+        if conf.airdrop_registry_contract.is_some() {
+            return Err(StdError::generic_err(
+                "airdrop_registry_contract already set",
+            ));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.airdrop_registry_contract = Some(airdrop);
             Ok(last_config)
