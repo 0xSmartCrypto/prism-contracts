@@ -6,9 +6,7 @@ use crate::state::{
     config_read, config_store, poll_read, poll_voter_read, read_poll_voters, read_polls,
     read_tmp_poll_id, store_last_poll_id, Config,
 };
-use crate::voting::{
-    query_voting_tokens, stake_voting_tokens, withdraw_voting_tokens,
-};
+use crate::voting::{query_voting_tokens, stake_voting_tokens, withdraw_voting_tokens};
 
 use cosmwasm_std::{
     from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply, Response,

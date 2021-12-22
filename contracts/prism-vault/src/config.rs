@@ -1,6 +1,9 @@
-use crate::state::{
-    read_validators, remove_white_validators, store_white_validators, Parameters, CONFIG,
-    PARAMETERS,
+use crate::{
+    contract::validate_rate,
+    state::{
+        read_validators, remove_white_validators, store_white_validators, Parameters, CONFIG,
+        PARAMETERS,
+    },
 };
 use cosmwasm_std::{
     attr, to_binary, Addr, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, MessageInfo,
@@ -35,8 +38,8 @@ pub fn execute_update_params(
         epoch_period: epoch_period.unwrap_or(params.epoch_period),
         underlying_coin_denom: params.underlying_coin_denom,
         unbonding_period: unbonding_period.unwrap_or(params.unbonding_period),
-        peg_recovery_fee: peg_recovery_fee.unwrap_or(params.peg_recovery_fee),
-        er_threshold: er_threshold.unwrap_or(params.er_threshold),
+        peg_recovery_fee: validate_rate(peg_recovery_fee.unwrap_or(params.peg_recovery_fee))?,
+        er_threshold: validate_rate(er_threshold.unwrap_or(params.er_threshold))?,
     };
 
     PARAMETERS.save(deps.storage, &new_params)?;

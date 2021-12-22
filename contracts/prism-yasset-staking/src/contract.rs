@@ -2,8 +2,8 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    Uint128,
+    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, Uint128,
 };
 
 use prism_protocol::yasset_staking::{
@@ -39,7 +39,7 @@ pub fn instantiate(
             yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
             pluna_token: deps.api.addr_validate(&msg.pluna_token)?,
             prism_token: deps.api.addr_validate(&msg.prism_token)?,
-            withdraw_fee: msg.withdraw_fee,
+            withdraw_fee: validate_rate(msg.withdraw_fee)?,
         },
     )?;
 
@@ -138,4 +138,15 @@ pub fn query_pool_info(deps: Deps, asset_token: String) -> StdResult<PoolInfoRes
         asset_token,
         reward_index: pool_info.reward_index,
     })
+}
+
+fn validate_rate(rate: Decimal) -> StdResult<Decimal> {
+    if rate > Decimal::one() {
+        return Err(StdError::generic_err(format!(
+            "Rate can not be bigger than one (given value: {})",
+            rate
+        )));
+    }
+
+    Ok(rate)
 }

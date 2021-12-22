@@ -75,8 +75,8 @@ pub fn instantiate(
         epoch_period: msg.epoch_period,
         underlying_coin_denom: msg.underlying_coin_denom,
         unbonding_period: msg.unbonding_period,
-        peg_recovery_fee: msg.peg_recovery_fee,
-        er_threshold: msg.er_threshold,
+        peg_recovery_fee: validate_rate(msg.peg_recovery_fee)?,
+        er_threshold: validate_rate(msg.er_threshold)?,
     };
 
     PARAMETERS.save(deps.storage, &params)?;
@@ -519,7 +519,10 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
 
-    Ok(cluna_token_info.total_supply + pluna_token_info.total_supply.min(yluna_token_info.total_supply))
+    Ok(cluna_token_info.total_supply
+        + pluna_token_info
+            .total_supply
+            .min(yluna_token_info.total_supply))
 }
 
 fn query_unbond_requests(deps: Deps, address: String) -> StdResult<UnbondRequestsResponse> {
@@ -537,4 +540,15 @@ fn query_unbond_requests_limitation(
     let requests = all_unbond_history(deps.storage, start, limit)?;
     let res = AllHistoryResponse { history: requests };
     Ok(res)
+}
+
+pub fn validate_rate(rate: Decimal) -> StdResult<Decimal> {
+    if rate > Decimal::one() {
+        return Err(StdError::generic_err(format!(
+            "Rate can not be bigger than one (given value: {})",
+            rate
+        )));
+    }
+
+    Ok(rate)
 }

@@ -14,9 +14,9 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
-    Unbond { 
+    Unbond {
         staking_token: String,
-        amount: Option<Uint128> 
+        amount: Option<Uint128>,
     },
     ClaimRewards {
         staking_token: Option<String>,
@@ -68,7 +68,7 @@ pub struct PoolInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StakerInfoResponse {
     pub staker: String,
-    pub reward_infos: Vec<RewardInfoResponseItem>
+    pub reward_infos: Vec<RewardInfoResponseItem>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

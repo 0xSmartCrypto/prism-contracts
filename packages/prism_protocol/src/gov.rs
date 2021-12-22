@@ -52,7 +52,7 @@ pub enum ExecuteMsg {
     SnapshotPoll {
         poll_id: u64,
     },
-    ClaimRedeemedXprism {}
+    ClaimRedeemedXprism {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -110,7 +110,7 @@ pub enum QueryMsg {
         start_after: Option<u64>,
         limit: Option<u32>,
         order_by: Option<OrderBy>,
-    }
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
