@@ -23,20 +23,18 @@ pub const LAST_COLLECTED: Item<u64> = Item::new("last_collected");
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: String,
-    pub vault: String,
+    pub generator: String,
     pub gov: String,
     pub collector: String,
-    pub collect_period: u64,
 }
 
 impl Config {
     pub fn as_res(&self) -> StdResult<ConfigResponse> {
         let res = ConfigResponse {
             owner: self.owner.to_string(),
-            vault: self.vault.to_string(),
+            generator: self.generator.to_string(),
             gov: self.gov.to_string(),
             collector: self.collector.to_string(),
-            collect_period: self.collect_period,
         };
         Ok(res)
     }

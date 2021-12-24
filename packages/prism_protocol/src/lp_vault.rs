@@ -10,10 +10,9 @@ use astroport::asset::{Asset, AssetInfo};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
-    pub vault: String,
+    pub generator: String,
     pub gov: String,
     pub collector: String,
-    pub collect_period: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -22,54 +21,64 @@ pub enum ExecuteMsg {
     ////////////////////
     /// Owner's operations
     ////////////////////
-
+    
     // Set the owner
     UpdateConfig {
         owner: Option<String>,
-        vault: Option<String>,
+        generator: Option<String>,
         gov: Option<String>,
         collector: Option<String>,
-        collect_period: Option<u64>,
     },
-
 
     ////////////////////
     /// User's operations
     ////////////////////
 
-    // some of these should be in Cw20ReceiveMsg interfaces prob
-    // and only called by the asset token
+    Receive(Cw20ReceiveMsg),
 
-    // Receives some amount of cw20 LP token from user
-    // Attempts to put the LP token into an astro generator
-    // On successful attempt, mints [y/p]LP and issues to user
-    Bond { token: String,
-           mode: Option<StakingMode>,  },
-
-    // unbonds 
+    // cLP -> LP
     Unbond { token: String,
-             amount: Option<Uint128>, },
+             amount: Option<Uint128> },
 
-    // withdraw rewards
-    ClaimRewards {token: String, },
+    // cLP -> [p/y]LP
+    Split { amount: Uint128, },
+
+    // [p/y]LP -> cLP
+    Merge { amount: Uint128, },
+
+    // stake yLP to get rewards
+    Stake { amount: Uint128, },
+
+    // unstake yLP
+    Unstake { amount: Uint128, },
 
     // lets a user update their staking mode
     UpdateStakingMode { token: String,
-                        mode: StakingMode,  },
+                        mode: StakingMode, },
 
     ////////////////////
     /// internal operations
     ///////////////////
     
-    // runs on a fixed schedule (collect_period)
-    // calculates AMM fees since last collection
-    // burns corresponding number of LP tokens
-    CalculateFees { user: String,
-                    token: String, },
+    // performs LP -> cLP conversion
+    Mint { user: String,
+           token: String,
+           amount: Uint128, },
+    
+    // burns cLP and updates internal state
+    Burn { user: String,
+           token: String,
+           amount: Uint128, },
 
-    // updates the rewards that each user can claim via ClaimRewards
-    UpdateRewards { user: String,
-                    token: String, },
+    // updates the rewards that each user can claim on every bond/unbond
+    UpdateRewards { },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Cw20HookMsg {
+    // LP -> cLP
+    Bond { },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -97,10 +106,9 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub vault: String,
+    pub generator: String,
     pub gov: String,
     pub collector: String,
-    pub collect_period: u64,
 }
 
 // build these out later if needed

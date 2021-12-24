@@ -15,6 +15,9 @@ pub enum ContractError {
     #[error("This address does not have staked tokens")]
     NothingStaked {},
 
+    #[error("Invalid number of tokens")]
+    InvalidNumTokens {},
+
     #[error("Invalid Cw20 msg")]
     InvalidCw20Msg {},
 }
