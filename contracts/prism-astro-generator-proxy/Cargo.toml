@@ -27,7 +27,7 @@ serde = { version = "1.0.125", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.24" }
 cw20 = "0.8.0"
 cw2 = "0.8.0"
-astroport = { path = "../../packages/astroport", default-features = false, version = "2.4.0"}
+astroport = { path = "../../packages/astroport", default-features = false, version = "0.3.1"}
 prism-protocol = { version = "1.0.0", path = "../../packages/prism_protocol" }
 
 [dev-dependencies]

@@ -2,40 +2,49 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::asset::{Asset, AssetInfo};
-use crate::hook::InitHook;
 
-use crate::factory::{factory_config, PairType};
-use crate::generator::ExecuteMsg as GeneratorExecuteMsg;
-use cosmwasm_std::{
-    to_binary, Addr, Decimal, DepsMut, ReplyOn, StdResult, SubMsg, Uint128, WasmMsg,
-};
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use cosmwasm_std::{Addr, Binary, Decimal, Uint128};
+use cw20::Cw20ReceiveMsg;
 
+/// the default slippage
+pub const DEFAULT_SLIPPAGE: &str = "0.005";
+/// the maximum allowed slippage
+pub const MAX_ALLOWED_SLIPPAGE: &str = "0.5";
+
+pub const TWAP_PRECISION: u8 = 6;
+
+/// ## Description
+/// This structure describes the basic settings for creating a contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    /// Asset infos
+    /// the type of asset infos available in [`AssetInfo`]
     pub asset_infos: [AssetInfo; 2],
-    /// Token contract code id for initialization
+    /// the token contract code id for initialization
     pub token_code_id: u64,
-    /// Hook for post initialization
-    pub init_hook: Option<InitHook>,
-    /// Factory contract address
+    /// the factory contract address
     pub factory_addr: Addr,
-    /// Pair type
-    pub pair_type: PairType,
+    /// the optional binary serialised parameters for custom pool types
+    pub init_params: Option<Binary>,
 }
 
+/// ## Description
+/// This structure describes the execute messages of the contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
+    /// ## Description
+    /// Receives a message of type [`Cw20ReceiveMsg`]
     Receive(Cw20ReceiveMsg),
-    /// Post initialize step to allow user to set controlled contract address after creating it
-    PostInitialize {},
     /// ProvideLiquidity a user provides pool liquidity
     ProvideLiquidity {
+        /// the type of asset available in [`Asset`]
         assets: [Asset; 2],
+        /// the slippage tolerance for sets the maximum percent of price movement
         slippage_tolerance: Option<Decimal>,
-        auto_stack: Option<bool>,
+        /// Determines whether an autostake will be performed on the generator
+        auto_stake: Option<bool>,
+        /// the receiver of provide liquidity
+        receiver: Option<String>,
     },
     /// Swap an offer asset to the other
     Swap {
@@ -44,11 +53,12 @@ pub enum ExecuteMsg {
         max_spread: Option<Decimal>,
         to: Option<String>,
     },
-    UpdateConfig {
-        amp: Option<u64>,
-    },
+    /// Update pair config if required
+    UpdateConfig { params: Binary },
 }
 
+/// ## Description
+/// This structure describes a CW20 hook message.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
@@ -58,27 +68,49 @@ pub enum Cw20HookMsg {
         max_spread: Option<Decimal>,
         to: Option<String>,
     },
+    /// Withdrawing liquidity from the pool
     WithdrawLiquidity {},
 }
 
+/// ## Description
+/// This structure describes the query messages of the contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
+    /// Returns information about a pair in an object of type [`PairInfo`].
     Pair {},
+    /// Returns information about a pool in an object of type [`PoolResponse`].
     Pool {},
+    /// Returns controls settings that specified in custom [`ConfigResponse`] structure.
+    Config {},
+    /// Returns information about the share of the pool in a vector that contains objects of type [`Asset`].
     Share { amount: Uint128 },
+    /// Returns information about the simulation of the swap in a [`SimulationResponse`] object.
     Simulation { offer_asset: Asset },
+    /// Returns information about the reverse simulation in a [`ReverseSimulationResponse`] object.
     ReverseSimulation { ask_asset: Asset },
+    /// Returns information about the cumulative prices in a [`CumulativePricesResponse`] object
     CumulativePrices {},
 }
 
-// We define a custom struct for each query response
+/// ## Description
+/// This structure describes the custom struct for each query response.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolResponse {
     pub assets: [Asset; 2],
     pub total_share: Uint128,
 }
 
+/// ## Description
+/// This structure describes the custom struct for each query response.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ConfigResponse {
+    /// the last time block
+    pub block_time_last: u64,
+    pub params: Option<Binary>,
+}
+
+/// ## Description
 /// SimulationResponse returns swap simulation response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SimulationResponse {
@@ -87,6 +119,7 @@ pub struct SimulationResponse {
     pub commission_amount: Uint128,
 }
 
+/// ## Description
 /// ReverseSimulationResponse returns reverse swap simulation response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ReverseSimulationResponse {
@@ -95,7 +128,8 @@ pub struct ReverseSimulationResponse {
     pub commission_amount: Uint128,
 }
 
-// We define a custom struct for each query response
+/// ## Description
+/// This structure describes the custom struct for each query response.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct CumulativePricesResponse {
     pub assets: [Asset; 2],
@@ -104,78 +138,27 @@ pub struct CumulativePricesResponse {
     pub price1_cumulative_last: Uint128,
 }
 
-/// We currently take no arguments for migrations
+/// ## Description
+/// This structure describes a migration message.
+/// We currently take no arguments for migrations.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MigrateMsg {}
 
-pub fn generator_address(
-    auto_stack: bool,
-    factory_addr: Addr,
-    deps: &DepsMut,
-) -> StdResult<Option<Addr>> {
-    Ok(if auto_stack {
-        let factory_config = factory_config(factory_addr, deps)?;
-        Some(factory_config.generator_address)
-    } else {
-        None
-    })
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct StablePoolParams {
+    pub amp: u64,
 }
 
-/// Mint LP token to sender or auto deposit into generator if set
-pub fn mint_liquidity_token_message(
-    pair: Addr,
-    lp_token: Addr,
-    beneficiary: Addr,
-    amount: Uint128,
-    generator: Option<Addr>,
-) -> StdResult<Vec<SubMsg>> {
-    let recipient = if generator.is_some() {
-        pair.to_string()
-    } else {
-        beneficiary.to_string()
-    };
-    let mut messages: Vec<SubMsg> = vec![SubMsg {
-        msg: WasmMsg::Execute {
-            contract_addr: lp_token.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Mint { recipient, amount })?,
-            funds: vec![],
-        }
-        .into(),
-        id: 0,
-        gas_limit: None,
-        reply_on: ReplyOn::Never,
-    }];
-    if let Some(generator) = generator {
-        messages.push(SubMsg {
-            msg: WasmMsg::Execute {
-                contract_addr: lp_token.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                    spender: generator.to_string(),
-                    amount,
-                    expires: None,
-                })?,
-                funds: vec![],
-            }
-            .into(),
-            id: 0,
-            gas_limit: None,
-            reply_on: ReplyOn::Never,
-        });
-        messages.push(SubMsg {
-            msg: WasmMsg::Execute {
-                contract_addr: generator.to_string(),
-                msg: to_binary(&GeneratorExecuteMsg::DepositFor {
-                    lp_token,
-                    beneficiary,
-                    amount,
-                })?,
-                funds: vec![],
-            }
-            .into(),
-            id: 0,
-            gas_limit: None,
-            reply_on: ReplyOn::Never,
-        });
-    }
-    Ok(messages)
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct StablePoolConfig {
+    pub amp: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StablePoolUpdateParams {
+    StartChangingAmp { next_amp: u64, next_amp_time: u64 },
+    StopChangingAmp {},
 }

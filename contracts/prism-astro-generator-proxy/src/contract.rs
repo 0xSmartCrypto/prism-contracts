@@ -7,7 +7,7 @@ use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg};
 use crate::error::ContractError;
 use crate::msg::InstantiateMsg;
 use crate::state::{Config, CONFIG};
-use astroport::generator_proxy::{Cw20HookMsg, ExecuteMsg, QueryMsg};
+use astroport::generator_proxy::{CallbackMsg, Cw20HookMsg, ExecuteMsg, QueryMsg};
 use cw2::set_contract_version;
 use prism_protocol::lp_staking::{
     Cw20HookMsg as PrismStakingCw20HookMsg, ExecuteMsg as PrismStakingExecuteMsg,
@@ -51,6 +51,7 @@ pub fn execute(
         ExecuteMsg::SendRewards { account, amount } => send_rewards(deps, info, account, amount),
         ExecuteMsg::Withdraw { account, amount } => withdraw(deps, info, account, amount),
         ExecuteMsg::EmergencyWithdraw { account, amount } => withdraw(deps, info, account, amount),
+        ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
     }
 }
 
@@ -160,6 +161,52 @@ fn withdraw(
     }));
 
     Ok(response)
+}
+
+pub fn handle_callback(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: CallbackMsg,
+) -> Result<Response, ContractError> {
+    // Callback functions can only be called this contract itself
+    if info.sender != env.contract.address {
+        return Err(ContractError::Unauthorized {});
+    }
+    match msg {
+        CallbackMsg::TransferLpTokensAfterWithdraw {
+            account,
+            prev_lp_balance,
+        } => transfer_lp_tokens_after_withdraw(deps, env, account, prev_lp_balance),
+    }
+}
+
+pub fn transfer_lp_tokens_after_withdraw(
+    deps: DepsMut,
+    env: Env,
+    account: Addr,
+    prev_lp_balance: Uint128,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    let amount = {
+        let res: BalanceResponse = deps.querier.query_wasm_smart(
+            &cfg.lp_token_addr,
+            &Cw20QueryMsg::Balance {
+                address: env.contract.address.to_string(),
+            },
+        )?;
+        res.balance - prev_lp_balance
+    };
+
+    Ok(Response::new().add_message(WasmMsg::Execute {
+        contract_addr: cfg.lp_token_addr.to_string(),
+        funds: vec![],
+        msg: to_binary(&Cw20ExecuteMsg::Transfer {
+            recipient: account.to_string(),
+            amount,
+        })?,
+    }))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
