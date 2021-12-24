@@ -11,8 +11,8 @@ use prism_protocol::lp_vault::{
 };
 
 use crate::error::ContractError;
-use crate::state::{Config, RewardInfo, CONFIG, REWARD_INFO, LAST_COLLECTED};
-use crate::query::{query_config, query_reward_info};
+use crate::state::{Config, RewardInfo, CONFIG,};
+use crate::query::{query_config,};
 use crate::execute::{update_config, bond, unbond, split, merge, stake, unstake, claim_rewards, update_staking_mode, mint, burn, update_rewards};
 
 use astroport::asset::AssetInfo;
@@ -34,9 +34,6 @@ pub fn instantiate(
         collector: msg.collector,
     };
     CONFIG.save(deps.storage, &data)?;
-
-    let init_collected: u64 = 0;
-    LAST_COLLECTED.save(deps.storage, &init_collected)?;
 
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }
@@ -88,6 +85,5 @@ pub fn receive_cw20(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::GetRewardInfo { stakerAddr, tokenAddr } => to_binary(&query_reward_info(deps, stakerAddr, tokenAddr)?),
     }
 }

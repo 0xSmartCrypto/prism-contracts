@@ -8,16 +8,18 @@ use cw_storage_plus::{Item, Map};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-// owner, asset_info -> RewardInfo;
-pub const REWARD_INFO: Map<(&[u8], &[u8]), RewardInfo> = Map::new("reward_info");
+// some way to make these mappings more compact?
+// map of LP -> uint
+// map of cLP -> uint
+// map of pLP -> uint
+// map of yLP -> uint
+// map of uint -> LPInfo = {LP addr, cLP addr, pLP addr, yLP addr, [xyLP addr]}
 
-// updated to the last time prism collected LP rewards from astroport
-pub const LAST_COLLECTED: Item<u64> = Item::new("last_collected");
+// map of {user, uint} -> StakerInfo
 
-// may need to store most stuff in the future for relevant getters
+// item of last liquidity per LP
 
-// when user calls to claim rewards we can lazily calculate the reward amount then
-// instead of storing the reward value and updating periodically
+// to propogate rewards, calculate amt to deposit PER LP, iterate thru each relevant StakerInfo and add rewards via stakingmode
 
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -41,7 +43,24 @@ impl Config {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct StakerInfo {
+    // amt staked
+    // staking mode
+    // RewardInfo
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct RewardInfo {
+    // pending_astro
+    // pending_underlying_1
+    // pending_underlying_2
+    // pending_xprism
+
+
+
+
+    // old old old below
+
     pub bond_amount: Uint128,
     pub last_received: u64, // we will lazily calculate the available rewards to be claimed when ClaimRewards is called by user
 

@@ -86,21 +86,12 @@ pub enum Cw20HookMsg {
 pub enum QueryMsg {
     Config {},
 
-    GetRewardInfo { 
-        stakerAddr: String,
-        tokenAddr: String,
-    },
+    // {user, id} -> StakerInfoResponse
+    //StakerInfo {},
 
-    // build this out later if needed
-    // StakerInfo {
-    //     staker: String,
-    //     staking_token: Option<String>,
-    // },
-    // TokenStakersInfo {
-    //     staking_token: String,
-    //     start_after: Option<String>,
-    //     limit: Option<u32>,
-    // },
+    // {user, id} -> RewardInfoResponse
+    // is needed if its already in StakerInfo? should we split the two?
+    //RewardInfo{}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -111,16 +102,12 @@ pub struct ConfigResponse {
     pub collector: String,
 }
 
-// build these out later if needed
-// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-// pub struct StakerInfoResponse {
-//     // return for a specific 
-// }
-
-// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-// pub struct TokenStakersInfoResponse {
-//     //WIP
-// }
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct StakerInfoResponse {
+    // amt staked
+    // staking mode
+    // RewardInfo
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]

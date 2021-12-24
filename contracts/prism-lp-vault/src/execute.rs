@@ -13,8 +13,8 @@ use prism_protocol::lp_vault::{
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
 
 use crate::error::ContractError;
-use crate::state::{Config, RewardInfo, CONFIG, REWARD_INFO, LAST_COLLECTED};
-use crate::query::{query_config, query_reward_info};
+use crate::state::{Config, RewardInfo, CONFIG};
+use crate::query::{query_config,};
 
 use astroport::asset::AssetInfo;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
