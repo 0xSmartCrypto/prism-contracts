@@ -7,11 +7,11 @@ use cosmwasm_std::{
 };
 
 use prism_protocol::lp_vault::{
-    Cw20HookMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode, 
+    Cw20HookMsg, Config, RewardInfo, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode, 
 };
 
 use crate::error::ContractError;
-use crate::state::{Config, RewardInfo, CONFIG,};
+use crate::state::{CONFIG,};
 use crate::query::{query_config,};
 use crate::execute::{update_config, bond, unbond, split, merge, stake, unstake, claim_rewards, update_staking_mode, mint, burn, update_rewards};
 

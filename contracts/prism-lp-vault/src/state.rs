@@ -1,74 +1,48 @@
-use prism_protocol::lp_vault::{ConfigResponse, StakingMode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use astroport::asset::AssetInfo;
 use cosmwasm_std::{Addr, Decimal, StdResult, Uint128};
-use cw_storage_plus::{Item, Map};
+use prism_protocol::lp_vault::{Config, RewardInfo, StakingMode};
+use cw_storage_plus::{Item, Map, U64Key,};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-// some way to make these mappings more compact?
-// map of LP -> uint
-// map of cLP -> uint
-// map of pLP -> uint
-// map of yLP -> uint
-// map of uint -> LPInfo = {LP addr, cLP addr, pLP addr, yLP addr, [xyLP addr]}
+// map of LP -> unique id
+pub const LP_IDS: Map<&Addr, U64Key> = Map::new("LP_ids");
+// map of cLP -> unique id
+pub const CLP_IDS: Map<&Addr, U64Key> = Map::new("cLP_ids");
+// map of pLP -> unique id
+pub const PLP_IDS: Map<&Addr, U64Key> = Map::new("pLP_ids");
+// map of yLP -> unique id
+pub const YLP_IDS: Map<&Addr, U64Key> = Map::new("yLP_ids");
+// xylp
+// pub const xyLP_IDS: Map<&Addr, U64Key> = Map::new("xyLP_ids");
 
-// map of {user, uint} -> StakerInfo
+// unique id -> LPInfo
+pub const LP_INFOS: Map<&Addr, LPInfo> = Map::new("LP_infos");
+
+// map of {user, unique id} -> StakerInfo
+pub const STAKER_INFO: Map<(&Addr, U64Key), StakerInfo> = Map::new("staker_info");
 
 // item of last liquidity per LP
-
-// to propogate rewards, calculate amt to deposit PER LP, iterate thru each relevant StakerInfo and add rewards via stakingmode
-
+pub const LAST_LIQUIDITY: Item<Decimal> = Item::new("last_liquidity_per_token");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Config {
-    pub owner: String,
-    pub generator: String,
-    pub gov: String,
-    pub collector: String,
+pub struct LPInfo {
+    pub amt_bonded: Uint128,
+    pub underlying_coin_denom_1: String,
+    pub underlying_coin_denom_2: String,
+    pub lp_addr: Addr,
+    pub clp_addr: Addr,
+    pub plp_addr: Addr,
+    pub ylp_addr: Addr,
+    // xylp
 }
 
-impl Config {
-    pub fn as_res(&self) -> StdResult<ConfigResponse> {
-        let res = ConfigResponse {
-            owner: self.owner.to_string(),
-            generator: self.generator.to_string(),
-            gov: self.gov.to_string(),
-            collector: self.collector.to_string(),
-        };
-        Ok(res)
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StakerInfo {
-    // amt staked
-    // staking mode
-    // RewardInfo
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct RewardInfo {
-    // pending_astro
-    // pending_underlying_1
-    // pending_underlying_2
-    // pending_xprism
-
-
-
-
-    // old old old below
-
-    pub bond_amount: Uint128,
-    pub last_received: u64, // we will lazily calculate the available rewards to be claimed when ClaimRewards is called by user
-
-    // we will likely want to encapsulate this into its own reward data structure
-    pub pending_xprism_reward: Uint128,
-    pub pending_underlying_reward_1: Uint128,
-    pub pending_underlying_reward_2: Uint128,
-    pub pending_underlying_astro: Uint128,
-
-    pub staking_mode: Option<StakingMode>,
+    pub amt_bonded: Uint128,
+    pub mode: StakingMode,
+    pub reward_info: RewardInfo,
 }

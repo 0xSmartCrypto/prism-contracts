@@ -1,5 +1,5 @@
 use std::fmt;
-use cosmwasm_std::{Binary, Decimal, Uint128};
+use cosmwasm_std::{Binary, Decimal, Uint128, StdResult};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -95,18 +95,39 @@ pub enum QueryMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ConfigResponse {
+pub struct Config {
     pub owner: String,
     pub generator: String,
     pub gov: String,
     pub collector: String,
 }
 
+impl Config {
+    pub fn as_res(&self) -> StdResult<ConfigResponse> {
+        let res = ConfigResponse {
+            owner: self.owner.to_string(),
+            generator: self.generator.to_string(),
+            gov: self.gov.to_string(),
+            collector: self.collector.to_string(),
+        };
+        Ok(res)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct RewardInfo {
+    pub pending_xprism_reward: Uint128,
+    pub pending_underlying_reward_1: Uint128,
+    pub pending_underlying_reward_2: Uint128,
+    pub pending_underlying_astro: Uint128,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct StakerInfoResponse {
-    // amt staked
-    // staking mode
-    // RewardInfo
+pub struct ConfigResponse {
+    pub owner: String,
+    pub generator: String,
+    pub gov: String,
+    pub collector: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

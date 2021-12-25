@@ -7,13 +7,13 @@ use cosmwasm_std::{
 };
 
 use prism_protocol::lp_vault::{
-    ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode,
+    ConfigResponse, Config, RewardInfo, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode,
 };
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
 
 use crate::error::ContractError;
-use crate::state::{Config, RewardInfo, CONFIG};
+use crate::state::{CONFIG};
 use crate::query::{query_config,};
 
 use astroport::asset::AssetInfo;
