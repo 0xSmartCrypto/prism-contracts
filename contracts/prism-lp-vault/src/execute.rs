@@ -12,8 +12,7 @@ use prism_protocol::lp_vault::{
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
 
-use crate::error::ContractError;
-use crate::state::{CONFIG};
+use crate::state::{CONFIG, CLP_IDS, LP_INFOS,};
 use crate::query::{query_config,};
 
 use astroport::asset::AssetInfo;
@@ -28,12 +27,12 @@ pub fn update_config(
     generator: Option<String>,
     gov: Option<String>,
     collector: Option<String>,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // only owner must be able to send this message.
     let conf = CONFIG.load(deps.storage)?;
 
     if info.sender.as_str() != conf.owner {
-        return Err(ContractError::Unauthorized {})
+        return Err(StdError::generic_err(format!("Unauthorized")));
     }
 
     if let Some(creator) = owner {
@@ -67,15 +66,16 @@ pub fn update_config(
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }
 
+// only callable by cw20
 pub fn bond(
     deps: DepsMut,
     env: Env,
     staking_token: Addr,
     sender_addr: Addr,
     amount: Uint128,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     if !(amount > Uint128::zero()) {
-        return Err(ContractError::InvalidNumTokens {});
+        return Err(StdError::generic_err(format!("Invalid number of LP tokens provided")));
     }
 
     let config = CONFIG.load(deps.storage)?;
@@ -93,11 +93,10 @@ pub fn bond(
     }));
 
     // update rewards for yLP stakers
+    // can we move when this is done to save computation? (lazily)
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::UpdateRewards {
-
-        })?,
+        msg: to_binary(&ExecuteMsg::UpdateRewards { })?,
         funds: vec![],
     }));
 
@@ -118,32 +117,27 @@ pub fn bond(
 pub fn unbond(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
-    token: String,
-    amount: Option<Uint128>,
-) -> Result<Response, ContractError> {
-    // might want some internal logic to infer [c/y/p]LP relationships
-    // load BondInfo
-    // err if amount < local amount OR [user, token] mapping DNE
-
-    // we prob wanna use funds here instead of token arg
-    // make sure only one token, then make sure it exists in cLP -> p/y/LP mapping
+    clp_token: Addr,
+    sender_addr: Addr,
+    amount: Uint128,
+) -> StdResult<Response> {
+    // make sure cLP token exists
+    let clp_id = CLP_IDS.load(deps.storage, &clp_token.clone())
+                            .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
     // grab LP address
-
-    // also need to make sure user has enough MERGED cLP 
-
-    let withdraw_amount : Uint128 = amount.unwrap();
-    let lp_addr = deps.api.addr_validate(&token)?;
+    let mut lp_info = LP_INFOS.load(deps.storage, clp_id.clone().into())
+                              .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
+    let lp_addr = lp_info.lp_addr;
 
     let config = CONFIG.load(deps.storage)?;
     let mut messages = vec![];
-
+    
     // attempt to withdraw LP from astro generator
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.generator.clone(),
         msg: to_binary(&AstroExecuteMsg::Withdraw {
             lp_token: lp_addr.clone(),
-            amount: withdraw_amount,
+            amount,
         })?,
         funds: vec![],
     }));
@@ -151,9 +145,7 @@ pub fn unbond(
     // update rewards for yLP stakers
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::UpdateRewards {
-
-        })?,
+        msg: to_binary(&ExecuteMsg::UpdateRewards { })?,
         funds: vec![],
     }));
 
@@ -161,21 +153,18 @@ pub fn unbond(
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
         msg: to_binary(&ExecuteMsg::Burn {
-            user: info.sender.clone().to_string(),
-            token: token.clone().to_string(),
-            amount: withdraw_amount,
+            token: clp_token.clone().to_string(),
+            amount,
         })?,
         funds: vec![],
     }));
 
     // call cw20 transfer LP to user
-    // need to figure out how to get LP from cLP in internal state
-    let lp_addr = token;
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: lp_addr.clone().to_string(),
         msg: to_binary(&Cw20ExecuteMsg::Transfer {
-            recipient: info.sender.clone().to_string(),
-            amount: withdraw_amount,
+            recipient: sender_addr.clone().to_string(),
+            amount,
         })?,
         funds: vec![],
     }));
@@ -188,7 +177,7 @@ pub fn split(
     env: Env,
     info: MessageInfo,
     amount: Uint128,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     Ok(Response::new())
 }
 
@@ -197,7 +186,7 @@ pub fn merge(
     env: Env,
     info: MessageInfo,
     amount: Uint128,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     Ok(Response::new())
 }
 
@@ -206,7 +195,7 @@ pub fn stake(
     env: Env,
     info: MessageInfo,
     amount: Uint128,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     Ok(Response::new())
 }
 
@@ -215,7 +204,7 @@ pub fn unstake(
     env: Env,
     info: MessageInfo,
     amount: Uint128,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     Ok(Response::new())
 }
 
@@ -224,7 +213,7 @@ pub fn claim_rewards(
     env: Env,
     info: MessageInfo,
     token: String,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // check that {user, token} RewardInfo exists
     
     // check that token is valid and safe
@@ -242,7 +231,7 @@ pub fn update_staking_mode(
     info: MessageInfo,
     token: String,
     mode: StakingMode,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // check that {user, token} RewardInfo exists
     
     // check that token is valid and safe
@@ -260,7 +249,7 @@ pub fn mint(
     user: String,
     token: String,
     amount: Uint128,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // check that it is called by us
     // check that LP -> cLP exists
     // if it doesn't add instantiate message and add addr to local storage
@@ -272,10 +261,9 @@ pub fn burn(
     deps: DepsMut,
     env: Env, 
     info: MessageInfo,
-    user: String,
     token: String,
     amount: Uint128,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // use cw20 burnfrom
     Ok(Response::new())
 }
@@ -284,7 +272,7 @@ pub fn update_rewards(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // update rewardinfo of given {user, token} after calculating fees
     // instead of updating all RewardInfo every time rewards are collected from astro generator,
     // we can probably instead look at RewardInfo's last collected and Config's collection time

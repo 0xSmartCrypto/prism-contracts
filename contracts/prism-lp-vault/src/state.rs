@@ -4,23 +4,23 @@ use serde::{Deserialize, Serialize};
 use astroport::asset::AssetInfo;
 use cosmwasm_std::{Addr, Decimal, StdResult, Uint128};
 use prism_protocol::lp_vault::{Config, RewardInfo, StakingMode};
-use cw_storage_plus::{Item, Map, U64Key,};
+use cw_storage_plus::{Item, Map, U64Key};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
 // map of LP -> unique id
-pub const LP_IDS: Map<&Addr, U64Key> = Map::new("LP_ids");
+pub const LP_IDS: Map<&Addr, u64> = Map::new("LP_ids");
 // map of cLP -> unique id
-pub const CLP_IDS: Map<&Addr, U64Key> = Map::new("cLP_ids");
+pub const CLP_IDS: Map<&Addr, u64> = Map::new("cLP_ids");
 // map of pLP -> unique id
-pub const PLP_IDS: Map<&Addr, U64Key> = Map::new("pLP_ids");
+pub const PLP_IDS: Map<&Addr, u64> = Map::new("pLP_ids");
 // map of yLP -> unique id
-pub const YLP_IDS: Map<&Addr, U64Key> = Map::new("yLP_ids");
+pub const YLP_IDS: Map<&Addr, u64> = Map::new("yLP_ids");
 // xylp
-// pub const xyLP_IDS: Map<&Addr, U64Key> = Map::new("xyLP_ids");
+// pub const xyLP_IDS: Map<&Addr, u64> = Map::new("xyLP_ids");
 
 // unique id -> LPInfo
-pub const LP_INFOS: Map<&Addr, LPInfo> = Map::new("LP_infos");
+pub const LP_INFOS: Map<U64Key, LPInfo> = Map::new("LP_infos");
 
 // map of {user, unique id} -> StakerInfo
 pub const STAKER_INFO: Map<(&Addr, U64Key), StakerInfo> = Map::new("staker_info");

@@ -44,7 +44,7 @@ pub fn execute(
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     match msg {
         // cw20 functions
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
@@ -53,7 +53,6 @@ pub fn execute(
         ExecuteMsg::UpdateConfig { owner, generator, gov, collector, } => update_config(deps, env, info, owner, generator, gov, collector), // should be contract restricted
 
         // user functions
-        ExecuteMsg::Unbond { token, amount, } => unbond(deps, env, info, token, amount),
         ExecuteMsg::Split { amount } => split(deps, env, info, amount),
         ExecuteMsg::Merge { amount } => merge(deps, env, info, amount),
         ExecuteMsg::Stake { amount } => stake(deps, env, info, amount),
@@ -62,7 +61,7 @@ pub fn execute(
 
         // internal functions
         ExecuteMsg::Mint { user, token, amount } => mint(deps, env, info, user, token, amount),
-        ExecuteMsg::Burn { user, token, amount } => burn(deps, env, info, user, token, amount),
+        ExecuteMsg::Burn { token, amount } => burn(deps, env, info, token, amount),
         ExecuteMsg::UpdateRewards { } => update_rewards(deps, env, info), // should be contract restricted
     }
 }
@@ -72,12 +71,13 @@ pub fn receive_cw20(
     env: Env,
     info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     let cw20_sender: Addr = deps.api.addr_validate(&cw20_msg.sender)?;
 
     match from_binary(&cw20_msg.msg) {
         Ok(Cw20HookMsg::Bond {}) => bond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
-        Err(_) => Err(ContractError::InvalidCw20Msg {}),
+        Ok(Cw20HookMsg::Unbond {}) => unbond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
+        Err(_) => Err(StdError::generic_err(format!("Invalid CW20 Message"))),
     }
 }
 

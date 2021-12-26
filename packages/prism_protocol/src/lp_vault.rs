@@ -36,10 +36,6 @@ pub enum ExecuteMsg {
 
     Receive(Cw20ReceiveMsg),
 
-    // cLP -> LP
-    Unbond { token: String,
-             amount: Option<Uint128> },
-
     // cLP -> [p/y]LP
     Split { amount: Uint128, },
 
@@ -66,8 +62,7 @@ pub enum ExecuteMsg {
            amount: Uint128, },
     
     // burns cLP and updates internal state
-    Burn { user: String,
-           token: String,
+    Burn { token: String,
            amount: Uint128, },
 
     // updates the rewards that each user can claim on every bond/unbond
@@ -79,6 +74,9 @@ pub enum ExecuteMsg {
 pub enum Cw20HookMsg {
     // LP -> cLP
     Bond { },
+
+    // cLP -> LP
+    Unbond { },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
