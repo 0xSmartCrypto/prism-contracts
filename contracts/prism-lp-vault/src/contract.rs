@@ -11,9 +11,9 @@ use prism_protocol::lp_vault::{
 };
 
 use crate::error::ContractError;
-use crate::state::{CONFIG,};
+use crate::state::{CONFIG, NUM_LPS};
 use crate::query::{query_config,};
-use crate::execute::{update_config, bond, unbond, split, merge, stake, unstake, claim_rewards, update_staking_mode, mint, burn, update_rewards};
+use crate::execute::{update_config, bond, unbond, split, merge, stake, unstake, claim_rewards, update_staking_mode, mint, burn, create_tokens, update_rewards, post_initialize};
 
 use astroport::asset::AssetInfo;
 use cw20::Cw20ReceiveMsg;
@@ -34,6 +34,7 @@ pub fn instantiate(
         collector: msg.collector,
     };
     CONFIG.save(deps.storage, &data)?;
+    NUM_LPS.save(deps.storage, &0)?;
 
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }
@@ -53,8 +54,8 @@ pub fn execute(
         ExecuteMsg::UpdateConfig { owner, generator, gov, collector, } => update_config(deps, env, info, owner, generator, gov, collector), // should be contract restricted
 
         // user functions
-        ExecuteMsg::Split { amount } => split(deps, env, info, amount),
-        ExecuteMsg::Merge { amount } => merge(deps, env, info, amount),
+        ExecuteMsg::Merge { token, amount } => merge(deps, env, info, token, amount),
+        ExecuteMsg::Split { token, amount } => split(deps, env, info, token, amount),
         ExecuteMsg::Stake { amount } => stake(deps, env, info, amount),
         ExecuteMsg::Unstake { amount } => unstake(deps, env, info, amount),
         ExecuteMsg::UpdateStakingMode { token, mode } => update_staking_mode(deps, env, info, token, mode),
@@ -62,7 +63,9 @@ pub fn execute(
         // internal functions
         ExecuteMsg::Mint { user, token, amount } => mint(deps, env, info, user, token, amount),
         ExecuteMsg::Burn { token, amount } => burn(deps, env, info, token, amount),
+        ExecuteMsg::CreateTokens { } => create_tokens(deps, env, info),
         ExecuteMsg::UpdateRewards { } => update_rewards(deps, env, info), // should be contract restricted
+        ExecuteMsg::PostInitialize { } => post_initialize(deps, env, info),
     }
 }
 

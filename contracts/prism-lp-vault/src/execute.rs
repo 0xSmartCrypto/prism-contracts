@@ -12,7 +12,7 @@ use prism_protocol::lp_vault::{
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
 
-use crate::state::{CONFIG, CLP_IDS, LP_INFOS,};
+use crate::state::{CONFIG, LP_IDS, CLP_IDS, LP_INFOS, NUM_LPS};
 use crate::query::{query_config,};
 
 use astroport::asset::AssetInfo;
@@ -92,8 +92,15 @@ pub fn bond(
         funds: vec![],
     }));
 
+    // create LP token set if it doesn't exist
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: env.contract.address.to_string(),
+        msg: to_binary(&ExecuteMsg::CreateTokens { })?,
+        funds: vec![],
+    }));
+
     // update rewards for yLP stakers
-    // can we move when this is done to save computation? (lazily)
+    // can we move when this is done to save computation? maybe when users query rewards? (lazily)
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
         msg: to_binary(&ExecuteMsg::UpdateRewards { })?,
@@ -105,7 +112,7 @@ pub fn bond(
         contract_addr: env.contract.address.clone().to_string(),
         msg: to_binary(&ExecuteMsg::Mint {
             user: sender_addr.clone().to_string(),
-            token: staking_token.clone().to_string(),
+            token: staking_token.clone(),
             amount,
         })?,
         funds: vec![],
@@ -114,6 +121,7 @@ pub fn bond(
     Ok(Response::new().add_messages(messages))
 }
 
+// only callable by cw20
 pub fn unbond(
     deps: DepsMut,
     env: Env,
@@ -125,13 +133,14 @@ pub fn unbond(
     let clp_id = CLP_IDS.load(deps.storage, &clp_token.clone())
                             .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
     // grab LP address
-    let mut lp_info = LP_INFOS.load(deps.storage, clp_id.clone().into())
+    // this shouldn't fail
+    let lp_info = LP_INFOS.load(deps.storage, clp_id.clone().into())
                               .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
     let lp_addr = lp_info.lp_addr;
 
     let config = CONFIG.load(deps.storage)?;
     let mut messages = vec![];
-    
+
     // attempt to withdraw LP from astro generator
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.generator.clone(),
@@ -153,7 +162,7 @@ pub fn unbond(
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
         msg: to_binary(&ExecuteMsg::Burn {
-            token: clp_token.clone().to_string(),
+            token: clp_token.clone(),
             amount,
         })?,
         funds: vec![],
@@ -176,18 +185,89 @@ pub fn split(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
+    token: String,
     amount: Uint128,
 ) -> StdResult<Response> {
-    Ok(Response::new())
+    // make sure cLP token exists
+    let token_addr = Addr::unchecked(token);
+    let clp_id = CLP_IDS.load(deps.storage, &token_addr)
+                      .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
+    let lp_info = LP_INFOS.load(deps.storage, clp_id.into())
+                              .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
+
+    let mut messages = vec![];
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: lp_info.clp_addr.clone().into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
+            owner: info.sender.clone().into_string(),
+            amount,
+        })?,
+        funds: vec![],
+    }));
+
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: lp_info.plp_addr.clone().into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Mint {
+            recipient: info.sender.clone().into_string(),
+            amount,
+        })?,
+        funds: vec![],
+    }));
+
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: lp_info.ylp_addr.clone().into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Mint {
+            recipient: info.sender.clone().into_string(),
+            amount,
+        })?,
+        funds: vec![],
+    }));
+
+    Ok(Response::new().add_messages(messages))
 }
 
 pub fn merge(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
+    token: String,
     amount: Uint128,
 ) -> StdResult<Response> {
-    Ok(Response::new())
+    let token_addr = Addr::unchecked(token);
+    let clp_id = CLP_IDS.load(deps.storage, &token_addr)
+                      .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
+    let lp_info = LP_INFOS.load(deps.storage, clp_id.into())
+                              .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
+
+    let mut messages = vec![];
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: lp_info.plp_addr.clone().into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
+            owner: info.sender.clone().into_string(),
+            amount,
+        })?,
+        funds: vec![],
+    }));
+
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: lp_info.ylp_addr.clone().into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
+            owner: info.sender.clone().into_string(),
+            amount,
+        })?,
+        funds: vec![],
+    }));
+
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: lp_info.clp_addr.clone().into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Mint {
+            recipient: info.sender.clone().into_string(),
+            amount,
+        })?,
+        funds: vec![],
+    }));
+
+    Ok(Response::new().add_messages(messages))
 }
 
 pub fn stake(
@@ -247,13 +327,25 @@ pub fn mint(
     env: Env, 
     info: MessageInfo,
     user: String,
-    token: String,
+    token: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
     // check that it is called by us
-    // check that LP -> cLP exists
-    // if it doesn't add instantiate message and add addr to local storage
-    // push back mint message (for cLP)
+    if info.sender.as_str() != env.contract.address.to_string() {
+        return Err(StdError::generic_err(format!("Unauthorized")));
+    }
+
+    // these should never fail
+    let lp_id = LP_IDS.load(deps.storage, &token.clone())
+                            .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
+    let mut lp_info = LP_INFOS.load(deps.storage, lp_id.clone().into())
+                            .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
+    let clp_addr = lp_info.clp_addr.clone();
+    
+    lp_info.amt_bonded += amount;
+    LP_INFOS.save(deps.storage, lp_id.clone().into(), &lp_info)?;
+
+    // TODO: push back mint cLP message to user
     Ok(Response::new())
 }
 
@@ -261,10 +353,45 @@ pub fn burn(
     deps: DepsMut,
     env: Env, 
     info: MessageInfo,
-    token: String,
+    token: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
-    // use cw20 burnfrom
+    // check that it is called by us
+    if info.sender.as_str() != env.contract.address.to_string() {
+        return Err(StdError::generic_err(format!("Unauthorized")));
+    }
+
+    // these should never fail
+    let clp_id = CLP_IDS.load(deps.storage, &token.clone())
+                        .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
+    let mut lp_info = LP_INFOS.load(deps.storage, clp_id.clone().into())
+                              .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
+    
+    lp_info.amt_bonded -= amount;
+    LP_INFOS.save(deps.storage, clp_id.clone().into(), &lp_info)?;
+
+    // TODO
+    // burn cLP from user using cw20 burn/burnfrom
+    // maybe doesn't need to be a cw20 message because burn will fail if 
+    // user doesn't have 'amount' cLP tokens? not sure but using funds and coin_denom seems sketchy
+    // doing cw20 transfers a cLP balance over to us, should just burn from our own addr
+    // if thats the case
+    // both ways will probably work.. downsides of using cw20? isnt it just extra protection? gas fees an issue here? dev complexity?
+    Ok(Response::new())
+}
+
+pub fn create_tokens(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> StdResult<Response> {
+    let new_lp_id = NUM_LPS.load(deps.storage)?;
+    // TODO:
+    // let mut messages = vec![];
+    // add TokenInstantiateMsg for cLP
+    // add TokenInstantiateMsg for pLP
+    // add TokenInstantiateMsg for yLP
+    NUM_LPS.save(deps.storage, &(new_lp_id + 1))?;
     Ok(Response::new())
 }
 
@@ -278,5 +405,16 @@ pub fn update_rewards(
     // we can probably instead look at RewardInfo's last collected and Config's collection time
     // and figure out how many cycles of rewards it collected
     // still need to figure out how this amm fee can be calculated tho/how it works
+    Ok(Response::new())
+}
+
+pub fn post_initialize(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> StdResult<Response> {
+    // TODO:
+    // add new token info to internal DS
+    // might need to do more here
     Ok(Response::new())
 }

@@ -1,5 +1,5 @@
 use std::fmt;
-use cosmwasm_std::{Binary, Decimal, Uint128, StdResult};
+use cosmwasm_std::{Binary, Decimal, Uint128, StdResult, Addr};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -37,10 +37,12 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
 
     // cLP -> [p/y]LP
-    Split { amount: Uint128, },
+    Split { token: String,
+            amount: Uint128, },
 
     // [p/y]LP -> cLP
-    Merge { amount: Uint128, },
+    Merge { token: String,
+            amount: Uint128, },
 
     // stake yLP to get rewards
     Stake { amount: Uint128, },
@@ -58,15 +60,21 @@ pub enum ExecuteMsg {
     
     // performs LP -> cLP conversion
     Mint { user: String,
-           token: String,
+           token: Addr,
            amount: Uint128, },
     
     // burns cLP and updates internal state
-    Burn { token: String,
+    Burn { token: Addr,
            amount: Uint128, },
+
+    // create a new set of c/p/y LP tokens given valid LP token
+    CreateTokens { },
 
     // updates the rewards that each user can claim on every bond/unbond
     UpdateRewards { },
+
+    // message for cw20 to call after new token initialization
+    PostInitialize { },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -19,6 +19,9 @@ pub const YLP_IDS: Map<&Addr, u64> = Map::new("yLP_ids");
 // xylp
 // pub const xyLP_IDS: Map<&Addr, u64> = Map::new("xyLP_ids");
 
+// number of supported tokens
+pub const NUM_LPS: Item<u64> = Item::new("num_lps");
+
 // unique id -> LPInfo
 pub const LP_INFOS: Map<U64Key, LPInfo> = Map::new("LP_infos");
 
