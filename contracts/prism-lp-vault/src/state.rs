@@ -8,16 +8,8 @@ use cw_storage_plus::{Item, Map, U64Key};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-// map of LP -> unique id
+// map of [c/p/y/xy]LP -> unique id
 pub const LP_IDS: Map<&Addr, u64> = Map::new("LP_ids");
-// map of cLP -> unique id
-pub const CLP_IDS: Map<&Addr, u64> = Map::new("cLP_ids");
-// map of pLP -> unique id
-pub const PLP_IDS: Map<&Addr, u64> = Map::new("pLP_ids");
-// map of yLP -> unique id
-pub const YLP_IDS: Map<&Addr, u64> = Map::new("yLP_ids");
-// xylp
-// pub const xyLP_IDS: Map<&Addr, u64> = Map::new("xyLP_ids");
 
 // number of supported tokens
 pub const NUM_LPS: Item<u64> = Item::new("num_lps");

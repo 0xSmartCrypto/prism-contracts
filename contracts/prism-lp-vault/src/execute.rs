@@ -12,7 +12,7 @@ use prism_protocol::lp_vault::{
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
 
-use crate::state::{CONFIG, LP_IDS, CLP_IDS, LP_INFOS, NUM_LPS};
+use crate::state::{CONFIG, LP_IDS, LP_INFOS, NUM_LPS};
 use crate::query::{query_config,};
 
 use astroport::asset::AssetInfo;
@@ -130,11 +130,11 @@ pub fn unbond(
     amount: Uint128,
 ) -> StdResult<Response> {
     // make sure cLP token exists
-    let clp_id = CLP_IDS.load(deps.storage, &clp_token.clone())
+    let lp_id = LP_IDS.load(deps.storage, &clp_token.clone())
                             .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
     // grab LP address
     // this shouldn't fail
-    let lp_info = LP_INFOS.load(deps.storage, clp_id.clone().into())
+    let lp_info = LP_INFOS.load(deps.storage, lp_id.clone().into())
                               .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
     let lp_addr = lp_info.lp_addr;
 
@@ -191,9 +191,9 @@ pub fn split(
 ) -> StdResult<Response> {
     // make sure cLP token exists
     let token_addr = Addr::unchecked(token);
-    let clp_id = CLP_IDS.load(deps.storage, &token_addr)
+    let lp_id = LP_IDS.load(deps.storage, &token_addr)
                       .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
-    let lp_info = LP_INFOS.load(deps.storage, clp_id.into())
+    let lp_info = LP_INFOS.load(deps.storage, lp_id.into())
                               .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
 
     let mut messages = vec![];
@@ -235,9 +235,9 @@ pub fn merge(
     amount: Uint128,
 ) -> StdResult<Response> {
     let token_addr = Addr::unchecked(token);
-    let clp_id = CLP_IDS.load(deps.storage, &token_addr)
+    let lp_id = LP_IDS.load(deps.storage, &token_addr)
                       .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
-    let lp_info = LP_INFOS.load(deps.storage, clp_id.into())
+    let lp_info = LP_INFOS.load(deps.storage, lp_id.into())
                               .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
 
     let mut messages = vec![];
@@ -391,13 +391,13 @@ pub fn burn(
     }
 
     // these should never fail
-    let clp_id = CLP_IDS.load(deps.storage, &token.clone())
+    let lp_id = LP_IDS.load(deps.storage, &token.clone())
                         .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
-    let mut lp_info = LP_INFOS.load(deps.storage, clp_id.clone().into())
+    let mut lp_info = LP_INFOS.load(deps.storage, lp_id.clone().into())
                               .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
     
     lp_info.amt_bonded -= amount;
-    LP_INFOS.save(deps.storage, clp_id.clone().into(), &lp_info)?;
+    LP_INFOS.save(deps.storage, lp_id.clone().into(), &lp_info)?;
 
     // burn cLP from user
     Ok(Response::new()
