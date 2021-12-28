@@ -13,6 +13,7 @@ pub struct InstantiateMsg {
     pub generator: String,
     pub gov: String,
     pub collector: String,
+    pub collect_period: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -73,9 +74,6 @@ pub enum ExecuteMsg {
 
     // updates the rewards that each user can claim on every bond/unbond
     UpdateRewards { },
-
-    // message for cw20 to call after new token initialization
-    PostInitialize { },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -107,6 +105,7 @@ pub struct Config {
     pub generator: String,
     pub gov: String,
     pub collector: String,
+    pub collect_period: u64,
 }
 
 impl Config {
@@ -116,6 +115,7 @@ impl Config {
             generator: self.generator.to_string(),
             gov: self.gov.to_string(),
             collector: self.collector.to_string(),
+            collect_period: self.collect_period.clone(),
         };
         Ok(res)
     }
@@ -123,7 +123,6 @@ impl Config {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct RewardInfo {
-    pub pending_xprism_reward: Uint128,
     pub pending_underlying_reward_1: Uint128,
     pub pending_underlying_reward_2: Uint128,
     pub pending_underlying_astro: Uint128,
@@ -135,6 +134,7 @@ pub struct ConfigResponse {
     pub generator: String,
     pub gov: String,
     pub collector: String,
+    pub collect_period: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

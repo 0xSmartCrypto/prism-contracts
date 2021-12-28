@@ -11,16 +11,14 @@ pub const CONFIG: Item<Config> = Item::new("config");
 // map of [c/p/y/xy]LP -> unique id
 pub const LP_IDS: Map<&Addr, u64> = Map::new("LP_ids");
 
-// number of supported tokens
-pub const NUM_LPS: Item<u64> = Item::new("num_lps");
-
 // unique id -> LPInfo
 pub const LP_INFOS: Map<U64Key, LPInfo> = Map::new("LP_infos");
 
 // map of {user, unique id} -> StakerInfo
 pub const STAKER_INFO: Map<(&Addr, U64Key), StakerInfo> = Map::new("staker_info");
 
-// need some form of collection period for ASTRO
+// number of supported tokens
+pub const NUM_LPS: Item<u64> = Item::new("num_lps");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LPInfo {

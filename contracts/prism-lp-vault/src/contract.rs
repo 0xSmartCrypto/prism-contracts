@@ -13,7 +13,7 @@ use prism_protocol::lp_vault::{
 use crate::error::ContractError;
 use crate::state::{CONFIG, NUM_LPS};
 use crate::query::{query_config,};
-use crate::execute::{update_config, bond, unbond, split, merge, stake, unstake, claim_rewards, update_staking_mode, mint, burn, create_tokens, update_rewards, post_initialize};
+use crate::execute::{update_config, bond, unbond, split, merge, stake, unstake, claim_rewards, update_staking_mode, mint, burn, create_tokens, update_rewards};
 
 use astroport::asset::AssetInfo;
 use cw20::Cw20ReceiveMsg;
@@ -32,6 +32,7 @@ pub fn instantiate(
         generator: msg.generator,
         gov: msg.gov,
         collector: msg.collector,
+        collect_period: msg.collect_period,
     };
     CONFIG.save(deps.storage, &data)?;
     NUM_LPS.save(deps.storage, &0)?;
@@ -64,8 +65,7 @@ pub fn execute(
         ExecuteMsg::Mint { user, token, amount } => mint(deps, env, info, user, token, amount),
         ExecuteMsg::Burn { user, token, amount } => burn(deps, env, info, user, token, amount),
         ExecuteMsg::CreateTokens { } => create_tokens(deps, env, info),
-        ExecuteMsg::UpdateRewards { } => update_rewards(deps, env, info), // should be contract restricted
-        ExecuteMsg::PostInitialize { } => post_initialize(deps, env, info),
+        ExecuteMsg::UpdateRewards { } => update_rewards(deps, env, info),
     }
 }
 

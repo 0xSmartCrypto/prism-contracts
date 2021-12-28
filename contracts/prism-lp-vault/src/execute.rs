@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    Uint128, SubMsg, attr, Addr, CanonicalAddr, CosmosMsg, WasmMsg
+    Uint128, SubMsg, attr, Addr, CanonicalAddr, CosmosMsg, WasmMsg, Reply, ReplyOn
 };
 
 use prism_protocol::lp_vault::{
@@ -18,6 +18,12 @@ use crate::query::{query_config,};
 use astroport::asset::AssetInfo;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use terra_cosmwasm::TerraMsgWrapper;
+
+// used for reply calls
+const CLP_INSTANTIATE_TOKEN_ID: u64= 1;
+const PLP_INSTANTIATE_TOKEN_ID: u64 = 2;
+const YLP_INSTANTIATE_TOKEN_ID: u64 = 3;
+// const XYLP_INSTANTIATE_TOKEN_ID = 4;
 
 // only executable by owner
 pub fn update_config(
@@ -333,6 +339,8 @@ pub fn update_staking_mode(
 ) -> StdResult<Response> {
     // call update_rewards
 
+    // send tokens
+
     // check that {user, token} StakerInfo exists
 
     // update StakingMode
@@ -414,23 +422,34 @@ pub fn burn(
     )
 }
 
+// TODO
 pub fn create_tokens(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> StdResult<Response> {
-    let new_lp_id = NUM_LPS.load(deps.storage)?;
-    // TODO:
-    // let mut messages = vec![];
-    // add TokenInstantiateMsg for cLP
-    // add TokenInstantiateMsg for pLP
-    // add TokenInstantiateMsg for yLP
+    let new_lp_id = NUM_LPS.load(deps.storage)? + 1;
+    NUM_LPS.save(deps.storage, &(new_lp_id))?;
 
-    // maybe add xyLP in the future
-    NUM_LPS.save(deps.storage, &(new_lp_id + 1))?;
+    // 1. Query for LP tokens TokenInfo to get name, symbol and decimals
+    // 2. Store LP address -> int mapping
+    // 3. Store new int -> LPInfo mapping
+    // 4. Set Reply ID, diff id for diff token and reply() function
+
     Ok(Response::new())
 }
 
+// TODO
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
+    // grab address from data field and validate
+
+    // filter by reply ID
+    // create [c/p/y]LP -> id mapping, update LPInfo in id -> LPInfo
+    Ok(Response::new())
+}
+
+// TODO
 pub fn update_rewards(
     deps: DepsMut,
     env: Env,
@@ -448,13 +467,7 @@ pub fn update_rewards(
     Ok(Response::new())
 }
 
-pub fn post_initialize(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-) -> StdResult<Response> {
-    // TODO:
-    // add new token info to internal DS
-    // might need to do more here
-    Ok(Response::new())
-}
+
+// every 4hrs or so
+// call withdraw 0 on astro gen if we have staked LP (for each LP info)
+// 
