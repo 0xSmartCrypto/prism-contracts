@@ -28,12 +28,12 @@ pub const LP_INFOS: Map<U64Key, LPInfo> = Map::new("LP_infos");
 // map of {user, unique id} -> StakerInfo
 pub const STAKER_INFO: Map<(&Addr, U64Key), StakerInfo> = Map::new("staker_info");
 
-// item of last liquidity per LP
-pub const LAST_LIQUIDITY: Item<Decimal> = Item::new("last_liquidity_per_token");
+// need some form of collection period for ASTRO
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LPInfo {
     pub amt_bonded: Uint128,
+    pub last_liquidity: Decimal,
     pub underlying_coin_denom_1: String,
     pub underlying_coin_denom_2: String,
     pub lp_addr: Addr,

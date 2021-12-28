@@ -19,6 +19,7 @@ use astroport::asset::AssetInfo;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use terra_cosmwasm::TerraMsgWrapper;
 
+// only executable by owner
 pub fn update_config(
     deps: DepsMut,
     env: Env,
@@ -28,7 +29,6 @@ pub fn update_config(
     gov: Option<String>,
     collector: Option<String>,
 ) -> StdResult<Response> {
-    // only owner must be able to send this message.
     let conf = CONFIG.load(deps.storage)?;
 
     if info.sender.as_str() != conf.owner {
@@ -83,7 +83,7 @@ pub fn bond(
 
     // attempt to send LP to astro generator
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: staking_token.clone().to_string(),
+        contract_addr: staking_token.clone().into_string(),
         msg: to_binary(&Cw20ExecuteMsg::Send {
             contract: config.generator.clone(),
             msg: to_binary(&AstroHookMsg::Deposit {})?,
@@ -162,6 +162,7 @@ pub fn unbond(
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
         msg: to_binary(&ExecuteMsg::Burn {
+            user: sender_addr.clone().into_string(),
             token: clp_token.clone(),
             amount,
         })?,
@@ -270,41 +271,59 @@ pub fn merge(
     Ok(Response::new().add_messages(messages))
 }
 
+// TODO
+// should be cw20
 pub fn stake(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     amount: Uint128,
 ) -> StdResult<Response> {
+    // yLP has already been transfered because cw20 send
+    // params will be ylp_addr, sender_addr, amount
+
+    // call update rewards
+    // check for (lp_id, user) staker_info
+    // if exists, add bond amount
+    // else, create new StakerInfo with bond amount and store
     Ok(Response::new())
 }
 
+// TODO
 pub fn unstake(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     amount: Uint128,
 ) -> StdResult<Response> {
+    // params will be ylp_addr, info.sender, Option<amount>
+    
+    // call update rewards
+    // check for (lp_id, user) staker_info
+    // if doesn't exist or amount < whats available, error
+    // if amount is empty, do all bonded yLP
+    // if bond amount is empty and RewardInfo is empty, delete StakerInfo instance
     Ok(Response::new())
 }
 
+// TODO
 pub fn claim_rewards(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    token: String,
 ) -> StdResult<Response> {
-    // check that {user, token} RewardInfo exists
-    
-    // check that token is valid and safe
+    // call update_rewards
 
-    // call update_rewards (calculate rewards? do we even need to store?)
+    // for each {info.sender, token_id} in STAKER_INFO
 
-    // send back all rewards
+    // send back all rewards (make a helper per RewardInfo)
+
+    // delete StakerInfo instance iff amt_bonded is empty
 
     Ok(Response::new())
 }
 
+// TODO
 pub fn update_staking_mode(
     deps: DepsMut,
     env: Env,
@@ -312,11 +331,9 @@ pub fn update_staking_mode(
     token: String,
     mode: StakingMode,
 ) -> StdResult<Response> {
-    // check that {user, token} RewardInfo exists
-    
-    // check that token is valid and safe
+    // call update_rewards
 
-    // update_rewards
+    // check that {user, token} StakerInfo exists
 
     // update StakingMode
     Ok(Response::new())
@@ -340,19 +357,31 @@ pub fn mint(
                             .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
     let mut lp_info = LP_INFOS.load(deps.storage, lp_id.clone().into())
                             .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
-    let clp_addr = lp_info.clp_addr.clone();
     
+    // update internal state
     lp_info.amt_bonded += amount;
     LP_INFOS.save(deps.storage, lp_id.clone().into(), &lp_info)?;
 
-    // TODO: push back mint cLP message to user
-    Ok(Response::new())
+    // mint cLP to user
+    Ok(Response::new()
+        .add_messages(vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: lp_info.clp_addr.clone().into_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: user.clone(),
+                    amount,
+                })?,
+                funds: vec![],
+            }),
+        ])
+    )
 }
 
 pub fn burn(
     deps: DepsMut,
     env: Env, 
     info: MessageInfo,
+    user: String,
     token: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
@@ -370,14 +399,19 @@ pub fn burn(
     lp_info.amt_bonded -= amount;
     LP_INFOS.save(deps.storage, clp_id.clone().into(), &lp_info)?;
 
-    // TODO
-    // burn cLP from user using cw20 burn/burnfrom
-    // maybe doesn't need to be a cw20 message because burn will fail if 
-    // user doesn't have 'amount' cLP tokens? not sure but using funds and coin_denom seems sketchy
-    // doing cw20 transfers a cLP balance over to us, should just burn from our own addr
-    // if thats the case
-    // both ways will probably work.. downsides of using cw20? isnt it just extra protection? gas fees an issue here? dev complexity?
-    Ok(Response::new())
+    // burn cLP from user
+    Ok(Response::new()
+        .add_messages(vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: lp_info.clp_addr.clone().into_string(),
+                msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
+                    owner: user.clone(),
+                    amount,
+                })?,
+                funds: vec![],
+            }),
+        ])
+    )
 }
 
 pub fn create_tokens(
@@ -391,6 +425,8 @@ pub fn create_tokens(
     // add TokenInstantiateMsg for cLP
     // add TokenInstantiateMsg for pLP
     // add TokenInstantiateMsg for yLP
+
+    // maybe add xyLP in the future
     NUM_LPS.save(deps.storage, &(new_lp_id + 1))?;
     Ok(Response::new())
 }
@@ -400,11 +436,15 @@ pub fn update_rewards(
     env: Env,
     info: MessageInfo,
 ) -> StdResult<Response> {
-    // update rewardinfo of given {user, token} after calculating fees
-    // instead of updating all RewardInfo every time rewards are collected from astro generator,
-    // we can probably instead look at RewardInfo's last collected and Config's collection time
-    // and figure out how many cycles of rewards it collected
-    // still need to figure out how this amm fee can be calculated tho/how it works
+    // update RewardInfo of given LP token
+
+    // grab x and y from Astroport, amt_bonded and last liquidity from LP_INFO
+    // calculate new liquidity, calculate amount of LP to withdraw and burn
+
+    // for each {user, token_id} in STAKER_INFO
+    // if default mode, add underlying rewards
+    // if xprism mode, use collector contract to convert and add to xprism reward
+
     Ok(Response::new())
 }
 

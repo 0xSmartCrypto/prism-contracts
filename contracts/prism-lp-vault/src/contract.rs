@@ -62,7 +62,7 @@ pub fn execute(
 
         // internal functions
         ExecuteMsg::Mint { user, token, amount } => mint(deps, env, info, user, token, amount),
-        ExecuteMsg::Burn { token, amount } => burn(deps, env, info, token, amount),
+        ExecuteMsg::Burn { user, token, amount } => burn(deps, env, info, user, token, amount),
         ExecuteMsg::CreateTokens { } => create_tokens(deps, env, info),
         ExecuteMsg::UpdateRewards { } => update_rewards(deps, env, info), // should be contract restricted
         ExecuteMsg::PostInitialize { } => post_initialize(deps, env, info),
