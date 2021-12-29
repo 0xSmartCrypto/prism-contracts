@@ -11,7 +11,7 @@ use astroport::asset::{Asset, AssetInfo};
 pub struct InstantiateMsg {
     pub owner: String,
     pub generator: String,
-    pub gov: String,
+    pub factory: String,
     pub collector: String,
     pub collect_period: u64,
 }
@@ -27,7 +27,7 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<String>,
         generator: Option<String>,
-        gov: Option<String>,
+        factory: Option<String>,
         collector: Option<String>,
     },
 
@@ -55,6 +55,9 @@ pub enum ExecuteMsg {
     UpdateStakingMode { token: String,
                         mode: StakingMode, },
 
+    // claims staked LP's rewards
+    ClaimRewards { },
+
     ////////////////////
     /// internal operations
     ///////////////////
@@ -70,7 +73,7 @@ pub enum ExecuteMsg {
            amount: Uint128, },
 
     // create a new set of c/p/y LP tokens given valid LP token
-    CreateTokens { },
+    CreateTokens { token: Addr,},
 
     // updates the rewards that each user can claim on every bond/unbond
     UpdateRewards { },
@@ -101,10 +104,19 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    // owner of contract
     pub owner: String,
+
+    // address of astroport generator
     pub generator: String,
-    pub gov: String,
+
+    // address of astroport factory
+    pub factory: String,
+
+    // used to swap assets to prism
     pub collector: String,
+
+    // we claim rewards from astro generator every collect_period (by calling Withdraw 0) for each LP
     pub collect_period: u64,
 }
 
@@ -113,7 +125,7 @@ impl Config {
         let res = ConfigResponse {
             owner: self.owner.to_string(),
             generator: self.generator.to_string(),
-            gov: self.gov.to_string(),
+            factory: self.factory.to_string(),
             collector: self.collector.to_string(),
             collect_period: self.collect_period.clone(),
         };
@@ -132,7 +144,7 @@ pub struct RewardInfo {
 pub struct ConfigResponse {
     pub owner: String,
     pub generator: String,
-    pub gov: String,
+    pub factory: String,
     pub collector: String,
     pub collect_period: u64,
 }

@@ -30,7 +30,7 @@ pub fn instantiate(
     let data = Config {
         owner: sender.to_string(),
         generator: msg.generator,
-        gov: msg.gov,
+        factory: msg.factory,
         collector: msg.collector,
         collect_period: msg.collect_period,
     };
@@ -52,7 +52,7 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
 
         // owner functions
-        ExecuteMsg::UpdateConfig { owner, generator, gov, collector, } => update_config(deps, env, info, owner, generator, gov, collector), // should be contract restricted
+        ExecuteMsg::UpdateConfig { owner, generator, factory, collector, } => update_config(deps, env, info, owner, generator, factory, collector), // should be contract restricted
 
         // user functions
         ExecuteMsg::Merge { token, amount } => merge(deps, env, info, token, amount),
@@ -60,11 +60,12 @@ pub fn execute(
         ExecuteMsg::Stake { amount } => stake(deps, env, info, amount),
         ExecuteMsg::Unstake { amount } => unstake(deps, env, info, amount),
         ExecuteMsg::UpdateStakingMode { token, mode } => update_staking_mode(deps, env, info, token, mode),
+        ExecuteMsg::ClaimRewards { } => claim_rewards(deps, env, info),
 
         // internal functions
         ExecuteMsg::Mint { user, token, amount } => mint(deps, env, info, user, token, amount),
         ExecuteMsg::Burn { user, token, amount } => burn(deps, env, info, user, token, amount),
-        ExecuteMsg::CreateTokens { } => create_tokens(deps, env, info),
+        ExecuteMsg::CreateTokens { token } => create_tokens(deps, env, info, token),
         ExecuteMsg::UpdateRewards { } => update_rewards(deps, env, info),
     }
 }

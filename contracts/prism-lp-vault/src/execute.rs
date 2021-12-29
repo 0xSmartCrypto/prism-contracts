@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    Uint128, SubMsg, attr, Addr, CanonicalAddr, CosmosMsg, WasmMsg, Reply, ReplyOn
+    Uint128, SubMsg, attr, Addr, CanonicalAddr, CosmosMsg, WasmMsg, Reply, ReplyOn, Decimal,
 };
 
 use prism_protocol::lp_vault::{
@@ -12,11 +12,11 @@ use prism_protocol::lp_vault::{
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
 
-use crate::state::{CONFIG, LP_IDS, LP_INFOS, NUM_LPS};
-use crate::query::{query_config,};
+use crate::state::{CONFIG, LP_IDS, LP_INFOS, NUM_LPS, LPInfo};
+use crate::query::{query_config, query_token_info,};
 
 use astroport::asset::AssetInfo;
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, TokenInfoResponse,};
 use terra_cosmwasm::TerraMsgWrapper;
 
 // used for reply calls
@@ -32,7 +32,7 @@ pub fn update_config(
     info: MessageInfo,
     owner: Option<String>,
     generator: Option<String>,
-    gov: Option<String>,
+    factory: Option<String>,
     collector: Option<String>,
 ) -> StdResult<Response> {
     let conf = CONFIG.load(deps.storage)?;
@@ -55,9 +55,9 @@ pub fn update_config(
         })?;
     }
 
-    if let Some(gov_contract) = gov {
+    if let Some(factory_contract) = factory {
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.gov = gov_contract;
+            last_config.factory = factory_contract;
             Ok(last_config)
         })?;
     }
@@ -101,7 +101,7 @@ pub fn bond(
     // create LP token set if it doesn't exist
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::CreateTokens { })?,
+        msg: to_binary(&ExecuteMsg::CreateTokens { token: staking_token.clone() })?,
         funds: vec![],
     }));
 
@@ -427,15 +427,36 @@ pub fn create_tokens(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
+    token: Addr,
 ) -> StdResult<Response> {
     let new_lp_id = NUM_LPS.load(deps.storage)? + 1;
-    NUM_LPS.save(deps.storage, &(new_lp_id))?;
+    
+    // Query for LP tokens TokenInfo to get name, symbol and decimals
+    // TODO: look for denoms of LP underlyings
+    let res: TokenInfoResponse = query_token_info(&deps.querier, token.clone())?;
 
-    // 1. Query for LP tokens TokenInfo to get name, symbol and decimals
-    // 2. Store LP address -> int mapping
-    // 3. Store new int -> LPInfo mapping
-    // 4. Set Reply ID, diff id for diff token and reply() function
+    // Store LP address -> id mapping
+    LP_IDS.save(deps.storage, &token.clone(), &new_lp_id.clone())?;
 
+    // Store id -> LPInfo mapping with lp_addr
+    let new_lp_info = LPInfo {
+        amt_bonded: Uint128::zero(),
+        last_liquidity: Decimal::zero(),
+        underlying_coin_denom_1: "??".to_string(),
+        underlying_coin_denom_2: "??".to_string(),
+        pair_contract: Addr::unchecked("".to_string()),
+        lp_addr: token,
+        clp_addr: Addr::unchecked("".to_string()),
+        plp_addr: Addr::unchecked("".to_string()),
+        ylp_addr: Addr::unchecked("".to_string()),
+    };
+
+    // Create new tokens
+    // Set Reply ID, diff id for diff token and reply() function
+
+
+    // 5. save new id
+    NUM_LPS.save(deps.storage, &new_lp_id)?;
     Ok(Response::new())
 }
 

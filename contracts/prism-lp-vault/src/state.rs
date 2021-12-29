@@ -24,8 +24,11 @@ pub const NUM_LPS: Item<u64> = Item::new("num_lps");
 pub struct LPInfo {
     pub amt_bonded: Uint128,
     pub last_liquidity: Decimal,
+    // swap to vec of Assets
+    // store pair contract
     pub underlying_coin_denom_1: String,
     pub underlying_coin_denom_2: String,
+    pub pair_contract: Addr,
     pub lp_addr: Addr,
     pub clp_addr: Addr,
     pub plp_addr: Addr,
