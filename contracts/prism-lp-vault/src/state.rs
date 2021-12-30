@@ -22,17 +22,17 @@ pub const NUM_LPS: Item<u64> = Item::new("num_lps");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LPInfo {
+    // calc
+    pub asset_infos: [AssetInfo; 2],
     pub amt_bonded: Uint128,
     pub last_liquidity: Decimal,
-    // swap to vec of Assets
-    // store pair contract
-    pub underlying_coin_denom_1: String,
-    pub underlying_coin_denom_2: String,
+
+    // contracts
     pub pair_contract: Addr,
-    pub lp_addr: Addr,
-    pub clp_addr: Addr,
-    pub plp_addr: Addr,
-    pub ylp_addr: Addr,
+    pub lp_contract: Addr,
+    pub clp_contract: Addr,
+    pub plp_contract: Addr,
+    pub ylp_contract: Addr,
     // xylp
 }
 

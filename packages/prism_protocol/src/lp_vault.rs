@@ -93,13 +93,6 @@ pub enum Cw20HookMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-
-    // {user, id} -> StakerInfoResponse
-    //StakerInfo {},
-
-    // {user, id} -> RewardInfoResponse
-    // is needed if its already in StakerInfo? should we split the two?
-    //RewardInfo{}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
