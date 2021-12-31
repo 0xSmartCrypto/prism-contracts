@@ -427,14 +427,13 @@ pub fn burn(
     )
 }
 
-// TODO
 pub fn create_tokens(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     token: Addr,
 ) -> StdResult<Response> {
-    let new_lp_id = NUM_LPS.load(deps.storage)? + 1;
+    let new_lp_id = NUM_LPS.load(deps.storage)?;
     
     // Get pair contract info and asset info
     let pair_info = query_pair_info(deps.as_ref(), &deps.querier, token.clone())?;
@@ -460,30 +459,15 @@ pub fn create_tokens(
         ylp_contract: Addr::unchecked("".to_string()),
     };
 
-    // LP token name is of form "{}-{}-LP"
-    // symbol is "uLP"
-
-    // new token names will be:
-    // "{}-{}-[c/p/y]LP"
-    // "cLP"
-    // make the helper string formatting functions in lp_vault.rs
-    let clp_name = token_info.name.clone();
-    let plp_name = token_info.name.clone();
-    let ylp_name = token_info.name.clone();
-
-    let clp_symbol = token_info.symbol.clone();
-    let plp_symbol = token_info.symbol.clone();
-    let ylp_symbol = token_info.symbol.clone();
-
-    // Instantiate new tokens (tentative cw20 format)
-    // we should probably make our own cw20 LP's intead for c/y/pLP's, this is just easiest for now
+    // Instantiate new tokens
+    // we will make our own cw20 LP's intead for c/y/pLP's, this is just easiest/placeholder for now
     let sub_msg: Vec<SubMsg> = vec![
         SubMsg {
             msg: WasmMsg::Instantiate {
                 code_id: factory_config.token_code_id,
                 msg: to_binary(&AstroTokenInstantiateMsg {
-                    name: clp_name,
-                    symbol: clp_symbol,
+                    name: format_token_name(&token_info.name.clone(), "c".to_string())?,
+                    symbol: format_token_symbol(&token_info.symbol.clone(), "c".to_string())?,
                     decimals: token_info.decimals.clone(),
                     initial_balances: vec![],
                     mint: Some(MinterResponse {
@@ -504,8 +488,8 @@ pub fn create_tokens(
             msg: WasmMsg::Instantiate {
                 code_id: factory_config.token_code_id,
                 msg: to_binary(&AstroTokenInstantiateMsg {
-                    name: plp_name,
-                    symbol: plp_symbol,
+                    name: format_token_name(&token_info.name.clone(), "p".to_string())?,
+                    symbol: format_token_symbol(&token_info.symbol.clone(), "p".to_string())?,
                     decimals: token_info.decimals.clone(),
                     initial_balances: vec![],
                     mint: Some(MinterResponse {
@@ -526,8 +510,8 @@ pub fn create_tokens(
             msg: WasmMsg::Instantiate {
                 code_id: factory_config.token_code_id,
                 msg: to_binary(&AstroTokenInstantiateMsg {
-                    name: ylp_name,
-                    symbol: ylp_symbol,
+                    name: format_token_name(&token_info.name.clone(), "y".to_string())?,
+                    symbol: format_token_symbol(&token_info.symbol.clone(), "y".to_string())?,
                     decimals: token_info.decimals.clone(),
                     initial_balances: vec![],
                     mint: Some(MinterResponse {
@@ -545,22 +529,13 @@ pub fn create_tokens(
             reply_on: ReplyOn::Success,
         },
     ];
-    
-
-    // will this reset if any of the instantiatemsg's here fail? or should the jank
-    // temp storage item be used
-    // prob the temp storage will have to be used
-
-    // figure this out later
-    NUM_LPS.save(deps.storage, &new_lp_id)?;
     Ok(Response::new().add_submessages(sub_msg))
 }
 
-// TODO
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
     // grab address from data field and validate
-    let mut config: Config = CONFIG.load(deps.storage)?;
+    let config: Config = CONFIG.load(deps.storage)?;
 
     let data = msg.result.unwrap().data.unwrap();
     let res: MsgInstantiateContractResponse =
@@ -568,18 +543,49 @@ pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
             StdError::parse_err("MsgInstantiateContractResponse", "failed to parse data")
         })?;
 
+    // get LPInfo to modify
     let new_token_addr = addr_validate_to_lower(deps.api, res.get_contract_address())?;
     let lp_id = NUM_LPS.load(deps.storage)?;
     let mut lp_info = LP_INFOS.load(deps.storage, lp_id.into())?;
     
+    // save new addr -> id mapping
+    LP_IDS.save(deps.storage, &new_token_addr, &lp_id.clone())?;
+
+    // update the correct contract
+    // we can turn change lp storage in LPInfo to a vec to clean up this logic a bit
+    // and make it more extensible to add xyLP (and other derivatives) in the future
     match msg.id {
-        CLP_INSTANTIATE_REPLY_ID => { lp_info.clp_contract = new_token_addr; },
-        PLP_INSTANTIATE_REPLY_ID => { lp_info.plp_contract = new_token_addr; },
-        YLP_INSTANTIATE_REPLY_ID => { lp_info.ylp_contract = new_token_addr; },
+        CLP_INSTANTIATE_REPLY_ID => { 
+            // check if cLP has already been instantiated
+            if lp_info.clp_contract != Addr::unchecked("") {
+                return Err(StdError::generic_err("Unauthorized"));
+            }
+
+            lp_info.clp_contract = new_token_addr; 
+        },
+        PLP_INSTANTIATE_REPLY_ID => { 
+            // check if pLP has already been instantiated
+            if lp_info.plp_contract != Addr::unchecked("") {
+                return Err(StdError::generic_err("Unauthorized"));
+            }
+
+            lp_info.plp_contract = new_token_addr; 
+        },
+        YLP_INSTANTIATE_REPLY_ID => {
+            // check if yLP has already been instantiated
+            if lp_info.ylp_contract != Addr::unchecked("") {
+                return Err(StdError::generic_err("Unauthorized"));
+            }
+
+            // update LP id on last token instantiation
+            lp_info.ylp_contract = new_token_addr; 
+            NUM_LPS.save(deps.storage, &(lp_id + 1))?;
+        },
         _ => { return Err(StdError::generic_err(format!("Bad Reply ID"))); }
     };
-    // filter by reply ID
-    // create [c/p/y]LP -> id mapping, update LPInfo in id -> LPInfo
+
+    // save new contract
+    LP_INFOS.save(deps.storage, lp_id.into(), &lp_info)?;
     Ok(Response::new())
 }
 
@@ -599,4 +605,23 @@ pub fn update_rewards(
     // if xprism mode, use collector contract to convert and add to xprism reward
 
     Ok(Response::new())
+}
+
+// ??
+pub fn format_token_name(name: &String, option: String) -> StdResult<String> {
+    // "{}-{}-LP" --> "{}-{}-[c/p/y]LP"
+    let index = name.rfind('-');
+
+    if index == None {
+        return Err(StdError::generic_err("format token name issue"));
+    }
+
+    let mut test = name.clone();
+    test.insert_str(index.unwrap(), &option);
+    Ok(test)
+}
+
+pub fn format_token_symbol(symbol: &String, option: String) -> StdResult<String> {
+    // "uLP" --> "[c/p/y]uLP"
+    Ok(option + symbol)
 }
