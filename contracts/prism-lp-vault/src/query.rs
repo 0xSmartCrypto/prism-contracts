@@ -1,13 +1,12 @@
 use cosmwasm_std::{Addr, CanonicalAddr, Deps, Env, Decimal, StdResult, Uint128, StdError, CosmosMsg, WasmMsg, QueryRequest, QuerierWrapper, WasmQuery, Response, to_binary,};
 
-use crate::error::ContractError;
-use crate::state::{CONFIG,};
+use crate::state::{CONFIG};
 
 use prism_protocol::lp_vault::{Config, ConfigResponse};
 use astroport::asset::PairInfo;
 use astroport::factory::{QueryMsg as AstroQueryMsg, ConfigResponse as FactoryConfigResponse};
 
-use cw20::{Cw20QueryMsg, TokenInfoResponse,};
+use cw20::{Cw20QueryMsg, TokenInfoResponse};
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;

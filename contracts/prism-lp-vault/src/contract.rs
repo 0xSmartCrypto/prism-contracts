@@ -3,17 +3,18 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    Uint128, attr, Addr,
+    attr, Addr,
 };
 
 use prism_protocol::lp_vault::{
     Cw20HookMsg, Config, RewardInfo, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode, 
 };
 
-use crate::error::ContractError;
 use crate::state::{CONFIG, NUM_LPS};
 use crate::query::{query_config,};
-use crate::execute::{update_config, bond, unbond, split, merge, stake, unstake, claim_rewards, update_staking_mode, mint, burn, create_tokens, update_rewards};
+use crate::bond::{bond, unbond, mint, burn, create_tokens};
+use crate::refract::{split, merge};
+use crate::stake::{stake, unstake, claim_rewards, update_staking_mode, update_rewards};
 
 use astroport::asset::AssetInfo;
 use cw20::Cw20ReceiveMsg;
@@ -90,4 +91,51 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
     }
+}
+
+// only executable by owner
+pub fn update_config(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    owner: Option<String>,
+    generator: Option<String>,
+    factory: Option<String>,
+    collector: Option<String>,
+) -> StdResult<Response> {
+    let conf = CONFIG.load(deps.storage)?;
+
+    if info.sender.as_str() != conf.owner {
+        return Err(StdError::generic_err(format!("Unauthorized")));
+    }
+
+    if let Some(creator) = owner {
+        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
+            last_config.owner = creator;
+            Ok(last_config)
+        })?;
+    }
+
+    if let Some(generator_contract) = generator {
+        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
+            last_config.generator = generator_contract;
+            Ok(last_config)
+        })?;
+    }
+
+    if let Some(factory_contract) = factory {
+        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
+            last_config.factory = factory_contract;
+            Ok(last_config)
+        })?;
+    }
+
+    if let Some(fee_contract) = collector {
+        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
+            last_config.collector = fee_contract;
+            Ok(last_config)
+        })?;
+    }
+
+    Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }

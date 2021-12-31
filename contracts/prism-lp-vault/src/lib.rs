@@ -1,11 +1,10 @@
 pub mod contract;
-mod error;
 mod query;
-mod execute;
+mod bond;
+mod stake;
+mod refract;
 mod state;
 mod response;
 
 #[cfg(test)]
 mod testing;
-
-pub use crate::error::ContractError;
