@@ -57,11 +57,13 @@ pub fn bond(
     }));
 
     // create LP token set if it doesn't exist
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::CreateTokens { token: staking_token.clone() })?,
-        funds: vec![],
-    }));
+    if LP_IDS.may_load(deps.storage, &staking_token)? == None {
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            msg: to_binary(&ExecuteMsg::CreateTokens { token: staking_token.clone() })?,
+            funds: vec![],
+        }));
+    }
 
     // update rewards for yLP stakers
     // can we move when this is done to save computation? maybe when users query rewards? (lazily)
@@ -227,6 +229,11 @@ pub fn create_tokens(
     info: MessageInfo,
     token: Addr,
 ) -> StdResult<Response> {
+    // check that it is called by us
+    if info.sender.as_str() != env.contract.address.to_string() {
+        return Err(StdError::generic_err(format!("Unauthorized")));
+    }
+
     let new_lp_id = NUM_LPS.load(deps.storage)?;
     
     // Get pair contract info and asset info
@@ -384,6 +391,7 @@ pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
 }
 
 // ??
+// pain
 pub fn format_token_name(name: &String, option: String) -> StdResult<String> {
     // "{}-{}-LP" --> "{}-{}-[c/p/y]LP"
     let index = name.rfind('-');
