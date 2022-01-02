@@ -7,7 +7,7 @@ use cosmwasm_std::{
 };
 
 use prism_protocol::lp_vault::{
-    ConfigResponse, Config, RewardInfo, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode,
+    ConfigResponse, Config, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode,
 };
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
@@ -24,18 +24,36 @@ use astroport::asset::{AssetInfo, addr_validate_to_lower};
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, TokenInfoResponse, MinterResponse};
 use terra_cosmwasm::TerraMsgWrapper;
 
+
+
+// pub struct StakerInfo {
+//     pub amt_bonded: Uint128,
+//     pub mode: StakingMode,
+//     pub reward_info: RewardInfo,
+// }
+
+// change to vec of 2 assetinfos to match astro?
+// pub struct RewardInfo {
+//     pub pending_underlying_reward_1: Uint128,
+//     pub pending_underlying_reward_2: Uint128,
+//     pub pending_underlying_astro: Uint128,
+// }
+
 // TODO
-// should be cw20
+// only callable by cw20
 pub fn stake(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    staking_token: Addr,
+    sender_addr: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
-    // yLP has already been transfered because cw20 send
-    // params will be ylp_contract, sender_addr, amount
+    // check that addr exists internally
+    // check that the addr sent is a yLP token (and not p/cLP) via LPInfo
 
     // call update rewards
+    // call update staker
+
     // check for (lp_id, user) staker_info
     // if exists, add bond amount
     // else, create new StakerInfo with bond amount and store
@@ -47,11 +65,15 @@ pub fn unstake(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: Uint128,
+    token: Addr,
+    amount: Option<Uint128>,
 ) -> StdResult<Response> {
-    // params will be ylp_contract, info.sender, Option<amount>
+    // check that addr exists internally
+    // check that token sent is a yLP token via LPInfo
     
     // call update rewards
+    // call update staker
+
     // check for (lp_id, user) staker_info
     // if doesn't exist or amount < whats available, error
     // if amount is empty, do all bonded yLP
@@ -66,6 +88,7 @@ pub fn claim_rewards(
     info: MessageInfo,
 ) -> StdResult<Response> {
     // call update_rewards
+    // call send_rewards
 
     // for each {info.sender, token_id} in STAKER_INFO
 
@@ -104,6 +127,8 @@ pub fn update_rewards(
 
     // grab x and y from Astroport, amt_bonded and last liquidity from LP_INFO
     // calculate new liquidity, calculate amount of LP to withdraw and burn
+
+    // might want to query reward too
 
     // for each {user, token_id} in STAKER_INFO
     // if default mode, add underlying rewards

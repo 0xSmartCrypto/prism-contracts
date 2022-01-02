@@ -45,11 +45,9 @@ pub enum ExecuteMsg {
     Merge { token: String,
             amount: Uint128, },
 
-    // stake yLP to get rewards
-    Stake { amount: Uint128, },
-
     // unstake yLP
-    Unstake { amount: Uint128, },
+    Unstake { token: Addr,
+              amount: Option<Uint128>, },
 
     // lets a user update their staking mode
     UpdateStakingMode { token: String,
@@ -87,6 +85,9 @@ pub enum Cw20HookMsg {
 
     // cLP -> LP
     Unbond { },
+
+    // stake yLP to get rewards
+    Stake { amount: Uint128, },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -124,13 +125,6 @@ impl Config {
         };
         Ok(res)
     }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct RewardInfo {
-    pub pending_underlying_reward_1: Uint128,
-    pub pending_underlying_reward_2: Uint128,
-    pub pending_underlying_astro: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

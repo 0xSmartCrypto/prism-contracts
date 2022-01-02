@@ -7,7 +7,7 @@ use cosmwasm_std::{
 };
 
 use prism_protocol::lp_vault::{
-    Cw20HookMsg, Config, RewardInfo, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode, 
+    Cw20HookMsg, Config, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode, 
 };
 
 use crate::state::{CONFIG, NUM_LPS};
@@ -58,8 +58,7 @@ pub fn execute(
         // user functions
         ExecuteMsg::Merge { token, amount } => merge(deps, env, info, token, amount),
         ExecuteMsg::Split { token, amount } => split(deps, env, info, token, amount),
-        ExecuteMsg::Stake { amount } => stake(deps, env, info, amount),
-        ExecuteMsg::Unstake { amount } => unstake(deps, env, info, amount),
+        ExecuteMsg::Unstake { token, amount } => unstake(deps, env, info, token, amount),
         ExecuteMsg::UpdateStakingMode { token, mode } => update_staking_mode(deps, env, info, token, mode),
         ExecuteMsg::ClaimRewards { } => claim_rewards(deps, env, info),
 
@@ -82,6 +81,7 @@ pub fn receive_cw20(
     match from_binary(&cw20_msg.msg) {
         Ok(Cw20HookMsg::Bond {}) => bond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
         Ok(Cw20HookMsg::Unbond {}) => unbond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
+        Ok(Cw20HookMsg::Stake { amount }) => stake(deps, env, info.sender, cw20_sender, cw20_msg.amount),
         Err(_) => Err(StdError::generic_err(format!("Invalid CW20 Message"))),
     }
 }

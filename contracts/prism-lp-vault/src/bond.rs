@@ -7,7 +7,7 @@ use cosmwasm_std::{
 };
 
 use prism_protocol::lp_vault::{
-    ConfigResponse, Config, RewardInfo, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode,
+    ConfigResponse, Config, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode,
 };
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
@@ -15,7 +15,7 @@ use astroport::token::{InstantiateMsg as AstroTokenInstantiateMsg};
 use astroport::factory::{ConfigResponse as FactoryConfigResponse};
 
 use crate::state::{CONFIG, LP_IDS, LP_INFOS, NUM_LPS, LPInfo};
-use crate::query::{query_config, query_token_info, query_pair_info, query_factory_config};
+use crate::query::{query_config, query_token_info, query_pair_info, query_factory_config, query_generator_rewards};
 
 use crate::response::MsgInstantiateContractResponse;
 use protobuf::Message;
@@ -66,6 +66,7 @@ pub fn bond(
     }
 
     // update rewards for yLP stakers
+    // do we even need to do this here?
     // can we move when this is done to save computation? maybe when users query rewards? (lazily)
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
@@ -118,6 +119,7 @@ pub fn unbond(
     }));
 
     // update rewards for yLP stakers
+    // is this necessary here?
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
         msg: to_binary(&ExecuteMsg::UpdateRewards { })?,
@@ -245,12 +247,16 @@ pub fn create_tokens(
     // Get LP token name for naming the new tokens
     let token_info = query_token_info(&deps.querier, token.clone())?;
 
+    // Get reward info for generator and form AssetInfos
+    let generator_rewards = query_generator_rewards(deps.as_ref(), &deps.querier, token.clone())?;
+
     // Store LP address -> id mapping
     LP_IDS.save(deps.storage, &token.clone(), &new_lp_id.clone())?;
 
     // Store id -> LPInfo mapping with lp_contract
     let new_lp_info = LPInfo {
-        asset_infos: pair_info.asset_infos,
+        pair_asset_info: pair_info.asset_infos.clone(),
+        generator_reward_info: generator_rewards.clone(),
         amt_bonded: Uint128::zero(),
         last_liquidity: Decimal::zero(),
         pair_contract: pair_info.contract_addr,

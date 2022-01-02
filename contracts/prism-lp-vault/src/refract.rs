@@ -7,7 +7,7 @@ use cosmwasm_std::{
 };
 
 use prism_protocol::lp_vault::{
-    ConfigResponse, Config, RewardInfo, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode,
+    ConfigResponse, Config, ExecuteMsg, InstantiateMsg, QueryMsg, StakingMode,
 };
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroExecuteMsg};
@@ -24,6 +24,9 @@ use astroport::asset::{AssetInfo, addr_validate_to_lower};
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, TokenInfoResponse, MinterResponse};
 use terra_cosmwasm::TerraMsgWrapper;
 
+// these currently work with any LP address in the set
+// should it be restricted to just cLP?
+
 pub fn split(
     deps: DepsMut,
     env: Env,
@@ -31,7 +34,7 @@ pub fn split(
     token: String,
     amount: Uint128,
 ) -> StdResult<Response> {
-    // make sure cLP token exists
+    // make sure the LP token exists
     let token_addr = Addr::unchecked(token);
     let lp_id = LP_IDS.load(deps.storage, &token_addr)
                       .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;

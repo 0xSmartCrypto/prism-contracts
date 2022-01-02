@@ -1,9 +1,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use astroport::asset::AssetInfo;
+use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::{Addr, Decimal, StdResult, Uint128};
-use prism_protocol::lp_vault::{Config, RewardInfo, StakingMode};
+use prism_protocol::lp_vault::{Config, StakingMode};
 use cw_storage_plus::{Item, Map, U64Key};
 
 pub const CONFIG: Item<Config> = Item::new("config");
@@ -23,7 +23,8 @@ pub const NUM_LPS: Item<u64> = Item::new("num_lps");
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LPInfo {
     // calc
-    pub asset_infos: [AssetInfo; 2],
+    pub pair_asset_info: [AssetInfo; 2],
+    pub generator_reward_info: Vec<AssetInfo>,
     pub amt_bonded: Uint128,
     pub last_liquidity: Decimal,
 
@@ -38,7 +39,18 @@ pub struct LPInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StakerInfo {
-    pub amt_bonded: Uint128,
+    pub amt_staked: Uint128,
     pub mode: StakingMode,
-    pub reward_info: RewardInfo,
+    pub rewards: RewardInfo,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct RewardInfo {
+    // will need to make this more extensible in the future for other AMMs, astroport specific for now
+
+    // index 0 = ASTRO, index 1 = proxy
+    pub generator_rewards: Vec<Asset>,
+    
+    // order established by messages sent back from Astroport
+    pub amm_rewards: Vec<Asset>,
 }

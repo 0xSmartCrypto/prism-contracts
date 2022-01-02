@@ -3,8 +3,9 @@ use cosmwasm_std::{Addr, CanonicalAddr, Deps, Env, Decimal, StdResult, Uint128, 
 use crate::state::{CONFIG};
 
 use prism_protocol::lp_vault::{Config, ConfigResponse};
-use astroport::asset::PairInfo;
+use astroport::asset::{PairInfo, AssetInfo};
 use astroport::factory::{QueryMsg as AstroQueryMsg, ConfigResponse as FactoryConfigResponse};
+use astroport::generator::{QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse};
 
 use cw20::{Cw20QueryMsg, TokenInfoResponse};
 
@@ -12,6 +13,8 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;
     Ok(config.as_res()?)
 }
+
+// use querier.query_wasm_smart instead?
 
 pub fn query_token_info(querier: &QuerierWrapper, contract_addr: Addr) -> StdResult<TokenInfoResponse> {
     Ok(querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
@@ -55,4 +58,32 @@ pub fn query_factory_config(deps: Deps, querier: &QuerierWrapper) -> StdResult<F
         contract_addr: config.factory.clone(),
         msg: to_binary(&AstroQueryMsg::Config {})?,
     }))?)
+}
+
+pub fn query_generator_rewards(deps: Deps, querier: &QuerierWrapper, token: Addr) -> StdResult<Vec<AssetInfo>> {
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    // query for generator reward infos
+    let gen_reward_info: RewardInfoResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.generator.clone(),
+        msg: to_binary(&AstroGeneratorQueryMsg::RewardInfo {
+            lp_token: token,
+        })?,
+    }))?;
+    
+    // if there exists a proxy reward, send back both
+    // looks kinda ugly
+    match gen_reward_info.proxy_reward_token {
+        Some(addr) => {
+            Ok(vec![
+                AssetInfo::Token { contract_addr: gen_reward_info.base_reward_token.clone() },
+                AssetInfo::Token { contract_addr: addr.clone() },
+            ])
+        },
+        None => {
+            Ok(vec![
+                AssetInfo::Token { contract_addr: gen_reward_info.base_reward_token.clone() },
+            ])
+        }
+    }
 }
