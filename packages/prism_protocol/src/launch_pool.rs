@@ -9,8 +9,9 @@ use cw20::Cw20ReceiveMsg;
 pub struct InstantiateMsg {
     pub owner: String,
     pub prism_token: String,
-    pub yluna_staking: String,
-    pub yluna_token: String,
+    pub reward_distribution: String,
+    pub yasset_staking: String,
+    pub yasset_token: String,
     // start, end, amount of $PRISM to distribute
     // distribute linearly
     pub distribution_schedule: (u64, u64, Uint128),
@@ -23,7 +24,7 @@ pub enum ExecuteMsg {
     ////////////////////////
     /// User operations ///
     ////////////////////////
-    /// Unbond yLUNA
+    /// Unbond yasset
     Unbond {
         amount: Option<Uint128>,
     },
@@ -33,7 +34,7 @@ pub enum ExecuteMsg {
 
     ClaimWithdrawnRewards {},
 
-    /// Withdraw underlying rewards from yLUNA staking contract
+    /// Withdraw underlying rewards from yasset staking contract
     AdminWithdrawRewards {},
 
     /// Helper for AdminWithdrawRewards
@@ -45,7 +46,7 @@ pub enum ExecuteMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
-    /// Bond yLuna to start receiving $PRISM rewards
+    /// Bond yasset to start receiving $PRISM rewards
     Bond {},
 }
 
@@ -62,8 +63,9 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub owner: String,
     pub prism_token: String,
-    pub yluna_staking: String,
-    pub yluna_token: String,
+    pub reward_distribution: String,
+    pub yasset_staking: String,
+    pub yasset_token: String,
     pub distribution_schedule: (u64, u64, Uint128),
 }
 

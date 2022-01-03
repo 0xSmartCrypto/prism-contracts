@@ -14,10 +14,13 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, VestingStatusResponse,
 };
-use prism_protocol::yasset_staking::{
-    Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
-    RewardAssetWhitelistResponse,
+use prism_protocol::reward_distribution::{
+    QueryMsg as RewardDistributionQueryMsg, RewardAssetWhitelistResponse,
 };
+use prism_protocol::yasset_staking::{
+    Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg,
+};
+
 use std::cmp::min;
 use std::convert::TryInto;
 
@@ -31,8 +34,9 @@ pub fn instantiate(
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
-        yluna_staking: deps.api.addr_validate(&msg.yluna_staking)?,
-        yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
+        reward_distribution: deps.api.addr_validate(&msg.reward_distribution)?,
+        yasset_staking: deps.api.addr_validate(&msg.yasset_staking)?,
+        yasset_token: deps.api.addr_validate(&msg.yasset_token)?,
         distribution_schedule: msg.distribution_schedule,
     };
 
@@ -75,8 +79,8 @@ pub fn receive_cw20(
         Cw20HookMsg::Bond {} => {
             let cfg = CONFIG.load(deps.storage)?;
 
-            // only yluna token contract can execute this message
-            if cfg.yluna_token != info.sender.to_string() {
+            // only yasset token contract can execute this message
+            if cfg.yasset_token != info.sender {
                 return Err(ContractError::Unauthorized {});
             }
 
@@ -133,8 +137,8 @@ pub fn admin_withdraw_rewards(
 
     let whitelist_res: RewardAssetWhitelistResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: cfg.yluna_staking.to_string(),
-            msg: to_binary(&StakingQueryMsg::RewardAssetWhitelist {})?,
+            contract_addr: cfg.reward_distribution.to_string(),
+            msg: to_binary(&RewardDistributionQueryMsg::RewardAssetWhitelist {})?,
         }))?;
 
     let mut balances = vec![];
@@ -144,7 +148,7 @@ pub fn admin_withdraw_rewards(
 
     Ok(Response::new().add_messages(vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_staking.to_string(),
+            contract_addr: cfg.yasset_staking.to_string(),
             msg: to_binary(&StakingExecuteMsg::ClaimRewards {})?,
             funds: vec![],
         }),
@@ -207,11 +211,11 @@ pub fn bond(
 
     Ok(
         Response::new().add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_token.to_string(),
+            contract_addr: cfg.yasset_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: cfg.yluna_staking.to_string(),
+                contract: cfg.yasset_staking.to_string(),
                 amount,
-                msg: to_binary(&StakingHookMsg::Bond { mode: None })?,
+                msg: to_binary(&StakingHookMsg::Bond {})?,
             })?,
             funds: vec![],
         })]),
@@ -253,14 +257,14 @@ pub fn unbond(
 
     Ok(Response::new().add_messages(vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_staking.to_string(),
+            contract_addr: cfg.yasset_staking.to_string(),
             msg: to_binary(&StakingExecuteMsg::Unbond {
                 amount: Some(unbond_amt),
             })?,
             funds: vec![],
         }),
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_token.to_string(),
+            contract_addr: cfg.yasset_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: info.sender.to_string(),
                 amount: unbond_amt,

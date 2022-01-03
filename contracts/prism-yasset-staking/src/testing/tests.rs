@@ -5,33 +5,92 @@ use cosmwasm_std::{
     StdError, SubMsg, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
-use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
+use crate::error::ContractError;
 use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
-use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
-use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::{
-    Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardAssetWhitelistResponse, RewardInfoResponse, StakingMode,
+    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
+    RewardInfoResponse, StateResponse,
 };
+
+const OWNER: &str = "owner";
+const YASSET_TOKEN: &str = "yluna0000";
+const REWARD_DISTRIBUTION: &str = "reward_distribution";
 
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let msg = InstantiateMsg {
-        vault: "vault0000".to_string(),
-        gov: "gov0000".to_string(),
-        reward_denom: "uluna".to_string(),
-        collector: "collector0000".to_string(),
-        protocol_fee: Decimal::from_ratio(1u128, 10u128),
-        cluna_token: "cluna0000".to_string(),
-        yluna_token: "yluna0000".to_string(),
-        pluna_token: "pluna0000".to_string(),
-        prism_token: "prism0000".to_string(),
-        withdraw_fee: Decimal::percent(1),
+        yasset_token: YASSET_TOKEN.to_string(),
     };
 
-    let info = mock_info("addr0000", &[]);
-    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let info = mock_info(OWNER, &[]);
+    instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // try to query staker info
+    let _res: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+
+    let msg = ExecuteMsg::PostInitialize {
+        reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
+    };
+    let info = mock_info(OWNER, &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+}
+
+#[test]
+pub fn test_init() {
+    let mut deps = mock_dependencies(&[]);
+    let msg = InstantiateMsg {
+        yasset_token: YASSET_TOKEN.to_string(),
+    };
+
+    let info = mock_info(OWNER, &[]);
+    instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // query config
+    let res: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+
+    let expected_result = ConfigResponse {
+        owner: OWNER.to_string(),
+        yasset_token: YASSET_TOKEN.to_string(),
+        reward_distribution_contract: None,
+    };
+    assert_eq!(res, expected_result);
+
+    // Unauthorized - post-initialize as random user
+    let msg = ExecuteMsg::PostInitialize {
+        reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
+    };
+    let info = mock_info("alice0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    assert_eq!(err, ContractError::Unauthorized {});
+
+    // successful post-initialize as owner
+    let msg = ExecuteMsg::PostInitialize {
+        reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
+    };
+    let info = mock_info(OWNER, &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // query config after post-initialize
+    let res: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+
+    let expected_result = ConfigResponse {
+        owner: OWNER.to_string(),
+        yasset_token: YASSET_TOKEN.to_string(),
+        reward_distribution_contract: Some(REWARD_DISTRIBUTION.to_string()),
+    };
+    assert_eq!(res, expected_result);
+
+    // DuplicatePostInitialize - retry post-initialize
+    let msg = ExecuteMsg::PostInitialize {
+        reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
+    };
+    let info = mock_info(OWNER, &[]);
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    assert_eq!(err, ContractError::DuplicatePostInitialize {});
 }
 
 #[test]
@@ -42,15 +101,15 @@ fn test_bond() {
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "alice0000".to_string(),
         amount: Uint128::from(1000000u128),
-        msg: to_binary(&Cw20HookMsg::Bond { mode: None }).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
 
     // wrong token
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, StdError::generic_err("unauthorized"));
+    assert_eq!(err, ContractError::Unauthorized {});
 
-    // valid token and mode
+    // valid token
     let info = mock_info("yluna0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
@@ -59,7 +118,6 @@ fn test_bond() {
             attr("action", "bond"),
             attr("staker_addr", "alice0000"),
             attr("amount", "1000000"),
-            attr("mode", "Default")
         ]
     );
 
@@ -80,7 +138,6 @@ fn test_bond() {
         RewardInfoResponse {
             staker_addr: "alice0000".to_string(),
             staked_amount: Uint128::from(1000000u128),
-            staking_mode: None,
             ..res
         }
     );
@@ -94,7 +151,7 @@ fn test_unbond() {
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "alice0000".to_string(),
         amount: Uint128::from(1000000u128),
-        msg: to_binary(&Cw20HookMsg::Bond { mode: None }).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
     let yluna_info = mock_info("yluna0000", &[]);
     execute(deps.as_mut(), mock_env(), yluna_info.clone(), msg).unwrap();
@@ -107,7 +164,9 @@ fn test_unbond() {
     let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
     assert_eq!(
         err,
-        StdError::generic_err("can not unbond more than the bonded amount")
+        ContractError::InvalidUnbond {
+            reason: "can not unbond more than the bonded amount".to_string(),
+        }
     );
 
     // unbond half
@@ -121,7 +180,6 @@ fn test_unbond() {
             attr("action", "unbond"),
             attr("staker_addr", "alice0000".to_string()),
             attr("amount", "500001"),
-            attr("withdraw_fee", "0"),
         ]
     );
     assert_eq!(
@@ -146,7 +204,6 @@ fn test_unbond() {
             attr("action", "unbond"),
             attr("staker_addr", "alice0000".to_string()),
             attr("amount", "499999"),
-            attr("withdraw_fee", "0"),
         ]
     );
     assert_eq!(
@@ -165,405 +222,99 @@ fn test_unbond() {
     // other user has nothing to unbond
     let info = mock_info("bob0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
-    assert_eq!(err, StdError::generic_err("no tokens bonded"));
+    assert_eq!(
+        err,
+        ContractError::InvalidUnbond {
+            reason: "no tokens bonded".to_string(),
+        }
+    );
 }
 
 #[test]
-fn test_change_bond_mode() {
+fn test_deposit_rewards() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
 
+    let luna_asset = Asset {
+        amount: Uint128::from(1000u128),
+        info: AssetInfo::NativeToken {
+            denom: "uluna".to_string(),
+        },
+    };
+
+    let mir_asset = Asset {
+        amount: Uint128::from(1000u128),
+        info: AssetInfo::Token {
+            contract_addr: Addr::unchecked("mir0000"),
+        },
+    };
+
+    // Unauthorized - deposit rewards must be called form reward_distribution contract
+    let info = mock_info("random_addr", &[]);
+    let msg = ExecuteMsg::DepositRewards {
+        assets: vec![luna_asset.clone(), mir_asset.clone()],
+    };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::Unauthorized {});
+
+    // ZeroBondedAmount - deposit rewards should only be called when we have
+    // something bonded
+    let info = mock_info(
+        REWARD_DISTRIBUTION,
+        &[Coin {
+            denom: luna_asset.info.to_string(),
+            amount: luna_asset.amount,
+        }],
+    );
+    let msg = ExecuteMsg::DepositRewards {
+        assets: vec![luna_asset.clone(), mir_asset.clone()],
+    };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::ZeroBondedAmount {});
+
+    // bond some yasset
+    let bond_amount = Uint128::from(1000000u128);
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "alice0000".to_string(),
-        amount: Uint128::from(1000000u128),
-        msg: to_binary(&Cw20HookMsg::Bond { mode: None }).unwrap(),
+        amount: bond_amount,
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
-    let yluna_info = mock_info("yluna0000", &[]);
-    execute(deps.as_mut(), mock_env(), yluna_info.clone(), msg).unwrap();
+    let info = mock_info("yluna0000", &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    deps.querier.with_token_balances(&[(
+        &YASSET_TOKEN.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000000u128))],
+    )]);
 
-    // change mode
-
-    // expect error, can only change when bond amount is zero
-    let update_msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: "alice0000".to_string(),
-        amount: Uint128::from(2000000u128),
-        msg: to_binary(&Cw20HookMsg::Bond {
-            mode: Some(StakingMode::XPrism),
-        })
-        .unwrap(),
-    });
-    let err = execute(
-        deps.as_mut(),
-        mock_env(),
-        yluna_info.clone(),
-        update_msg.clone(),
-    )
-    .unwrap_err();
-    assert_eq!(
-        err,
-        StdError::generic_err("mode can only be changed if nothing is bonded")
-    );
-
-    // unbond everything
-    let msg = ExecuteMsg::Unbond { amount: None };
-    let info = mock_info("alice0000", &[]);
-    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-    // now mode can be updated
-    let res = execute(deps.as_mut(), mock_env(), yluna_info, update_msg).unwrap();
-    assert_eq!(
-        res.attributes,
-        vec![
-            attr("action", "bond"),
-            attr("staker_addr", "alice0000"),
-            attr("amount", "2000000"),
-            attr("mode", "XPrism")
-        ]
-    );
-
-    let res: RewardInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            mock_env(),
-            QueryMsg::RewardInfo {
-                staker_addr: "alice0000".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        res.clone(),
-        RewardInfoResponse {
-            staker_addr: "alice0000".to_string(),
-            staked_amount: Uint128::from(2000000u128),
-            staking_mode: Some(StakingMode::XPrism),
-            ..res
-        }
-    );
-}
-
-#[test]
-pub fn test_process_delegator_rewards() {
-    let mut deps = mock_dependencies(&[
-        Coin {
-            denom: "uusd".to_string(),
-            amount: Uint128::new(1000u128),
-        },
-        Coin {
-            denom: "ukrw".to_string(),
-            amount: Uint128::new(100u128),
-        },
-        Coin {
-            denom: "uluna".to_string(),
-            amount: Uint128::new(150u128),
-        },
-        Coin {
-            denom: "mnt".to_string(),
-            amount: Uint128::new(50u128),
-        },
-        Coin {
-            denom: "uinr".to_string(),
-            amount: Uint128::new(5000u128),
-        },
-    ]);
-
-    init(&mut deps);
-
-    let info = mock_info("vault0000", &[]);
-    let msg = ExecuteMsg::ProcessDelegatorRewards {};
-
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_eq!(
-        res.messages,
-        vec![
-            SubMsg::new(create_swap_msg(
-                Coin {
-                    denom: "uusd".to_string(),
-                    amount: Uint128::new(1000u128),
-                },
-                "uluna".to_string()
-            )),
-            SubMsg::new(create_swap_msg(
-                Coin {
-                    denom: "ukrw".to_string(),
-                    amount: Uint128::new(100u128)
-                },
-                "uluna".to_string()
-            )),
-            SubMsg::new(create_swap_msg(
-                Coin {
-                    denom: "uinr".to_string(),
-                    amount: Uint128::new(5000u128)
-                },
-                "uluna".to_string()
-            )),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::LunaToPylunaHook {}).unwrap(),
-                funds: vec![],
-            })),
-        ]
-    );
-}
-
-#[test]
-fn test_luna_to_cluna_hook() {
-    let mut deps = mock_dependencies(&[Coin {
-        denom: "uluna".to_string(),
-        amount: Uint128::new(150u128),
-    }]);
-    init(&mut deps);
-
-    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::LunaToPylunaHook {};
-
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_eq!(res.attributes, vec![attr("action", "luna_to_pyluna_hook")]);
-    assert_eq!(
-        res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "vault0000".to_string(),
-                msg: to_binary(&VaultExecuteMsg::BondSplit { validator: None }).unwrap(),
-                funds: vec![Coin {
-                    denom: "uluna".to_string(),
-                    amount: Uint128::from(150u128),
-                }],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::DepositMintedPylunaHook {}).unwrap(),
-                funds: vec![],
-            })),
-        ]
-    )
-}
-
-#[test]
-fn test_deposit_minted_pyluna_hook() {
-    let mut deps = mock_dependencies(&[]);
-    init(&mut deps);
-
-    deps.querier.with_token_balances(&[
-        (
-            &"yluna0000".to_string(),
-            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000000u128))],
-        ),
-        (
-            &"pluna0000".to_string(),
-            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000000u128))],
-        ),
-    ]);
-
-    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::DepositMintedPylunaHook {};
-
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_eq!(
-        res.attributes,
-        vec![attr("action", "deposit_minted_pyluna_hook")]
-    );
-    assert_eq!(
-        res.messages,
-        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-            msg: to_binary(&ExecuteMsg::DepositRewards {
-                assets: vec![
-                    Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("yluna0000".to_string()),
-                        },
-                        amount: Uint128::from(1000000u128),
-                    },
-                    Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("pluna0000".to_string()),
-                        },
-                        amount: Uint128::from(1000000u128),
-                    },
-                ]
-            })
-            .unwrap(),
-            funds: vec![],
-        }))]
-    )
-}
-
-#[test]
-fn test_whitelist() {
-    let mut deps = mock_dependencies(&[]);
-    init(&mut deps);
-
-    // by default yluna and pluna are whitelisted
-    let res: RewardAssetWhitelistResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::RewardAssetWhitelist {}).unwrap())
-            .unwrap();
-    assert_eq!(
-        res,
-        RewardAssetWhitelistResponse {
-            assets: vec![
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000".to_string())
-                },
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000".to_string())
-                }
-            ]
-        }
-    );
-
-    // whitelist one more
-
-    let msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::Token {
-            contract_addr: Addr::unchecked("mir0000".to_string()),
-        },
-    };
-
-    // unauth attempt
-    let info = mock_info("addr0000", &[]);
-    let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, StdError::generic_err("unauthorized"));
-
-    // valid attempt
-    let info = mock_info("gov0000", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
-    assert_eq!(
-        res.attributes,
-        vec![
-            attr("action", "whitelist_reward_asset"),
-            attr("whitelisted_asset", "mir0000"),
-        ]
-    );
-
-    let res: RewardAssetWhitelistResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::RewardAssetWhitelist {}).unwrap())
-            .unwrap();
-    assert_eq!(
-        res,
-        RewardAssetWhitelistResponse {
-            assets: vec![
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000".to_string())
-                },
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000".to_string())
-                },
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("mir0000".to_string())
-                }
-            ]
-        }
-    );
-
-    // try to register native asset
-    let msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::NativeToken {
-            denom: "uusd".to_string(),
-        },
-    };
-    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
-    assert_eq!(
-        err,
-        StdError::generic_err("only token assets can be registered")
-    )
-}
-
-#[test]
-fn test_internal_deposit_rewards() {
-    let mut deps = mock_dependencies(&[]);
-    init(&mut deps);
-
-    deps.querier.with_vault_state(&Uint128::from(2000000u128));
-
-    // try non whitelisted asset
+    // InvalidNativeFunds - need to send native funds with deposit rewards msg
+    let info = mock_info(REWARD_DISTRIBUTION, &[]);
     let msg = ExecuteMsg::DepositRewards {
-        assets: vec![Asset {
-            amount: Uint128::from(100u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("mir0000".to_string()),
-            },
+        assets: vec![luna_asset.clone(), mir_asset.clone()],
+    };
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(res, ContractError::InvalidNativeFunds {});
+
+    // successful deposit
+    let info = mock_info(
+        REWARD_DISTRIBUTION,
+        &[Coin {
+            denom: luna_asset.info.to_string(),
+            amount: luna_asset.amount,
         }],
-    };
-
-    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
-    assert_eq!(
-        err,
-        StdError::generic_err("asset mir0000 is not whitelisted")
     );
-
-    // deposit when bond amount is zero
-
     let msg = ExecuteMsg::DepositRewards {
-        assets: vec![
-            Asset {
-                amount: Uint128::from(1000u128),
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000".to_string()),
-                },
-            },
-            Asset {
-                amount: Uint128::from(1000u128),
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000".to_string()),
-                },
-            },
-        ],
+        assets: vec![luna_asset.clone(), mir_asset.clone()],
     };
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
     assert_eq!(res.attributes, vec![attr("action", "deposit_rewards")]);
     assert_eq!(
         res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "yluna0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: "collector0000".to_string(),
-                    amount: Uint128::from(1000u128), // everything sent to collector
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "pluna0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: "collector0000".to_string(),
-                    amount: Uint128::from(1000u128), // everything sent to collector
-                })
-                .unwrap(),
-                funds: vec![],
-            }))
-        ]
-    );
-
-    // bond yluna
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: "alice0000".to_string(),
-        amount: Uint128::from(1000000u128), // now 50% of the total yLuna is staked
-        msg: to_binary(&Cw20HookMsg::Bond { mode: None }).unwrap(),
-    });
-    let yluna_info = mock_info("yluna0000", &[]);
-    execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
-
-    // deposit reward again
-    let msg = ExecuteMsg::DepositRewards {
-        assets: vec![Asset {
-            amount: Uint128::from(5000u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("yluna0000".to_string()),
-            },
-        }],
-    };
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_eq!(
-        res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "yluna0000".to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: "collector0000".to_string(),
-                amount: Uint128::from(2750u128), // 10% of 50% of 5k + 50% of 2500
+            contract_addr: mir_asset.info.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                owner: REWARD_DISTRIBUTION.to_string(),
+                recipient: MOCK_CONTRACT_ADDR.to_string(),
+                amount: mir_asset.amount,
             })
             .unwrap(),
             funds: vec![],
@@ -575,7 +326,7 @@ fn test_internal_deposit_rewards() {
             deps.as_ref(),
             mock_env(),
             QueryMsg::PoolInfo {
-                asset_token: "yluna0000".to_string(),
+                asset_info: luna_asset.info.clone(),
             },
         )
         .unwrap(),
@@ -584,60 +335,251 @@ fn test_internal_deposit_rewards() {
     assert_eq!(
         res,
         PoolInfoResponse {
-            asset_token: "yluna0000".to_string(),
-            reward_index: Decimal::from_ratio(2250u128, 1000000u128), // ((50% of 5k) - 250) / 1000000
+            asset_info: luna_asset.info,
+            reward_index: Decimal::from_ratio(luna_asset.amount, bond_amount),
+        }
+    );
+
+    let res: PoolInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::PoolInfo {
+                asset_info: mir_asset.info.clone(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        res,
+        PoolInfoResponse {
+            asset_info: mir_asset.info,
+            reward_index: Decimal::from_ratio(mir_asset.amount, bond_amount),
         }
     );
 }
 
 #[test]
-fn test_external_deposit_rewards() {
+fn test_deposit_rewards_multi_user() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
 
-    let msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::Token {
-            contract_addr: Addr::unchecked("mir0000".to_string()),
+    let luna_asset = Asset {
+        amount: Uint128::from(1000u128),
+        info: AssetInfo::NativeToken {
+            denom: "uluna".to_string(),
         },
     };
-    let info = mock_info("gov0000", &[]);
-    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    // the difference with internal deposit, is that tokens need to be transfered first
-    let info = mock_info("addr0000", &[]);
-    let msg = ExecuteMsg::DepositRewards {
-        assets: vec![Asset {
-            amount: Uint128::from(1000u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("mir0000".to_string()),
-            },
-        }],
+    let mir_asset = Asset {
+        amount: Uint128::from(1000u128),
+        info: AssetInfo::Token {
+            contract_addr: Addr::unchecked("mir0000"),
+        },
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
-    assert_eq!(res.attributes, vec![attr("action", "deposit_rewards")]);
+
+    // alice bonds 2500
+    let bond_amount = Uint128::from(2500u128);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "alice0000".to_string(),
+        amount: bond_amount,
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("yluna0000", &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // bob bonds 2500
+    let bond_amount = Uint128::from(2500u128);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "bob0000".to_string(),
+        amount: bond_amount,
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("yluna0000", &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // update yasset_staking balances to reflect newly bonded yassets
+    deps.querier.with_token_balances(&[(
+        &YASSET_TOKEN.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(5000u128))],
+    )]);
+
+    // deposit reward of 1000 luna and 1000 mir
+    let info = mock_info(
+        REWARD_DISTRIBUTION,
+        &[Coin {
+            denom: luna_asset.info.to_string(),
+            amount: luna_asset.amount,
+        }],
+    );
+    let msg = ExecuteMsg::DepositRewards {
+        assets: vec![luna_asset.clone(), mir_asset.clone()],
+    };
+    execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+
+    let state: StateResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::State {}).unwrap()).unwrap();
+    assert_eq!(state.total_bond_amount, Uint128::from(5000u128));
+
+    // query pool info for luna and mir
+    let res: PoolInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::PoolInfo {
+                asset_info: luna_asset.info.clone(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
     assert_eq!(
-        res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "mir0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: "addr0000".to_string(),
-                    recipient: MOCK_CONTRACT_ADDR.to_string(),
-                    amount: Uint128::from(1000u128),
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "mir0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: "collector0000".to_string(),
-                    amount: Uint128::from(1000u128), // everything, because no bonded yLuna
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-        ]
+        res,
+        PoolInfoResponse {
+            asset_info: luna_asset.info.clone(),
+            reward_index: Decimal::from_ratio(luna_asset.amount, state.total_bond_amount),
+        }
+    );
+
+    let res: PoolInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::PoolInfo {
+                asset_info: mir_asset.info.clone(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        res,
+        PoolInfoResponse {
+            asset_info: mir_asset.info,
+            reward_index: Decimal::from_ratio(mir_asset.amount, state.total_bond_amount),
+        }
+    );
+
+    // query pool info for anc (no rewards), should we return empy result
+    // instead of erroring?
+    let err = query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::PoolInfo {
+            asset_info: AssetInfo::Token {
+                contract_addr: Addr::unchecked("anc0000"),
+            },
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, StdError::NotFound { .. }));
+
+    // alice bonds 1000 more
+    let bond_amount = Uint128::from(1000u128);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "alice0000".to_string(),
+        amount: bond_amount,
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("yluna0000", &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // update yasset_staking balances to reflect newly bonded yassets
+    deps.querier.with_token_balances(&[(
+        &YASSET_TOKEN.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(6000u128))],
+    )]);
+
+    let state: StateResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::State {}).unwrap()).unwrap();
+    assert_eq!(state.total_bond_amount, Uint128::from(6000u128));
+
+    // deposit reward of 1000 luna
+    let info = mock_info(
+        REWARD_DISTRIBUTION,
+        &[Coin {
+            denom: luna_asset.info.to_string(),
+            amount: luna_asset.amount,
+        }],
+    );
+    let msg = ExecuteMsg::DepositRewards {
+        assets: vec![luna_asset.clone()],
+    };
+    execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+
+    // current rewards state
+    // alice:   luna:   (1000 * 2500 bonded / 5000 total bonded) +
+    //                  (1000 * 3500 bonded / 6000 total bonded) = 1083 uluna
+    //          mir:    (1000 * 2500 bonded / 5000 total bonded) = 500 mir
+    // bob:     luna:   (1000 * 2500 bonded / 5000 total bonded) +
+    //                  (1000 * 2500 bonded / 6000 total bonded) = 916 uluna
+    //          mir:    (1000 * 2500 bonded / 5000 total bonded) = 500 mir
+
+    let res: RewardInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::RewardInfo {
+                staker_addr: "alice0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: "alice0000".to_string(),
+            staked_amount: Uint128::from(3500u128),
+            rewards: vec![
+                Asset {
+                    info: AssetInfo::NativeToken {
+                        denom: "uluna".to_string()
+                    },
+                    amount: Uint128::from(1083u128)
+                },
+                Asset {
+                    info: AssetInfo::Token {
+                        contract_addr: Addr::unchecked("mir0000".to_string())
+                    },
+                    amount: Uint128::from(500u128)
+                }
+            ]
+        }
+    );
+
+    let res: RewardInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::RewardInfo {
+                staker_addr: "bob0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: "bob0000".to_string(),
+            staked_amount: Uint128::from(2500u128),
+            rewards: vec![
+                Asset {
+                    info: AssetInfo::NativeToken {
+                        denom: "uluna".to_string()
+                    },
+                    amount: Uint128::from(916u128)
+                },
+                Asset {
+                    info: AssetInfo::Token {
+                        contract_addr: Addr::unchecked("mir0000".to_string())
+                    },
+                    amount: Uint128::from(500u128)
+                }
+            ]
+        }
     );
 }
 
@@ -648,24 +590,30 @@ fn test_claim_rewards() {
 
     deps.querier.with_vault_state(&Uint128::from(1000000u128));
 
+    // bond 1e6
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "alice0000".to_string(),
         amount: Uint128::from(1000000u128),
-        msg: to_binary(&Cw20HookMsg::Bond { mode: None }).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
     let yluna_info = mock_info("yluna0000", &[]);
     execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
+    deps.querier.with_token_balances(&[(
+        &YASSET_TOKEN.to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000000u128))],
+    )]);
 
     // deposit 100 reward
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![Asset {
             amount: Uint128::from(100u128),
             info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("yluna0000".to_string()),
+                contract_addr: Addr::unchecked("mir0000".to_string()),
             },
         }],
     };
-    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+
+    let info = mock_info(REWARD_DISTRIBUTION, &[]);
     execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let res: RewardInfoResponse = from_binary(
@@ -684,19 +632,18 @@ fn test_claim_rewards() {
         RewardInfoResponse {
             staker_addr: "alice0000".to_string(),
             staked_amount: Uint128::from(1000000u128),
-            staking_mode: None,
             rewards: vec![
                 Asset {
-                    info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked("pluna0000".to_string())
+                    info: AssetInfo::NativeToken {
+                        denom: "uluna".to_string()
                     },
                     amount: Uint128::from(0u128)
                 },
                 Asset {
                     info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked("yluna0000".to_string())
+                        contract_addr: Addr::unchecked("mir0000".to_string())
                     },
-                    amount: Uint128::from(90u128)
+                    amount: Uint128::from(100u128)
                 }
             ]
         }
@@ -707,133 +654,38 @@ fn test_claim_rewards() {
     // try execute claim from address without bonded tokens
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, StdError::generic_err("no tokens bonded"));
+    assert_eq!(
+        err,
+        ContractError::InvalidUnbond {
+            reason: "no tokens bonded".to_string(),
+        }
+    );
 
     let info = mock_info("alice0000", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
     assert_eq!(
         res.attributes,
         vec![
             attr("action", "claim_rewards"),
-            attr("claimed_asset", "90yluna0000"),
+            attr("claimed_asset", "100mir0000"),
         ]
     );
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "yluna0000".to_string(),
+            contract_addr: "mir0000".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "alice0000".to_string(),
-                amount: Uint128::from(90u128),
+                amount: Uint128::from(100u128),
             })
             .unwrap(),
             funds: vec![],
         }))]
-    )
-}
-
-#[test]
-fn test_claim_rewards_xprism_mode() {
-    let mut deps = mock_dependencies(&[]);
-    init(&mut deps);
-
-    deps.querier.with_vault_state(&Uint128::from(1000000u128));
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: "alice0000".to_string(),
-        amount: Uint128::from(1000000u128),
-        msg: to_binary(&Cw20HookMsg::Bond {
-            mode: Some(StakingMode::XPrism),
-        })
-        .unwrap(),
-    });
-    let yluna_info = mock_info("yluna0000", &[]);
-    execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
-
-    // deposit 100 reward
-    let msg = ExecuteMsg::DepositRewards {
-        assets: vec![Asset {
-            amount: Uint128::from(100u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("yluna0000".to_string()),
-            },
-        }],
-    };
-    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
-
-    let res: RewardInfoResponse = from_binary(
-        &query(
-            deps.as_ref(),
-            mock_env(),
-            QueryMsg::RewardInfo {
-                staker_addr: "alice0000".to_string(),
-            },
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        res,
-        RewardInfoResponse {
-            staker_addr: "alice0000".to_string(),
-            staked_amount: Uint128::from(1000000u128),
-            staking_mode: Some(StakingMode::XPrism),
-            rewards: vec![
-                Asset {
-                    info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked("pluna0000".to_string())
-                    },
-                    amount: Uint128::from(0u128)
-                },
-                Asset {
-                    info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked("yluna0000".to_string())
-                    },
-                    amount: Uint128::from(90u128)
-                }
-            ]
-        }
     );
 
-    let msg = ExecuteMsg::ClaimRewards {};
-
+    // claim again, nothing returned
     let info = mock_info("alice0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-    assert_eq!(
-        res.attributes,
-        vec![
-            attr("action", "claim_rewards"),
-            attr("claimed_asset", "90yluna0000"),
-        ]
-    );
-    assert_eq!(
-        res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "yluna0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                    spender: "collector0000".to_string(),
-                    amount: Uint128::from(90u128),
-                    expires: None,
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "collector0000".to_string(),
-                msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
-                    assets: vec![Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("yluna0000")
-                        },
-                        amount: Uint128::from(90u128),
-                    }],
-                    receiver: Some("alice0000".to_string()),
-                })
-                .unwrap(),
-                funds: vec![],
-            }))
-        ]
-    )
+    assert_eq!(res.attributes, vec![attr("action", "claim_rewards"),]);
+    assert_eq!(res.messages, vec![],);
 }

@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstantiateMsg",
+  "type": "object",
+  "required": [
+    "asset_contract",
+    "asset_reward_contract",
+    "asset_reward_denom"
+  ],
+  "properties": {
+    "asset_contract": {
+      "type": "string"
+    },
+    "asset_reward_contract": {
+      "type": "string"
+    },
+    "asset_reward_denom": {
+      "type": "string"
+    }
+  }
+}

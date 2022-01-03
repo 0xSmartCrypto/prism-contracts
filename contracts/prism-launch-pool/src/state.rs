@@ -36,8 +36,9 @@ impl DistributionStatus {
 pub struct Config {
     pub owner: Addr,
     pub prism_token: Addr,
-    pub yluna_staking: Addr,
-    pub yluna_token: Addr,
+    pub reward_distribution: Addr,
+    pub yasset_staking: Addr,
+    pub yasset_token: Addr,
     pub distribution_schedule: (u64, u64, Uint128),
 }
 
@@ -46,8 +47,9 @@ impl Config {
         ConfigResponse {
             owner: self.owner.to_string(),
             prism_token: self.prism_token.to_string(),
-            yluna_staking: self.yluna_staking.to_string(),
-            yluna_token: self.yluna_token.to_string(),
+            reward_distribution: self.reward_distribution.to_string(),
+            yasset_staking: self.yasset_staking.to_string(),
+            yasset_token: self.yasset_token.to_string(),
             distribution_schedule: self.distribution_schedule,
         }
     }

@@ -19,15 +19,15 @@ use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 
 use crate::bond::{execute_bond, execute_bond_split};
 use crate::refract::{merge, split};
-use astroport::asset::{Asset, AssetInfo};
+use astroport::asset::AssetInfo;
 use astroport::querier::query_token_balance;
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, TokenInfoResponse};
+use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 use prism_protocol::vault::{
-    AllHistoryResponse, Config, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
-    InstantiateMsg, QueryMsg, State, StateResponse, UnbondRequestsResponse,
-    WhitelistedValidatorsResponse, WithdrawableUnbondedResponse,
+    AllHistoryResponse, BondedAmountResponse, Config, ConfigResponse, CurrentBatchResponse,
+    Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, State, StateResponse,
+    UnbondRequestsResponse, WhitelistedValidatorsResponse, WithdrawableUnbondedResponse,
 };
-use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -50,7 +50,7 @@ pub fn instantiate(
     // TODO -- auto create yluna, pluna, cluna token contracts from token code id
     let data = Config {
         creator: sender.to_string(),
-        yluna_staking: None,
+        reward_distribution_contract: None,
         cluna_contract: None,
         yluna_contract: None,
         airdrop_registry_contract: None,
@@ -146,7 +146,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ),
         ExecuteMsg::UpdateConfig {
             owner,
-            yluna_staking,
+            reward_distribution_contract,
             cluna_contract,
             yluna_contract,
             pluna_contract,
@@ -156,7 +156,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             env,
             info,
             owner,
-            yluna_staking,
+            reward_distribution_contract,
             cluna_contract,
             yluna_contract,
             pluna_contract,
@@ -218,8 +218,8 @@ pub fn execute_update_global(
     let mut messages: Vec<SubMsg> = vec![];
 
     let config = CONFIG.load(deps.storage)?;
-    let yluna_staking_addr = config
-        .yluna_staking
+    let reward_distribution_contract_addr = config
+        .reward_distribution_contract
         .expect("the reward contract must have been registered");
 
     if airdrop_hooks.is_some() {
@@ -237,10 +237,9 @@ pub fn execute_update_global(
     let mut withdraw_msgs = withdraw_all_rewards(&deps, env.contract.address.clone())?;
     messages.append(&mut withdraw_msgs);
 
-    // Swap to $UST, then into $PRISM
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: yluna_staking_addr.clone(),
-        msg: to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap(),
+        contract_addr: reward_distribution_contract_addr.clone(),
+        msg: to_binary(&RewardDistributionExecuteMsg::ProcessDelegatorRewards {}).unwrap(),
         funds: vec![],
     })));
 
@@ -355,8 +354,8 @@ pub fn deposit_airdrop_rewards(
     airdrop_token_contract: String,
 ) -> StdResult<Response> {
     let conf = CONFIG.load(deps.storage)?;
-    let yluna_staking_addr = conf
-        .yluna_staking
+    let reward_distribution_contract_addr = conf
+        .reward_distribution_contract
         .expect("the reward contract must have been registered");
     let astrport_token_addr = deps.api.addr_validate(&airdrop_token_contract)?;
 
@@ -366,31 +365,21 @@ pub fn deposit_airdrop_rewards(
         env.contract.address,
     )?;
 
-    let airdrop_reward = Asset {
-        info: AssetInfo::Token {
-            contract_addr: astrport_token_addr.clone(),
-        },
-        amount,
-    };
-
-    Ok(Response::new().add_messages(vec![
-        CosmosMsg::Wasm(WasmMsg::Execute {
+    Ok(
+        Response::new().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: astrport_token_addr.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                spender: yluna_staking_addr.clone(),
-                amount,
-                expires: None,
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: reward_distribution_contract_addr,
+                amount: amount,
+                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {
+                    asset_infos: vec![AssetInfo::Token {
+                        contract_addr: astrport_token_addr,
+                    }],
+                })?,
             })?,
             funds: vec![],
-        }),
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: yluna_staking_addr.clone(),
-            msg: to_binary(&StakingExecuteMsg::DepositRewards {
-                assets: vec![airdrop_reward],
-            })?,
-            funds: vec![],
-        }),
-    ]))
+        })),
+    )
 }
 
 /// Handler for tracking slashing
@@ -410,6 +399,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::State {} => to_binary(&query_state(deps)?),
+        QueryMsg::BondedAmount {} => to_binary(&query_bonded_amount(deps)?),
         QueryMsg::CurrentBatch {} => to_binary(&query_current_batch(deps)?),
         QueryMsg::WhitelistedValidators {} => to_binary(&query_white_validators(deps)?),
         QueryMsg::WithdrawableUnbonded { address } => {
@@ -428,7 +418,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 
     Ok(ConfigResponse {
         owner: config.creator,
-        yluna_staking: config.yluna_staking,
+        reward_distribution_contract: config.reward_distribution_contract,
         cluna_contract: config.cluna_contract,
         pluna_contract: config.pluna_contract,
         yluna_contract: config.yluna_contract,
@@ -446,6 +436,14 @@ fn query_state(deps: Deps) -> StdResult<StateResponse> {
         actual_unbonded_amount: state.actual_unbonded_amount,
         last_unbonded_time: state.last_unbonded_time,
         last_processed_batch: state.last_processed_batch,
+    };
+    Ok(res)
+}
+
+fn query_bonded_amount(deps: Deps) -> StdResult<BondedAmountResponse> {
+    let state = STATE.load(deps.storage)?;
+    let res = BondedAmountResponse {
+        total_bond_amount: state.total_bond_amount,
     };
     Ok(res)
 }
@@ -519,7 +517,10 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
 
-    Ok(cluna_token_info.total_supply + pluna_token_info.total_supply.min(yluna_token_info.total_supply))
+    Ok(cluna_token_info.total_supply
+        + pluna_token_info
+            .total_supply
+            .min(yluna_token_info.total_supply))
 }
 
 fn query_unbond_requests(deps: Deps, address: String) -> StdResult<UnbondRequestsResponse> {

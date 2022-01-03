@@ -6,7 +6,7 @@ use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::{
     from_binary,
     testing::{mock_env, mock_info},
-    to_binary, Addr, CosmosMsg, Decimal, SubMsg, Timestamp, Uint128, WasmMsg,
+    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use prism_common::testing::mock_querier::{mock_dependencies, MOCK_CONTRACT_ADDR};
@@ -25,9 +25,10 @@ fn proper_initialization() {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
+        reward_distribution: "rewarddistribution0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
-        yluna_staking: "ylunastaking0000".to_string(),
-        yluna_token: "ylunatoken0000".to_string(),
+        yasset_staking: "yassetstaking0000".to_string(),
+        yasset_token: "yassettoken0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -41,9 +42,10 @@ fn proper_initialization() {
         ConfigResponse {
             owner: "owner0000".to_string(),
             prism_token: "prism0000".to_string(),
+            reward_distribution: "rewarddistribution0000".to_string(),
             distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
-            yluna_staking: "ylunastaking0000".to_string(),
-            yluna_token: "ylunatoken0000".to_string(),
+            yasset_staking: "yassetstaking0000".to_string(),
+            yasset_token: "yassettoken0000".to_string(),
         }
     );
 }
@@ -55,9 +57,10 @@ fn withdraw_rewards() {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
+        reward_distribution: "rewarddistribution0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
-        yluna_staking: "ylunastaking0000".to_string(),
-        yluna_token: "ylunatoken0000".to_string(),
+        yasset_staking: "yassetstaking0000".to_string(),
+        yasset_token: "yassettoken0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -73,7 +76,7 @@ fn withdraw_rewards() {
     // bond
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(90u64);
-    let info = mock_info("ylunatoken0000", &[]);
+    let info = mock_info("yassettoken0000", &[]);
     execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // withdraw rewards after 50 seconds
@@ -163,9 +166,10 @@ fn withdraw_rewards_with_no_bond() {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
+        reward_distribution: "rewarddistribution0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
-        yluna_staking: "ylunastaking0000".to_string(),
-        yluna_token: "ylunatoken0000".to_string(),
+        yasset_staking: "yassetstaking0000".to_string(),
+        yasset_token: "yassettoken0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -216,7 +220,7 @@ fn withdraw_rewards_with_no_bond() {
         amount: Uint128::from(100u128),
         msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
-    let info = mock_info("ylunatoken0000", &[]);
+    let info = mock_info("yassettoken0000", &[]);
     execute(deps.as_mut(), env.clone(), info, msg.clone()).unwrap();
 
     // withdraw immediately, we still get all the pending rewards
@@ -281,13 +285,14 @@ fn bond() {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
+        reward_distribution: "rewarddistribution0000".to_string(),
         distribution_schedule: (
             100000000000000u64,
             200000000000000u64,
             Uint128::from(1000000u128),
         ),
-        yluna_staking: "ylunastaking0000".to_string(),
-        yluna_token: "ylunatoken0000".to_string(),
+        yasset_staking: "yassetstaking0000".to_string(),
+        yasset_token: "yassettoken0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -306,16 +311,16 @@ fn bond() {
     assert_eq!(err, ContractError::Unauthorized {});
 
     // correct token
-    let info = mock_info("ylunatoken0000", &[]);
+    let info = mock_info("yassettoken0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "ylunatoken0000".to_string(),
+            contract_addr: "yassettoken0000".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: "ylunastaking0000".to_string(),
+                contract: "yassetstaking0000".to_string(),
                 amount: Uint128::from(100u128),
-                msg: to_binary(&StakingHookMsg::Bond { mode: None }).unwrap(),
+                msg: to_binary(&StakingHookMsg::Bond {}).unwrap(),
             })
             .unwrap(),
             funds: vec![],
@@ -361,13 +366,14 @@ fn unbond() {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
+        reward_distribution: "rewarddistribution0000".to_string(),
         distribution_schedule: (
             100000000000000u64,
             200000000000000u64,
             Uint128::from(1000000u128),
         ),
-        yluna_staking: "ylunastaking0000".to_string(),
-        yluna_token: "ylunatoken0000".to_string(),
+        yasset_staking: "yassetstaking0000".to_string(),
+        yasset_token: "yassettoken0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -381,7 +387,7 @@ fn unbond() {
         msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
 
-    let info = mock_info("ylunatoken0000", &[]);
+    let info = mock_info("yassettoken0000", &[]);
     execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
 
     // try to unbond from a different sender with nothing bonded
@@ -423,7 +429,7 @@ fn unbond() {
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "ylunastaking0000".to_string(),
+                contract_addr: "yassetstaking0000".to_string(),
                 msg: to_binary(&StakingExecuteMsg::Unbond {
                     amount: Some(unbond_amt),
                 })
@@ -431,7 +437,7 @@ fn unbond() {
                 funds: vec![],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "ylunatoken0000".to_string(),
+                contract_addr: "yassettoken0000".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: "addr0000".to_string(),
                     amount: unbond_amt,
@@ -452,7 +458,7 @@ fn unbond() {
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "ylunastaking0000".to_string(),
+                contract_addr: "yassetstaking0000".to_string(),
                 msg: to_binary(&StakingExecuteMsg::Unbond {
                     amount: Some(remaining_amt),
                 })
@@ -460,7 +466,7 @@ fn unbond() {
                 funds: vec![],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "ylunatoken0000".to_string(),
+                contract_addr: "yassettoken0000".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: "addr0000".to_string(),
                     amount: remaining_amt,
@@ -528,9 +534,10 @@ fn claim_withdrawn_rewards() {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
+        reward_distribution: "rewarddistribution0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
-        yluna_staking: "ylunastaking0000".to_string(),
-        yluna_token: "ylunatoken0000".to_string(),
+        yasset_staking: "yassetstaking0000".to_string(),
+        yasset_token: "yassettoken0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -546,7 +553,7 @@ fn claim_withdrawn_rewards() {
     // bond
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(90u64);
-    let info = mock_info("ylunatoken0000", &[]);
+    let info = mock_info("yassettoken0000", &[]);
     execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // withdraw rewards after 50 seconds
@@ -629,9 +636,10 @@ fn admin_withdraw_rewards() {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
+        reward_distribution: "rewarddistribution0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
-        yluna_staking: "ylunastaking0000".to_string(),
-        yluna_token: "ylunatoken0000".to_string(),
+        yasset_staking: "yassetstaking0000".to_string(),
+        yasset_token: "yassettoken0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -645,16 +653,17 @@ fn admin_withdraw_rewards() {
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(err, ContractError::Unauthorized {});
 
-    deps.querier.with_token_balances(&[
-        (
-            &"yluna0000".to_string(),
-            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(100u128))],
-        ),
-        (
-            &"pluna0000".to_string(),
-            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(200u128))],
-        ),
-    ]);
+    deps.querier.with_native_balances(&[(
+        MOCK_CONTRACT_ADDR.to_string(),
+        Coin {
+            denom: "uluna".to_string(),
+            amount: Uint128::from(100u128),
+        },
+    )]);
+    deps.querier.with_token_balances(&[(
+        &"mir0000".to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(200u128))],
+    )]);
 
     // correct address
     let info = mock_info("owner0000", &[]);
@@ -663,7 +672,7 @@ fn admin_withdraw_rewards() {
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "ylunastaking0000".to_string(),
+                contract_addr: "yassetstaking0000".to_string(),
                 msg: to_binary(&StakingExecuteMsg::ClaimRewards {}).unwrap(),
                 funds: vec![],
             })),
@@ -672,14 +681,14 @@ fn admin_withdraw_rewards() {
                 msg: to_binary(&ExecuteMsg::AdminSendWithdrawnRewards {
                     original_balances: vec![
                         Asset {
-                            info: AssetInfo::Token {
-                                contract_addr: Addr::unchecked("yluna0000"),
+                            info: AssetInfo::NativeToken {
+                                denom: "uluna".to_string(),
                             },
                             amount: Uint128::from(100u128),
                         },
                         Asset {
                             info: AssetInfo::Token {
-                                contract_addr: Addr::unchecked("pluna0000"),
+                                contract_addr: Addr::unchecked("mir0000"),
                             },
                             amount: Uint128::from(200u128),
                         }
@@ -695,14 +704,14 @@ fn admin_withdraw_rewards() {
     let msg = ExecuteMsg::AdminSendWithdrawnRewards {
         original_balances: vec![
             Asset {
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000"),
+                info: AssetInfo::NativeToken {
+                    denom: "uluna".to_string(),
                 },
                 amount: Uint128::from(100u128),
             },
             Asset {
                 info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000"),
+                    contract_addr: Addr::unchecked("mir0000"),
                 },
                 amount: Uint128::from(200u128),
             },
@@ -710,16 +719,17 @@ fn admin_withdraw_rewards() {
     };
 
     // simulate that the contract received rewards after claiming
-    deps.querier.with_token_balances(&[
-        (
-            &"yluna0000".to_string(),
-            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(250u128))],
-        ),
-        (
-            &"pluna0000".to_string(),
-            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(400u128))],
-        ),
-    ]);
+    deps.querier.with_native_balances(&[(
+        MOCK_CONTRACT_ADDR.to_string(),
+        Coin {
+            denom: "uluna".to_string(),
+            amount: Uint128::from(250u128),
+        },
+    )]);
+    deps.querier.with_token_balances(&[(
+        &"mir0000".to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(400u128))],
+    )]);
 
     // wrong adddress attempt
     let info = mock_info("addr0000", &[]);
@@ -732,17 +742,15 @@ fn admin_withdraw_rewards() {
     assert_eq!(
         res.messages,
         vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "yluna0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: "owner0000".to_string(),
-                    amount: Uint128::from(150u128),
-                })
-                .unwrap(),
-                funds: vec![],
+            SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+                to_address: "owner0000".to_string(),
+                amount: vec![Coin {
+                    denom: "uluna".to_string(),
+                    amount: Uint128::from(150u128)
+                }],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "pluna0000".to_string(),
+                contract_addr: "mir0000".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: "owner0000".to_string(),
                     amount: Uint128::from(200u128),
@@ -757,14 +765,14 @@ fn admin_withdraw_rewards() {
     let msg = ExecuteMsg::AdminSendWithdrawnRewards {
         original_balances: vec![
             Asset {
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000"),
+                info: AssetInfo::NativeToken {
+                    denom: "uluna".to_string(),
                 },
                 amount: Uint128::from(250u128),
             },
             Asset {
                 info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000"),
+                    contract_addr: Addr::unchecked("mir0000"),
                 },
                 amount: Uint128::from(400u128),
             },

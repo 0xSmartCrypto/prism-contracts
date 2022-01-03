@@ -53,44 +53,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Internal operations Process delegator rewards swaps to luna and calls the internal hooks 1) Swap delegator rewards to luna 2) LunaToPyluna 3) DepositMintedPylunaHook",
-      "type": "object",
-      "required": [
-        "process_delegator_rewards"
-      ],
-      "properties": {
-        "process_delegator_rewards": {
-          "type": "object"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "luna_to_pyluna_hook"
-      ],
-      "properties": {
-        "luna_to_pyluna_hook": {
-          "type": "object"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "deposit_minted_pyluna_hook"
-      ],
-      "properties": {
-        "deposit_minted_pyluna_hook": {
-          "type": "object"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "Deposit rewards to yLuna stakers",
+      "description": "Deposit rewards to staker reward pools",
       "type": "object",
       "required": [
         "deposit_rewards"
@@ -114,20 +77,20 @@
       "additionalProperties": false
     },
     {
-      "description": "Gov operations",
+      "description": "PostInitialize to set the reward distribution contract",
       "type": "object",
       "required": [
-        "whitelist_reward_asset"
+        "post_initialize"
       ],
       "properties": {
-        "whitelist_reward_asset": {
+        "post_initialize": {
           "type": "object",
           "required": [
-            "asset"
+            "reward_distribution_contract"
           ],
           "properties": {
-            "asset": {
-              "$ref": "#/definitions/AssetInfo"
+            "reward_distribution_contract": {
+              "type": "string"
             }
           }
         }

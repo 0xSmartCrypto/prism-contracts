@@ -6,7 +6,7 @@ use cosmwasm_std::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use astroport::asset::{Asset, AssetInfo};
+use astroport::asset::AssetInfo;
 use cosmwasm_std::testing::{mock_env, mock_info};
 
 use crate::contract::{execute, instantiate, query};
@@ -30,8 +30,8 @@ use crate::state::{
 };
 use prism_common::testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use prism_protocol::airdrop::ExecuteMsg::FabricateClaim;
+use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
-use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
 use std::borrow::BorrowMut;
 
 const DEFAULT_VALIDATOR: &str = "default-validator";
@@ -66,7 +66,7 @@ fn set_validator_mock(querier: &mut WasmMockQuerier) {
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut OwnedDeps<S, A, Q>,
     owner: String,
-    yluna_staking: String,
+    reward_distribution_contract: String,
     cluna_contract: String,
     yluna_contract: String,
     pluna_contract: String,
@@ -86,7 +86,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 
     let register_msg = ExecuteMsg::UpdateConfig {
         owner: None,
-        yluna_staking: Some(yluna_staking),
+        reward_distribution_contract: Some(reward_distribution_contract),
         yluna_contract: Some(yluna_contract),
         pluna_contract: Some(pluna_contract),
         cluna_contract: Some(cluna_contract),
@@ -212,7 +212,7 @@ fn proper_initialization() {
         from_binary(&query(deps.as_ref(), mock_env(), conf).unwrap()).unwrap();
     let expected_conf = ConfigResponse {
         owner: "owner1".to_string(),
-        yluna_staking: None,
+        reward_distribution_contract: None,
         yluna_contract: None,
         pluna_contract: None,
         cluna_contract: None,
@@ -245,7 +245,7 @@ fn proper_register_validator() {
     set_validator_mock(&mut deps.querier);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -253,7 +253,7 @@ fn proper_register_validator() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -329,7 +329,7 @@ fn proper_bond() {
     let bond_amount = Uint128::new(10000);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -337,7 +337,7 @@ fn proper_bond() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -486,7 +486,7 @@ fn proper_deregister() {
     let delegated_amount = Uint128::new(10);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -494,7 +494,7 @@ fn proper_deregister() {
     init(
         deps.borrow_mut(),
         owner.clone(),
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -606,7 +606,7 @@ pub fn proper_update_global_index() {
     let bond_amount = Uint128::new(10);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -614,7 +614,7 @@ pub fn proper_update_global_index() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking.clone(),
+        reward_distribution_contract.clone(),
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -679,10 +679,10 @@ pub fn proper_update_global_index() {
             msg,
             funds: _,
         }) => {
-            assert_eq!(contract_addr, &yluna_staking);
+            assert_eq!(contract_addr, &reward_distribution_contract);
             assert_eq!(
                 msg,
-                &to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap()
+                &to_binary(&RewardDistributionExecuteMsg::ProcessDelegatorRewards {}).unwrap()
             )
         }
         _ => panic!("Unexpected message: {:?}", process_rewards),
@@ -701,7 +701,7 @@ pub fn proper_update_global_index_two_validators() {
     let addr1 = "addr1000".to_string();
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -709,7 +709,7 @@ pub fn proper_update_global_index_two_validators() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -793,7 +793,7 @@ pub fn proper_update_global_index_respect_one_registered_validator() {
     let addr1 = "addr1000".to_string();
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -801,7 +801,7 @@ pub fn proper_update_global_index_respect_one_registered_validator() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -869,7 +869,7 @@ pub fn proper_receive() {
     let invalid = "invalid".to_string();
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -877,7 +877,7 @@ pub fn proper_receive() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract.clone(),
         yluna_contract,
         pluna_contract,
@@ -966,7 +966,7 @@ pub fn proper_unbond() {
     set_validator_mock(&mut deps.querier);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -974,7 +974,7 @@ pub fn proper_unbond() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract.clone(),
         yluna_contract,
         pluna_contract,
@@ -1189,7 +1189,7 @@ pub fn proper_pick_validator() {
     set_validator_mock(&mut deps.querier);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -1197,7 +1197,7 @@ pub fn proper_pick_validator() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract.clone(),
         yluna_contract,
         pluna_contract,
@@ -1363,7 +1363,7 @@ pub fn proper_pick_validator_respect_distributed_delegation() {
     set_validator_mock(&mut deps.querier);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -1371,7 +1371,7 @@ pub fn proper_pick_validator_respect_distributed_delegation() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract.clone(),
         yluna_contract,
         pluna_contract,
@@ -1468,7 +1468,7 @@ pub fn proper_slashing() {
     let addr1 = "addr1000".to_string();
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -1476,7 +1476,7 @@ pub fn proper_slashing() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract.clone(),
         yluna_contract,
         pluna_contract,
@@ -1642,7 +1642,7 @@ pub fn proper_withdraw_unbonded() {
     set_validator_mock(&mut deps.querier);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -1650,7 +1650,7 @@ pub fn proper_withdraw_unbonded() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -1840,7 +1840,7 @@ pub fn proper_withdraw_unbonded_respect_slashing() {
     let unbond_amount = Uint128::new(500);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -1848,7 +1848,7 @@ pub fn proper_withdraw_unbonded_respect_slashing() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -2001,7 +2001,7 @@ pub fn proper_withdraw_unbonded_respect_inactivity_slashing() {
     let unbond_amount = Uint128::new(500);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -2009,7 +2009,7 @@ pub fn proper_withdraw_unbonded_respect_inactivity_slashing() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -2197,7 +2197,7 @@ pub fn proper_withdraw_unbond_with_dummies() {
     let unbond_amount = Uint128::new(500);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -2205,7 +2205,7 @@ pub fn proper_withdraw_unbond_with_dummies() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -2370,7 +2370,7 @@ pub fn test_update_params() {
         er_threshold: None,
     };
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -2378,7 +2378,7 @@ pub fn test_update_params() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -2446,7 +2446,7 @@ pub fn proper_recovery_fee() {
     let unbond_amount = Uint128::new(100000u128);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -2454,7 +2454,7 @@ pub fn proper_recovery_fee() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract.clone(),
         yluna_contract,
         pluna_contract,
@@ -2666,7 +2666,7 @@ pub fn proper_update_config() {
     let invalid_owner = "invalid_owner".to_string();
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -2674,7 +2674,7 @@ pub fn proper_update_config() {
     init(
         deps.borrow_mut(),
         owner.clone(),
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -2684,7 +2684,7 @@ pub fn proper_update_config() {
     // only the owner can call this message
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
-        yluna_staking: None,
+        reward_distribution_contract: None,
         yluna_contract: None,
         pluna_contract: None,
         cluna_contract: None,
@@ -2697,7 +2697,7 @@ pub fn proper_update_config() {
     // change the owner
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
-        yluna_staking: None,
+        reward_distribution_contract: None,
         yluna_contract: None,
         pluna_contract: None,
         cluna_contract: None,
@@ -2736,7 +2736,7 @@ pub fn proper_update_config() {
 
     let update_config = UpdateConfig {
         owner: None,
-        yluna_staking: Some("new reward".to_string()),
+        reward_distribution_contract: Some("new reward".to_string()),
         yluna_contract: None,
         pluna_contract: None,
         cluna_contract: None,
@@ -2757,13 +2757,13 @@ pub fn proper_update_config() {
     let config_query: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), config).unwrap()).unwrap();
     assert_eq!(
-        config_query.yluna_staking.unwrap(),
+        config_query.reward_distribution_contract.unwrap(),
         "new reward".to_string()
     );
 
     let update_config = UpdateConfig {
         owner: None,
-        yluna_staking: None,
+        reward_distribution_contract: None,
         yluna_contract: Some("new token".to_string()),
         pluna_contract: None,
         cluna_contract: None,
@@ -2783,14 +2783,14 @@ pub fn proper_update_config() {
 
     //make sure the other configs are still the same.
     assert_eq!(
-        config_query.yluna_staking.unwrap(),
+        config_query.reward_distribution_contract.unwrap(),
         "new reward".to_string()
     );
     assert_eq!(config_query.owner, new_owner);
 
     let update_config = UpdateConfig {
         owner: None,
-        yluna_staking: None,
+        reward_distribution_contract: None,
         yluna_contract: None,
         pluna_contract: None,
         cluna_contract: None,
@@ -2817,7 +2817,7 @@ fn proper_claim_airdrop() {
     set_validator_mock(&mut deps.querier);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -2825,7 +2825,7 @@ fn proper_claim_airdrop() {
     init(
         deps.borrow_mut(),
         owner.clone(),
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,
@@ -2879,7 +2879,7 @@ fn proper_deposit_airdrop_reward() {
     set_validator_mock(&mut deps.querier);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -2887,14 +2887,14 @@ fn proper_deposit_airdrop_reward() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking.clone(),
+        reward_distribution_contract.clone(),
         cluna_contract,
         yluna_contract,
         pluna_contract,
         validator.address.clone(),
     );
 
-    let swap_msg = ExecuteMsg::DepositAirdropReward {
+    let deposit_airdrop_msg = ExecuteMsg::DepositAirdropReward {
         airdrop_token_contract: "airdrop_token".to_string(),
     };
 
@@ -2906,34 +2906,30 @@ fn proper_deposit_airdrop_reward() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::new(1000))],
     )]);
 
-    let res = execute(deps.as_mut(), mock_env(), contract_info, swap_msg).unwrap();
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        contract_info,
+        deposit_airdrop_msg,
+    )
+    .unwrap();
     assert_eq!(
         res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "airdrop_token".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                    spender: yluna_staking.clone(),
-                    amount: Uint128::from(1000u128),
-                    expires: None,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "airdrop_token".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: reward_distribution_contract,
+                amount: Uint128::from(1000u128),
+                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {
+                    asset_infos: vec![AssetInfo::Token {
+                        contract_addr: Addr::unchecked("airdrop_token")
+                    }]
                 })
-                .unwrap(),
-                funds: vec![],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: yluna_staking,
-                msg: to_binary(&StakingExecuteMsg::DepositRewards {
-                    assets: vec![Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("airdrop_token"),
-                        },
-                        amount: Uint128::from(1000u128)
-                    }],
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-        ]
+                .unwrap()
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
     );
 }
 
@@ -2948,7 +2944,7 @@ fn proper_update_global_index_with_airdrop() {
     let bond_amount = Uint128::new(10);
 
     let owner = "owner1".to_string();
-    let yluna_staking = "ylunastaking".to_string();
+    let reward_distribution_contract = "reward_distribution".to_string();
     let yluna_contract = "yluna".to_string();
     let pluna_contract = "pluna".to_string();
     let cluna_contract = "cluna".to_string();
@@ -2956,7 +2952,7 @@ fn proper_update_global_index_with_airdrop() {
     init(
         deps.borrow_mut(),
         owner,
-        yluna_staking,
+        reward_distribution_contract,
         cluna_contract,
         yluna_contract,
         pluna_contract,

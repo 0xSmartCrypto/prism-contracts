@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConfigResponse",
+  "type": "object",
+  "required": [
+    "asset_contract",
+    "asset_reward_contract",
+    "asset_reward_denom",
+    "owner"
+  ],
+  "properties": {
+    "asset_contract": {
+      "type": "string"
+    },
+    "asset_reward_contract": {
+      "type": "string"
+    },
+    "asset_reward_denom": {
+      "type": "string"
+    },
+    "casset_contract": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "owner": {
+      "type": "string"
+    },
+    "passet_contract": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reward_distribution_contract": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "yasset_contract": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
