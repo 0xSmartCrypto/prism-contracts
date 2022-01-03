@@ -65,15 +65,6 @@ pub fn bond(
         }));
     }
 
-    // update rewards for yLP stakers
-    // do we even need to do this here?
-    // can we move when this is done to save computation? maybe when users query rewards? (lazily)
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::UpdateRewards { })?,
-        funds: vec![],
-    }));
-
     // mint cLP tokens and update internal state
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.clone().to_string(),
@@ -115,14 +106,6 @@ pub fn unbond(
             lp_token: lp_contract.clone(),
             amount,
         })?,
-        funds: vec![],
-    }));
-
-    // update rewards for yLP stakers
-    // is this necessary here?
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::UpdateRewards { })?,
         funds: vec![],
     }));
 
@@ -238,19 +221,13 @@ pub fn create_tokens(
 
     let new_lp_id = NUM_LPS.load(deps.storage)?;
     
-    // Get pair contract info and asset info
+    // Get relevant info
     let pair_info = query_pair_info(deps.as_ref(), &deps.querier, token.clone())?;
-
-    // Get factory config for token code id
     let factory_config = query_factory_config(deps.as_ref(), &deps.querier)?;
-
-    // Get LP token name for naming the new tokens
     let token_info = query_token_info(&deps.querier, token.clone())?;
-
-    // Get reward info for generator and form AssetInfos
     let generator_rewards = query_generator_rewards(deps.as_ref(), &deps.querier, token.clone())?;
 
-    // Store LP address -> id mapping
+    // Store new token mappings
     LP_IDS.save(deps.storage, &token.clone(), &new_lp_id.clone())?;
 
     // Store id -> LPInfo mapping with lp_contract
@@ -265,9 +242,11 @@ pub fn create_tokens(
         plp_contract: Addr::unchecked("".to_string()),
         ylp_contract: Addr::unchecked("".to_string()),
     };
+    LP_INFOS.save(deps.storage, new_lp_id.clone().into(), &new_lp_info);
 
     // Instantiate new tokens
-    // we will make our own cw20 LP's intead for c/y/pLP's, this is just easiest/placeholder for now
+    // we will make our own cw20 LP's intead for c/y/pLP's to generalize per AMM, 
+    // this is just easiest for astroport for now
     let sub_msg: Vec<SubMsg> = vec![
         SubMsg {
             msg: WasmMsg::Instantiate {

@@ -14,8 +14,8 @@ pub const LP_IDS: Map<&Addr, u64> = Map::new("LP_ids");
 // unique id -> LPInfo
 pub const LP_INFOS: Map<U64Key, LPInfo> = Map::new("LP_infos");
 
-// map of {user, unique id} -> StakerInfo
-pub const STAKER_INFO: Map<(&Addr, U64Key), StakerInfo> = Map::new("staker_info");
+// map of {unique id, user} -> StakerInfo
+pub const STAKER_INFO: Map<(U64Key, &Addr), StakerInfo> = Map::new("staker_info");
 
 // number of supported tokens
 pub const NUM_LPS: Item<u64> = Item::new("num_lps");

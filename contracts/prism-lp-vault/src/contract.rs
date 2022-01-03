@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    attr, Addr,
+    attr, Addr, Decimal,
 };
 
 use prism_protocol::lp_vault::{
@@ -14,7 +14,7 @@ use crate::state::{CONFIG, NUM_LPS};
 use crate::query::{query_config,};
 use crate::bond::{bond, unbond, mint, burn, create_tokens};
 use crate::refract::{split, merge};
-use crate::stake::{stake, unstake, claim_rewards, update_staking_mode, update_rewards};
+use crate::stake::{stake, unstake, claim_rewards, update_staking_mode};
 
 use astroport::asset::AssetInfo;
 use cw20::Cw20ReceiveMsg;
@@ -33,7 +33,7 @@ pub fn instantiate(
         generator: msg.generator,
         factory: msg.factory,
         collector: msg.collector,
-        collect_period: msg.collect_period,
+        fee: msg.fee,
     };
     CONFIG.save(deps.storage, &data)?;
     NUM_LPS.save(deps.storage, &0)?;
@@ -53,7 +53,7 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
 
         // owner functions
-        ExecuteMsg::UpdateConfig { owner, generator, factory, collector, } => update_config(deps, env, info, owner, generator, factory, collector), // should be contract restricted
+        ExecuteMsg::UpdateConfig { owner, generator, factory, collector, fee } => update_config(deps, env, info, owner, generator, factory, collector, fee), // should be contract restricted
 
         // user functions
         ExecuteMsg::Merge { token, amount } => merge(deps, env, info, token, amount),
@@ -66,7 +66,6 @@ pub fn execute(
         ExecuteMsg::Mint { user, token, amount } => mint(deps, env, info, user, token, amount),
         ExecuteMsg::Burn { user, token, amount } => burn(deps, env, info, user, token, amount),
         ExecuteMsg::CreateTokens { token } => create_tokens(deps, env, info, token),
-        ExecuteMsg::UpdateRewards { } => update_rewards(deps, env, info),
     }
 }
 
@@ -102,6 +101,7 @@ pub fn update_config(
     generator: Option<String>,
     factory: Option<String>,
     collector: Option<String>,
+    fee: Option<Decimal>,
 ) -> StdResult<Response> {
     let conf = CONFIG.load(deps.storage)?;
 
@@ -133,6 +133,13 @@ pub fn update_config(
     if let Some(fee_contract) = collector {
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.collector = fee_contract;
+            Ok(last_config)
+        })?;
+    }
+
+    if let Some(prism_fee) = fee {
+        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
+            last_config.fee = prism_fee;
             Ok(last_config)
         })?;
     }

@@ -5,6 +5,7 @@ mod stake;
 mod refract;
 mod state;
 mod response;
+mod math;
 
 #[cfg(test)]
 mod testing;

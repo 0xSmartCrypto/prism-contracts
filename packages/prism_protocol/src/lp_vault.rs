@@ -13,7 +13,7 @@ pub struct InstantiateMsg {
     pub generator: String,
     pub factory: String,
     pub collector: String,
-    pub collect_period: u64,
+    pub fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -29,6 +29,7 @@ pub enum ExecuteMsg {
         generator: Option<String>,
         factory: Option<String>,
         collector: Option<String>,
+        fee: Option<Decimal>,
     },
 
     ////////////////////
@@ -72,9 +73,6 @@ pub enum ExecuteMsg {
 
     // create a new set of c/p/y LP tokens given valid LP token
     CreateTokens { token: Addr,},
-
-    // updates the rewards that each user can claim on every bond/unbond
-    UpdateRewards { },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -110,8 +108,8 @@ pub struct Config {
     // used to swap assets to prism
     pub collector: String,
 
-    // we claim rewards from astro generator every collect_period (by calling Withdraw 0) for each LP
-    pub collect_period: u64,
+    // prism fee of 15%
+    pub fee: Decimal,
 }
 
 impl Config {
@@ -121,7 +119,7 @@ impl Config {
             generator: self.generator.to_string(),
             factory: self.factory.to_string(),
             collector: self.collector.to_string(),
-            collect_period: self.collect_period.clone(),
+            fee: self.fee.clone(),
         };
         Ok(res)
     }
@@ -133,7 +131,7 @@ pub struct ConfigResponse {
     pub generator: String,
     pub factory: String,
     pub collector: String,
-    pub collect_period: u64,
+    pub fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

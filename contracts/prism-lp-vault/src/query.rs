@@ -1,11 +1,12 @@
 use cosmwasm_std::{Addr, CanonicalAddr, Deps, Env, Decimal, StdResult, Uint128, StdError, CosmosMsg, WasmMsg, QueryRequest, QuerierWrapper, WasmQuery, Response, to_binary,};
 
-use crate::state::{CONFIG};
+use crate::state::{CONFIG, LP_IDS, LP_INFOS};
 
 use prism_protocol::lp_vault::{Config, ConfigResponse};
-use astroport::asset::{PairInfo, AssetInfo};
-use astroport::factory::{QueryMsg as AstroQueryMsg, ConfigResponse as FactoryConfigResponse};
-use astroport::generator::{QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse};
+use astroport::asset::{PairInfo, AssetInfo, Asset};
+use astroport::pair::{QueryMsg as AstroPairQueryMsg, PoolResponse};
+use astroport::factory::{QueryMsg as AstroFactoryQueryMsg, ConfigResponse as AstroFactoryConfigResponse};
+use astroport::generator::{QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse, PendingTokenResponse};
 
 use cw20::{Cw20QueryMsg, TokenInfoResponse};
 
@@ -29,7 +30,7 @@ pub fn query_all_pairs(deps: Deps, querier: &QuerierWrapper) -> StdResult<Vec<Pa
     // grab all pairs from astroport
     Ok(querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: config.factory.clone(),
-        msg: to_binary(&AstroQueryMsg::Pairs { 
+        msg: to_binary(&AstroFactoryQueryMsg::Pairs { 
             limit: None,
             start_after: None,
         })?,
@@ -50,13 +51,24 @@ pub fn query_pair_info(deps: Deps, querier: &QuerierWrapper, contract_addr: Addr
     )
 }
 
-pub fn query_factory_config(deps: Deps, querier: &QuerierWrapper) -> StdResult<FactoryConfigResponse> {
+
+pub fn query_pool_info(deps: Deps, querier: &QuerierWrapper, token_addr: Addr) -> StdResult<PoolResponse> {
+    let lp_id = LP_IDS.load(deps.storage, &token_addr)?;
+    let lp_info = LP_INFOS.load(deps.storage, lp_id.into())?;
+
+    Ok(querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: lp_info.pair_contract.clone().into_string(),
+        msg: to_binary(&AstroPairQueryMsg::Pool { })?,
+    }))?)
+}
+
+pub fn query_factory_config(deps: Deps, querier: &QuerierWrapper) -> StdResult<AstroFactoryConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     // query for factory config and return its token code id
     Ok(querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: config.factory.clone(),
-        msg: to_binary(&AstroQueryMsg::Config {})?,
+        msg: to_binary(&AstroFactoryQueryMsg::Config {})?,
     }))?)
 }
 
@@ -86,4 +98,28 @@ pub fn query_generator_rewards(deps: Deps, querier: &QuerierWrapper, token: Addr
             ])
         }
     }
+}
+
+pub fn query_pending_generator_rewards(deps: Deps, env: Env, querier: &QuerierWrapper, token: Addr) -> StdResult<PendingTokenResponse> {
+    let config: Config = CONFIG.load(deps.storage)?;
+
+    Ok(querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.factory.clone(),
+        msg: to_binary(&AstroGeneratorQueryMsg::PendingToken { 
+            lp_token: token.clone(),
+            user: env.contract.address.clone(),
+        })?,
+    }))?)
+}
+
+pub fn query_lp_burn_rewards(deps: Deps, querier: &QuerierWrapper, token: Addr, amount: Uint128) -> StdResult<Vec<Asset>> {
+    let lp_id = LP_IDS.load(deps.storage, &token)?;
+    let lp_info = LP_INFOS.load(deps.storage, lp_id.into())?;
+
+    Ok(querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: lp_info.pair_contract.clone().into_string(),
+        msg: to_binary(&AstroPairQueryMsg::Share { 
+            amount,
+        })?,
+    }))?)
 }
