@@ -242,7 +242,7 @@ pub fn create_tokens(
         plp_contract: Addr::unchecked("".to_string()),
         ylp_contract: Addr::unchecked("".to_string()),
     };
-    LP_INFOS.save(deps.storage, new_lp_id.clone().into(), &new_lp_info);
+    LP_INFOS.save(deps.storage, new_lp_id.clone().into(), &new_lp_info)?;
 
     // Instantiate new tokens
     // we will make our own cw20 LP's intead for c/y/pLP's to generalize per AMM, 

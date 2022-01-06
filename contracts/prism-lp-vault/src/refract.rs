@@ -31,12 +31,11 @@ pub fn split(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    token: String,
+    token: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
     // make sure the LP token exists
-    let token_addr = Addr::unchecked(token);
-    let lp_id = LP_IDS.load(deps.storage, &token_addr)
+    let lp_id = LP_IDS.load(deps.storage, &token.clone())
                       .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
     let lp_info = LP_INFOS.load(deps.storage, lp_id.into())
                               .map_err(|_| StdError::generic_err(format!("No cLP address exists")))?;
@@ -79,7 +78,7 @@ pub fn merge(
     token: String,
     amount: Uint128,
 ) -> StdResult<Response> {
-    let token_addr = Addr::unchecked(token);
+    let token_addr = deps.api.addr_validate(&token)?;
     let lp_id = LP_IDS.load(deps.storage, &token_addr)
                       .map_err(|_| StdError::generic_err(format!("No LP address exists")))?;
     let lp_info = LP_INFOS.load(deps.storage, lp_id.into())

@@ -39,7 +39,7 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
 
     // cLP -> [p/y]LP
-    Split { token: String,
+    Split { token: Addr,
             amount: Uint128, },
 
     // [p/y]LP -> cLP
@@ -51,7 +51,7 @@ pub enum ExecuteMsg {
               amount: Option<Uint128>, },
 
     // lets a user update their staking mode
-    UpdateStakingMode { token: String,
+    UpdateStakingMode { token: Addr,
                         mode: StakingMode, },
 
     // claims staked LP's rewards
@@ -72,7 +72,13 @@ pub enum ExecuteMsg {
            amount: Uint128, },
 
     // create a new set of c/p/y LP tokens given valid LP token
-    CreateTokens { token: Addr,},
+    CreateTokens { token: Addr, },
+
+    // update LP rewards for all users staking this LP
+    UpdateLPRewards { token: Addr, },
+
+    // send all LP rewards to this staker
+    SendStakerRewards { staker: Addr, },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

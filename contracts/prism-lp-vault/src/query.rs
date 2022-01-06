@@ -15,8 +15,6 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(config.as_res()?)
 }
 
-// use querier.query_wasm_smart instead?
-
 pub fn query_token_info(querier: &QuerierWrapper, contract_addr: Addr) -> StdResult<TokenInfoResponse> {
     Ok(querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: String::from(contract_addr),

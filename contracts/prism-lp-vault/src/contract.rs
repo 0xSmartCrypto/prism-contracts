@@ -14,7 +14,7 @@ use crate::state::{CONFIG, NUM_LPS};
 use crate::query::{query_config,};
 use crate::bond::{bond, unbond, mint, burn, create_tokens};
 use crate::refract::{split, merge};
-use crate::stake::{stake, unstake, claim_rewards, update_staking_mode};
+use crate::stake::{stake, unstake, claim_rewards, update_staking_mode, update_lp_rewards, send_staker_rewards};
 
 use astroport::asset::AssetInfo;
 use cw20::Cw20ReceiveMsg;
@@ -66,6 +66,8 @@ pub fn execute(
         ExecuteMsg::Mint { user, token, amount } => mint(deps, env, info, user, token, amount),
         ExecuteMsg::Burn { user, token, amount } => burn(deps, env, info, user, token, amount),
         ExecuteMsg::CreateTokens { token } => create_tokens(deps, env, info, token),
+        ExecuteMsg::UpdateLPRewards { token } => update_lp_rewards(deps, env, info, token),
+        ExecuteMsg::SendStakerRewards { staker } => send_staker_rewards(deps, env, info, staker),
     }
 }
 

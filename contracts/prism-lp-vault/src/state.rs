@@ -39,6 +39,7 @@ pub struct LPInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StakerInfo {
+    pub lp_addr: Addr,
     pub amt_staked: Uint128,
     pub mode: StakingMode,
     pub rewards: RewardInfo,
