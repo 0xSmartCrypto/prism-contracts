@@ -189,7 +189,7 @@ pub fn query_prism_withdraw_orders(
         .map(|item| {
             let (key, (_, prism_amt)) = item?;
             let end_time = u64::from_be_bytes(key.try_into().unwrap());
-            if current_time > end_time {
+            if current_time >= end_time {
                 claimable_amount += prism_amt;
             }
 

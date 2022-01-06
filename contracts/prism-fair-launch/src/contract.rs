@@ -70,7 +70,7 @@ pub fn post_initialize(
 
     if env.block.time.seconds() > launch_config.phase1_start
         || launch_config.phase1_start > launch_config.phase2_start
-        || launch_config.phase2_end > launch_config.phase2_end
+        || launch_config.phase2_start > launch_config.phase2_end
     {
         return Err(ContractError::InvalidLaunchConfig {});
     }
@@ -188,7 +188,7 @@ pub fn withdraw(
             let withdraw_fee_amount = withdraw_amount * cfg.withdraw_fee;
             withdraw_asset.amount -= withdraw_fee_amount;
 
-            withdraw_amount
+            withdraw_fee_amount
         } else {
             Uint128::zero()
         };

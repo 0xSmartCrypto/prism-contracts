@@ -20,6 +20,8 @@ const MAX_DESC_LENGTH: usize = 256;
 const MIN_LINK_LENGTH: usize = 12;
 const MAX_LINK_LENGTH: usize = 128;
 
+const MAX_POLL_VOTES_PER_USER: usize = 20;
+
 /*
  * Creates a new poll
  */
@@ -94,7 +96,9 @@ pub fn create_poll(
  * Ends a poll.
  */
 pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
+    let config: Config = config_read(deps.storage).load()?;
     let mut a_poll: Poll = poll_store(deps.storage).load(&poll_id.to_be_bytes())?;
+    let xprism_addr = deps.api.addr_humanize(&config.xprism_token.unwrap())?;
 
     if a_poll.status != PollStatus::InProgress {
         return Err(StdError::generic_err("Poll is not in progress"));
@@ -116,16 +120,11 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
     let mut passed = false;
 
     let mut messages: Vec<CosmosMsg> = vec![];
-    let config: Config = config_read(deps.storage).load()?;
 
     let total_supply = match a_poll.supply_snapshot {
         Some(v) => v,
         None => {
-            let supply = query_supply(
-                &deps.querier,
-                deps.api
-                    .addr_humanize(&config.xprism_token.as_ref().unwrap())?,
-            )?;
+            let supply = query_supply(&deps.querier, xprism_addr.clone())?;
             a_poll.supply_snapshot = Some(supply);
 
             supply
@@ -142,6 +141,17 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
         // Quorum: More than quorum of the total staked tokens at the end of the voting
         // period need to have participated in the vote.
         rejected_reason = "Quorum not reached";
+
+        // burn the deposit xPRISM tokens
+        if !a_poll.deposit_amount.is_zero() {
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: xprism_addr.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Burn {
+                    amount: a_poll.deposit_amount,
+                })?,
+            }))
+        }
     } else {
         if yes != 0u128 && Decimal::from_ratio(yes, yes + no) > config.threshold {
             //Threshold: More than 50% of the tokens that participated in the vote
@@ -155,10 +165,7 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
         // Refunds deposit only when quorum is reached
         if !a_poll.deposit_amount.is_zero() {
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: deps
-                    .api
-                    .addr_humanize(config.xprism_token.as_ref().unwrap())?
-                    .to_string(),
+                contract_addr: xprism_addr.to_string(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: deps.api.addr_humanize(&a_poll.creator)?.to_string(),
@@ -214,7 +221,7 @@ pub fn execute_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response
                 msg: execute_data.msg,
                 funds: vec![],
             }),
-            gas_limit: None,
+            gas_limit: Some(config.poll_gas_limit),
             id: POLL_EXECUTE_REPLY_ID,
             reply_on: ReplyOn::Error,
         });
@@ -283,6 +290,12 @@ pub fn cast_vote(
         return Err(StdError::generic_err(
             "User does not have enough staked tokens.",
         ));
+    }
+
+    if token_manager.locked_balance.len() >= MAX_POLL_VOTES_PER_USER as usize {
+        return Err(StdError::generic_err(format!(
+            "Can not vote on more than {} at the same time. Voting rewards of finished polls should be claimed.", MAX_POLL_VOTES_PER_USER
+        )));
     }
 
     // update tally info

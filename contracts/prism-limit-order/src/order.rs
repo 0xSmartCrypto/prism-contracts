@@ -24,6 +24,13 @@ pub fn submit_order(
 ) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
+    // check zero amounts to prevent error on execution
+    if offer_asset.amount.is_zero() || ask_asset.amount.is_zero() {
+        return Err(StdError::generic_err(
+            "offer_asset and ask_asset amounts must be greater than zero",
+        ));
+    }
+
     let pair_key = generate_pair_key(&[offer_asset.info.clone(), ask_asset.info.clone()]);
     let (pair_addr, inter_pair_addr): (Addr, Option<Addr>) =
         match PAIRS.load(deps.storage, &pair_key) {
@@ -279,11 +286,13 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
         amount: prism_fee_amount * config.executor_fee_portion,
         info: prism_asset_info.clone(),
     };
-    messages.push(
-        executor_fee_asset
-            .clone()
-            .into_msg(&deps.querier, info.sender.clone())?,
-    );
+    if !executor_fee_asset.amount.is_zero() {
+        messages.push(
+            executor_fee_asset
+                .clone()
+                .into_msg(&deps.querier, info.sender.clone())?,
+        );
+    }
 
     // send fee to PRISM stakers
     let protocol_fee_asset = Asset {

@@ -251,6 +251,12 @@ pub fn unbond(
         &(current_bond - unbond_amt),
     )?;
 
+    DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
+        item.total_bond_amount -= unbond_amt;
+
+        Ok(item)
+    })?;
+
     Ok(Response::new().add_messages(vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.yluna_staking.to_string(),

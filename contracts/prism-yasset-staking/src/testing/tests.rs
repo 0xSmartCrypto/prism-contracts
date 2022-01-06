@@ -467,7 +467,57 @@ fn test_whitelist() {
     assert_eq!(
         err,
         StdError::generic_err("only token assets can be registered")
-    )
+    );
+
+    // remove whiteslited asset
+    let msg = ExecuteMsg::RemoveRewardAsset {
+        asset: AssetInfo::Token {
+            contract_addr: Addr::unchecked("yluna0000".to_string()),
+        },
+    };
+
+    // unauth attempt
+    let info = mock_info("addr0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized"));
+
+    // valid attempt
+    let info = mock_info("gov0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "remove_whitelisted_reward_asset"),
+            attr("removed_asset", "yluna0000"),
+        ]
+    );
+
+    // verify whitelist is modified
+    let res: RewardAssetWhitelistResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::RewardAssetWhitelist {}).unwrap())
+            .unwrap();
+    assert_eq!(
+        res,
+        RewardAssetWhitelistResponse {
+            assets: vec![
+                AssetInfo::Token {
+                    contract_addr: Addr::unchecked("pluna0000".to_string())
+                },
+                AssetInfo::Token {
+                    contract_addr: Addr::unchecked("mir0000".to_string())
+                }
+            ]
+        }
+    );
+
+    // try to remove non whitelisted asset
+    let msg = ExecuteMsg::RemoveRewardAsset {
+        asset: AssetInfo::Token {
+            contract_addr: Addr::unchecked("random0000".to_string()),
+        },
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("this asset is not whitelisted"));
 }
 
 #[test]

@@ -33,6 +33,7 @@ pub struct Config {
     pub proposal_deposit: Uint128,
     pub snapshot_period: u64,
     pub redemption_time: u64,
+    pub poll_gas_limit: u64,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -20,4 +20,7 @@ pub enum ContractError {
 
     #[error("Invalid Cw20 msg")]
     InvalidCw20Msg {},
+
+    #[error("Invalid distribution schedule")]
+    InvalidDistributionSchedule {},
 }

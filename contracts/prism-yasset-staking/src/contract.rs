@@ -11,7 +11,10 @@ use prism_protocol::yasset_staking::{
     RewardAssetWhitelistResponse,
 };
 
-use crate::rewards::{claim_rewards, deposit_rewards, query_reward_info, whitelist_reward_asset};
+use crate::rewards::{
+    claim_rewards, deposit_rewards, query_reward_info, remove_whitelisted_reward_asset,
+    whitelist_reward_asset,
+};
 use crate::staking::{bond, unbond};
 use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
 
@@ -74,6 +77,9 @@ pub fn execute(
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
         ExecuteMsg::DepositMintedPylunaHook {} => deposit_minted_pyluna_hook(deps, env),
         ExecuteMsg::WhitelistRewardAsset { asset } => whitelist_reward_asset(deps, info, asset),
+        ExecuteMsg::RemoveRewardAsset { asset } => {
+            remove_whitelisted_reward_asset(deps, info, asset)
+        }
     }
 }
 

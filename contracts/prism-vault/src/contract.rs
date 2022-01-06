@@ -416,7 +416,11 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&query_withdrawable_unbonded(deps, address, env)?)
         }
         QueryMsg::Parameters {} => to_binary(&query_params(deps)?),
-        QueryMsg::UnbondRequests { address } => to_binary(&query_unbond_requests(deps, address)?),
+        QueryMsg::UnbondRequests {
+            address,
+            start_from,
+            limit,
+        } => to_binary(&query_unbond_requests(deps, address, start_from, limit)?),
         QueryMsg::AllHistory { start_from, limit } => {
             to_binary(&query_unbond_requests_limitation(deps, start_from, limit)?)
         }
@@ -525,9 +529,14 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
             .min(yluna_token_info.total_supply))
 }
 
-fn query_unbond_requests(deps: Deps, address: String) -> StdResult<UnbondRequestsResponse> {
+fn query_unbond_requests(
+    deps: Deps,
+    address: String,
+    start: Option<u64>,
+    limit: Option<u32>,
+) -> StdResult<UnbondRequestsResponse> {
     let addr = deps.api.addr_validate(&address)?;
-    let requests = get_unbond_requests(deps.storage, &addr)?;
+    let requests = get_unbond_requests(deps.storage, &addr, start, limit)?;
     let res = UnbondRequestsResponse { address, requests };
     Ok(res)
 }

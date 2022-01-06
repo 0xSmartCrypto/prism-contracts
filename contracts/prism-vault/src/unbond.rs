@@ -182,7 +182,7 @@ pub fn execute_withdraw_unbonded(
     }
 
     // remove the previous batches for the user
-    let deprecated_batches = get_unbond_batches(deps.storage, &sender_human)?;
+    let deprecated_batches = get_unbond_batches(deps.storage, &sender_human, None)?;
     remove_unbond_wait_list(deps.storage, deprecated_batches, &sender_human)?;
 
     // Update previous balance used for calculation in next Luna batch release

@@ -30,6 +30,7 @@ const DEFAULT_EFFECTIVE_DELAY: u64 = 10000u64;
 const DEFAULT_PROPOSAL_DEPOSIT: u128 = 10000000000u128;
 const DEFAULT_SNAPSHOT_PERIOD: u64 = 10u64;
 const DEFAULT_REDEMPTION_TIME: u64 = 21u64 * 24u64 * 60u64 * 60u64;
+const DEFAULT_POLL_GAS_LIMIT: u64 = 1000000;
 
 fn mock_instantiate(deps: DepsMut) {
     let msg = InstantiateMsg {
@@ -41,6 +42,7 @@ fn mock_instantiate(deps: DepsMut) {
         proposal_deposit: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
         snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
         redemption_time: DEFAULT_REDEMPTION_TIME,
+        poll_gas_limit: DEFAULT_POLL_GAS_LIMIT,
     };
 
     let info = mock_info(TEST_CREATOR, &[]);
@@ -73,6 +75,7 @@ fn init_msg() -> InstantiateMsg {
         proposal_deposit: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
         snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
         redemption_time: DEFAULT_REDEMPTION_TIME,
+        poll_gas_limit: DEFAULT_POLL_GAS_LIMIT,
     }
 }
 
@@ -104,6 +107,7 @@ fn proper_initialization() {
             proposal_deposit: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
             snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
             redemption_time: DEFAULT_REDEMPTION_TIME,
+            poll_gas_limit: DEFAULT_POLL_GAS_LIMIT,
         }
     );
 }
@@ -136,6 +140,7 @@ fn fails_create_poll_invalid_quorum() {
         proposal_deposit: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
         snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
         redemption_time: DEFAULT_REDEMPTION_TIME,
+        poll_gas_limit: DEFAULT_POLL_GAS_LIMIT,
     };
 
     let res = instantiate(deps.as_mut(), mock_env(), info, msg);
@@ -160,6 +165,7 @@ fn fails_create_poll_invalid_threshold() {
         proposal_deposit: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
         snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
         redemption_time: DEFAULT_REDEMPTION_TIME,
+        poll_gas_limit: DEFAULT_POLL_GAS_LIMIT,
     };
 
     let res = instantiate(deps.as_mut(), mock_env(), info, msg);
@@ -708,7 +714,7 @@ fn happy_days_end_poll() {
                 msg: exec_msg_bz,
                 funds: vec![],
             }),
-            gas_limit: None,
+            gas_limit: Some(DEFAULT_POLL_GAS_LIMIT),
             id: 1u64,
             reply_on: ReplyOn::Error,
         }]
@@ -907,7 +913,7 @@ fn failed_execute_poll() {
                 msg: exec_msg_bz,
                 funds: vec![],
             }),
-            gas_limit: None,
+            gas_limit: Some(DEFAULT_POLL_GAS_LIMIT),
             id: 1u64,
             reply_on: ReplyOn::Error,
         }]
@@ -1014,8 +1020,17 @@ fn end_poll_zero_quorum() {
             attr("passed", "false"),
         ]
     );
-
-    assert_eq!(execute_res.messages.len(), 0usize);
+    assert_eq!(
+        execute_res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: VOTING_TOKEN.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Burn {
+                amount: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
 
     // Query rejected polls
     let res = query(
@@ -1144,6 +1159,17 @@ fn end_poll_quorum_rejected() {
             attr("rejected_reason", "Quorum not reached"),
             attr("passed", "false"),
         ]
+    );
+    assert_eq!(
+        execute_res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: VOTING_TOKEN.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Burn {
+                amount: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
     );
 }
 
@@ -1964,6 +1990,7 @@ fn update_config() {
         proposal_deposit: None,
         snapshot_period: None,
         redemption_time: None,
+        poll_gas_limit: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1978,6 +2005,7 @@ fn update_config() {
     assert_eq!(DEFAULT_VOTING_PERIOD, config.voting_period);
     assert_eq!(DEFAULT_EFFECTIVE_DELAY, config.effective_delay);
     assert_eq!(DEFAULT_PROPOSAL_DEPOSIT, config.proposal_deposit.u128());
+    assert_eq!(DEFAULT_POLL_GAS_LIMIT, config.poll_gas_limit);
 
     // update left items
     let info = mock_info("addr0001", &[]);
@@ -1990,6 +2018,7 @@ fn update_config() {
         proposal_deposit: Some(Uint128::new(123u128)),
         snapshot_period: Some(60u64),
         redemption_time: Some(1u64),
+        poll_gas_limit: Some(2000000u64),
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -2006,6 +2035,7 @@ fn update_config() {
     assert_eq!(123u128, config.proposal_deposit.u128());
     assert_eq!(60u64, config.snapshot_period);
     assert_eq!(1u64, config.redemption_time);
+    assert_eq!(2000000u64, config.poll_gas_limit);
 
     // Unauthorzied err
     let info = mock_info(TEST_CREATOR, &[]);
@@ -2018,6 +2048,7 @@ fn update_config() {
         proposal_deposit: None,
         snapshot_period: None,
         redemption_time: None,
+        poll_gas_limit: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), info, msg);
@@ -2039,6 +2070,7 @@ fn test_abstain_votes_theshold() {
         proposal_deposit: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
         snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
         redemption_time: DEFAULT_REDEMPTION_TIME,
+        poll_gas_limit: DEFAULT_POLL_GAS_LIMIT,
     };
 
     let info = mock_info(TEST_CREATOR, &[]);
@@ -2162,6 +2194,7 @@ fn test_abstain_votes_quorum() {
         proposal_deposit: Uint128::new(DEFAULT_PROPOSAL_DEPOSIT),
         snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
         redemption_time: DEFAULT_REDEMPTION_TIME,
+        poll_gas_limit: DEFAULT_POLL_GAS_LIMIT,
     };
 
     let info = mock_info(TEST_CREATOR, &[]);

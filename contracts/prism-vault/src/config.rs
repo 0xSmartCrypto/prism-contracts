@@ -13,6 +13,8 @@ use prism_protocol::vault::{Config, ExecuteMsg};
 
 use rand::{Rng, SeedableRng, XorShiftRng};
 
+pub const MAX_VALIDATORS: u64 = 20;
+
 /// Update general parameters
 /// Only creator/owner is allowed to execute
 #[allow(clippy::too_many_arguments)]
@@ -151,6 +153,14 @@ pub fn execute_register_validator(
         && env.contract.address.as_str() != info.sender.as_str()
     {
         return Err(StdError::generic_err("unauthorized"));
+    }
+
+    // check if validator count exceeds max
+    if read_validators(deps.storage)?.len() >= MAX_VALIDATORS as usize {
+        return Err(StdError::generic_err(format!(
+            "Can't register more than {} validators",
+            MAX_VALIDATORS
+        )));
     }
 
     // given validator must be first a validator in the system.

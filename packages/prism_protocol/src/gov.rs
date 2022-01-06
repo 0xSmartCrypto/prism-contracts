@@ -16,6 +16,7 @@ pub struct InstantiateMsg {
     pub proposal_deposit: Uint128,
     pub snapshot_period: u64,
     pub redemption_time: u64,
+    pub poll_gas_limit: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -34,6 +35,7 @@ pub enum ExecuteMsg {
         proposal_deposit: Option<Uint128>,
         snapshot_period: Option<u64>,
         redemption_time: Option<u64>,
+        poll_gas_limit: Option<u64>,
     },
     CastVote {
         poll_id: u64,
@@ -124,6 +126,7 @@ pub struct ConfigResponse {
     pub proposal_deposit: Uint128,
     pub snapshot_period: u64,
     pub redemption_time: u64,
+    pub poll_gas_limit: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]

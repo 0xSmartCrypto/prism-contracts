@@ -139,6 +139,8 @@ pub enum QueryMsg {
     Parameters {},
     UnbondRequests {
         address: String,
+        start_from: Option<u64>,
+        limit: Option<u32>,
     },
     AllHistory {
         start_from: Option<u64>,

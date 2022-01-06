@@ -1099,12 +1099,20 @@ pub fn proper_unbond() {
     //pushing time forward to check the unbond message
     let successful_bond = Unbond {};
     let receive = Receive(Cw20ReceiveMsg {
-        sender: bob,
+        sender: bob.clone(),
         amount: Uint128::new(2),
         msg: to_binary(&successful_bond).unwrap(),
     });
-    let res = execute(deps.as_mut(), token_env.clone(), token_info, receive).unwrap();
+    let res = execute(
+        deps.as_mut(),
+        token_env.clone(),
+        token_info.clone(),
+        receive.clone(),
+    )
+    .unwrap();
     assert_eq!(2, res.messages.len());
+    deps.querier
+        .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(2u128))])]);
 
     let msg = &res.messages[1].msg;
     match msg {
@@ -1153,9 +1161,11 @@ pub fn proper_unbond() {
     // the last request (2) gets combined and processed with the previous requests (1, 5)
     let waitlist = QueryMsg::UnbondRequests {
         address: "bob".to_string(),
+        start_from: None,
+        limit: None,
     };
     let query_unbond: UnbondRequestsResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), waitlist).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), mock_env(), waitlist.clone()).unwrap()).unwrap();
     assert_eq!(query_unbond.requests[0].0, 1);
     assert_eq!(query_unbond.requests[0].1, Uint128::new(8));
 
@@ -1759,6 +1769,8 @@ pub fn proper_withdraw_unbonded() {
     //first query AllUnbondedRequests
     let all_unbonded = UnbondRequests {
         address: bob.clone(),
+        start_from: None,
+        limit: None,
     };
     let query_unbonded = query(deps.as_ref(), mock_env(), all_unbonded).unwrap();
     let res: UnbondRequestsResponse = from_binary(&query_unbonded).unwrap();
@@ -1809,6 +1821,8 @@ pub fn proper_withdraw_unbonded() {
 
     let waitlist = UnbondRequests {
         address: bob.clone(),
+        start_from: None,
+        limit: None,
     };
     let query_unbond: UnbondRequestsResponse =
         from_binary(&query(deps.as_ref(), mock_env(), waitlist).unwrap()).unwrap();
@@ -1950,6 +1964,8 @@ pub fn proper_withdraw_unbonded_respect_slashing() {
     //first query AllUnbondedRequests
     let all_unbonded = UnbondRequests {
         address: bob.clone(),
+        start_from: None,
+        limit: None,
     };
     let query_unbonded = query(deps.as_ref(), mock_env(), all_unbonded).unwrap();
     let res: UnbondRequestsResponse = from_binary(&query_unbonded).unwrap();
@@ -2133,6 +2149,8 @@ pub fn proper_withdraw_unbonded_respect_inactivity_slashing() {
     //first query AllUnbondedRequests
     let all_unbonded = UnbondRequests {
         address: bob.clone(),
+        start_from: None,
+        limit: None,
     };
     let query_unbonded = query(deps.as_ref(), env.clone(), all_unbonded).unwrap();
     let res: UnbondRequestsResponse = from_binary(&query_unbonded).unwrap();
@@ -3071,13 +3089,13 @@ fn proper_unbond_storage() -> StdResult<()> {
     store_unbond_wait_list(deps.as_mut().storage, 1, &addr2, amount1)?;
 
     // validate addr1 requests
-    let unbond_requests = get_unbond_requests(deps.as_ref().storage, &addr1)?;
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, &addr1, None, None)?;
     assert_eq!(unbond_requests.len(), 2);
     assert_eq!(unbond_requests[0], (1u64, amount1));
     assert_eq!(unbond_requests[1], (2u64, amount1 + amount2));
 
     // validate addr2 requests
-    let unbond_requests = get_unbond_requests(deps.as_ref().storage, &addr2)?;
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, &addr2, None, None)?;
     assert_eq!(unbond_requests.len(), 1);
     assert_eq!(unbond_requests[0], (1u64, amount1));
 
@@ -3097,7 +3115,7 @@ fn proper_unbond_storage() -> StdResult<()> {
     assert_eq!(res, Uint128::zero());
 
     // no unbonded batches yet
-    let res = get_unbond_batches(deps.as_ref().storage, &addr1)?;
+    let res = get_unbond_batches(deps.as_ref().storage, &addr1, None)?;
     assert_eq!(res.len(), 0);
 
     //no unbond history yet
@@ -3207,13 +3225,13 @@ fn proper_unbond_storage() -> StdResult<()> {
     );
 
     // block1 should be unbonded now
-    let unbond_batches = get_unbond_batches(deps.as_ref().storage, &addr1)?;
+    let unbond_batches = get_unbond_batches(deps.as_ref().storage, &addr1, None)?;
     assert_eq!(unbond_batches.len(), 1);
     assert_eq!(unbond_batches[0], 1);
 
     // remove block1 from addr1 and verify that it's gone via unbond_requests
     remove_unbond_wait_list(deps.as_mut().storage, unbond_batches, &addr1)?;
-    let unbond_requests = get_unbond_requests(deps.as_ref().storage, &addr1)?;
+    let unbond_requests = get_unbond_requests(deps.as_ref().storage, &addr1, None, None)?;
     assert_eq!(unbond_requests.len(), 1);
     assert_eq!(unbond_requests[0], (2u64, amount1 + amount2));
 

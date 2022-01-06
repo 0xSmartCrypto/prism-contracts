@@ -264,6 +264,35 @@ pub fn whitelist_reward_asset(
     ]))
 }
 
+pub fn remove_whitelisted_reward_asset(
+    deps: DepsMut,
+    info: MessageInfo,
+    asset: AssetInfo,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // can only be exeucted by gov
+    if info.sender.as_str() != cfg.gov.as_str() {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    let mut whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
+
+    match whitelist.iter().position(|item| item.eq(&asset)) {
+        Some(position) => {
+            whitelist.remove(position);
+        }
+        None => return Err(StdError::generic_err("this asset is not whitelisted")),
+    }
+
+    WHITELISTED_ASSETS.save(deps.storage, &whitelist)?;
+
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "remove_whitelisted_reward_asset"),
+        attr("removed_asset", asset.to_string()),
+    ]))
+}
+
 pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInfoResponse> {
     let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
     let bond_info = BOND_AMOUNTS

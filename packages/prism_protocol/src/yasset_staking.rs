@@ -57,6 +57,9 @@ pub enum ExecuteMsg {
     WhitelistRewardAsset {
         asset: AssetInfo,
     },
+    RemoveRewardAsset {
+        asset: AssetInfo,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
