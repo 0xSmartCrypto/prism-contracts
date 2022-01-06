@@ -46,9 +46,7 @@ prism-protocol = { version = "1.0.0", path = "../../packages/prism_protocol" }
 prism-common = { version = "1.0.0", path = "../../packages/prism_common" }
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.20" }
-protobuf = { version = "2", features = ["with-bytes"] }
 cw20-base = { version = "0.8", features = ["library"] }
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
-prism-common = { path = "../../packages/prism_common", default-features = false, version = "1.0.0"}

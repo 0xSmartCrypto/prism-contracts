@@ -14,6 +14,12 @@ pub enum ContractError {
 
     #[error("DuplicatePostInitialize")]
     DuplicatePostInitialize {},
+
+    #[error("InvalidReplyId")]
+    InvalidReplyId {},
+
+    #[error("ParseReplyError")]
+    ParseReplyError {},
 }
 
 pub type ContractResult<T> = core::result::Result<T, ContractError>;

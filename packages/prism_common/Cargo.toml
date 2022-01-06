@@ -39,7 +39,7 @@ cosmwasm-storage = { version = "0.16.0", default-features = false, features = ["
 terra-cosmwasm = { version = "2.2.0" }
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-protobuf = { version = "2", features = ["with-bytes"] }
+thiserror = { version = "1.0.20" }
 
 [dev-dependencies]
 cosmwasm-schema = { version = "0.16.0" }

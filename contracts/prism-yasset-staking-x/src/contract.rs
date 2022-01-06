@@ -7,12 +7,11 @@ use cosmwasm_std::{
     WasmMsg, WasmQuery,
 };
 
-use prism_common::response::MsgInstantiateContractResponse;
+use prism_common::parse_reply_instantiate_data;
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::yasset_staking_x::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, StateResponse,
 };
-use protobuf::Message;
 
 use crate::error::{ContractError, ContractResult};
 use crate::state::{Config, CONFIG};
@@ -78,14 +77,13 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
-    let data = msg.result.unwrap().data.unwrap();
-    let res: MsgInstantiateContractResponse =
-        Message::parse_from_bytes(data.as_slice()).map_err(|_| {
-            StdError::parse_err("MsgInstantiateContractResponse", "failed to parse data")
-        })?;
-    let xyasset_token_addr = deps.api.addr_validate(res.get_contract_address())?;
-
+pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> ContractResult<Response> {
+    if msg.id != INSTANTIATE_REPLY_ID {
+        return Err(ContractError::InvalidReplyId{});
+    }
+    let res = parse_reply_instantiate_data(msg)
+        .map_err(|_| ContractError::ParseReplyError{})?;
+    let xyasset_token_addr = deps.api.addr_validate(&res.contract_address)?;
     CONFIG.update(deps.storage, |mut cfg| -> StdResult<_> {
         cfg.xyasset_token = xyasset_token_addr.clone();
         Ok(cfg)
