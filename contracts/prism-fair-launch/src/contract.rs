@@ -1,5 +1,5 @@
 use crate::error::ContractError;
-use crate::state::{Config, CONFIG, DEPOSITS, TOTAL_DEPOSIT};
+use crate::state::{Config, DepositInfo, CONFIG, DEPOSITS, TOTAL_DEPOSIT};
 
 use astroport::asset::{Asset, AssetInfo};
 use astroport::querier::query_balance;
@@ -12,6 +12,8 @@ use prism_protocol::fair_launch::{
     ConfigResponse, DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg,
 };
 
+pub const SECONDS_PER_HOUR: u64 = 60 * 60;
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -19,16 +21,11 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    if msg.withdraw_fee > Decimal::one() {
-        return Err(ContractError::InvalidFee {});
-    }
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
         token: deps.api.addr_validate(&msg.token)?,
         launch_config: None,
         base_denom: msg.base_denom,
-        withdraw_threshold: msg.withdraw_threshold,
-        withdraw_fee: msg.withdraw_fee,
     };
     TOTAL_DEPOSIT.save(deps.storage, &Uint128::zero())?;
     CONFIG.save(deps.storage, &cfg)?;
@@ -75,6 +72,11 @@ pub fn post_initialize(
         return Err(ContractError::InvalidLaunchConfig {});
     }
 
+    // phase 2 must be longer than 1 hour, since we are using one hour slots
+    if (launch_config.phase2_end - launch_config.phase2_start) < SECONDS_PER_HOUR {
+        return Err(ContractError::InvalidLaunchConfig {});
+    }
+
     cfg.launch_config = Some(launch_config.clone());
 
     CONFIG.save(deps.storage, &cfg)?;
@@ -113,9 +115,16 @@ pub fn deposit(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, C
         });
     }
 
-    DEPOSITS.update(deps.storage, &info.sender, |curr| -> StdResult<Uint128> {
-        Ok(curr.unwrap_or(Uint128::zero()) + coin.amount)
-    })?;
+    DEPOSITS.update(
+        deps.storage,
+        &info.sender,
+        |curr| -> StdResult<DepositInfo> {
+            let mut deposit = curr.unwrap_or_default();
+            deposit.amount += coin.amount;
+
+            Ok(deposit)
+        },
+    )?;
     TOTAL_DEPOSIT.update(deps.storage, |curr| -> StdResult<Uint128> {
         Ok(curr + coin.amount)
     })?;
@@ -138,24 +147,46 @@ pub fn withdraw(
             reason: "withdraw period is over".to_string(),
         });
     }
-    let cur_deposit = DEPOSITS
+    let mut deposit_info = DEPOSITS
         .load(deps.storage, &info.sender)
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_default();
 
-    if cur_deposit == Uint128::zero() {
+    if deposit_info.amount == Uint128::zero() {
         return Err(ContractError::InvalidWithdraw {
             reason: "no funds available to withdraw".to_string(),
         });
     }
 
+    let withdrawable_amount = if current_time >= launch_config.phase2_start {
+        // check if user already withdrew on phase 2
+        if deposit_info.withdrew_phase2 {
+            return Err(ContractError::InvalidWithdraw {
+                reason: "a withdraw was already executed on phase 2".to_string(),
+            });
+        }
+
+        let current_slot = (launch_config.phase2_end - current_time) / SECONDS_PER_HOUR;
+        let total_slots =
+            (launch_config.phase2_end - launch_config.phase2_start) / SECONDS_PER_HOUR;
+        let withdrawable_portion =
+            Decimal::from_ratio(current_slot, total_slots).min(Decimal::one());
+
+        // on phase 2 can only withraw one time, so flag the position
+        deposit_info.withdrew_phase2 = true;
+
+        deposit_info.amount * withdrawable_portion
+    } else {
+        deposit_info.amount
+    };
+
     let withdraw_amount = match amount {
-        None => cur_deposit,
+        None => withdrawable_amount,
         Some(requested_amount) => {
-            if requested_amount > cur_deposit {
+            if requested_amount > withdrawable_amount {
                 return Err(ContractError::InvalidWithdraw {
                     reason: format!(
-                        "can not withdraw more than current deposit amount ({})",
-                        cur_deposit
+                        "can not withdraw more than current withrawable amount ({})",
+                        withdrawable_amount
                     ),
                 });
             }
@@ -169,38 +200,29 @@ pub fn withdraw(
         }
     };
 
-    DEPOSITS.save(deps.storage, &info.sender, &(cur_deposit - withdraw_amount))?;
+    // update user deposit amount
+    deposit_info.amount -= withdraw_amount;
+
+    DEPOSITS.save(deps.storage, &info.sender, &deposit_info)?;
 
     TOTAL_DEPOSIT.update(deps.storage, |curr| -> StdResult<Uint128> {
         Ok(curr - withdraw_amount)
     })?;
 
-    let mut withdraw_asset = Asset {
+    let withdraw_asset = Asset {
         info: AssetInfo::NativeToken {
             denom: cfg.base_denom,
         },
         amount: withdraw_amount,
     };
-
-    // to prevent massive withdraw on phase 2, charge fee
-    let withdraw_fee_amount =
-        if current_time > launch_config.phase2_start && withdraw_amount > cfg.withdraw_threshold {
-            let withdraw_fee_amount = withdraw_amount * cfg.withdraw_fee;
-            withdraw_asset.amount -= withdraw_fee_amount;
-
-            withdraw_fee_amount
-        } else {
-            Uint128::zero()
-        };
-
     let tax_amount = withdraw_asset.compute_tax(&deps.querier)?;
     let msg = withdraw_asset
         .clone()
         .into_msg(&deps.querier, info.sender)?;
+
     Ok(Response::new().add_message(msg).add_attributes(vec![
         attr("action", "withdraw"),
         attr("withdraw_amount", withdraw_asset.amount.to_string()),
-        attr("withdraw_fee", withdraw_fee_amount.to_string()),
         attr("tax_amount", tax_amount.to_string()),
     ]))
 }
@@ -219,16 +241,31 @@ pub fn withdraw_tokens(
         });
     }
 
-    let deposited = DEPOSITS.load(deps.storage, &info.sender)?;
+    let mut deposit_info = DEPOSITS.load(deps.storage, &info.sender).map_err(|_| {
+        ContractError::InvalidWithdrawTokens {
+            reason: "deposit information not found".to_string(),
+        }
+    })?;
+    if deposit_info.tokens_claimed {
+        return Err(ContractError::InvalidWithdrawTokens {
+            reason: "tokens were already claimed".to_string(),
+        });
+    }
+
     let deposit_total = TOTAL_DEPOSIT.load(deps.storage)?;
-    let amount = launch_cfg.amount.multiply_ratio(deposited, deposit_total);
+    let amount = launch_cfg
+        .amount
+        .multiply_ratio(deposit_info.amount, deposit_total);
     if amount == Uint128::zero() {
         return Err(ContractError::InvalidWithdrawTokens {
             reason: "no tokens available for withdraw".to_string(),
         });
     }
 
-    DEPOSITS.save(deps.storage, &info.sender, &Uint128::zero())?;
+    // update claimed flag, we don't delete storage to keep the record
+    deposit_info.tokens_claimed = true;
+
+    DEPOSITS.save(deps.storage, &info.sender, &deposit_info)?;
     let to_send = Asset {
         info: AssetInfo::Token {
             contract_addr: cfg.token,
@@ -280,10 +317,10 @@ pub fn admin_withdraw(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::DepositInfo { address } => to_binary(&query_deposit_info(deps, address)?),
+        QueryMsg::DepositInfo { address } => to_binary(&query_deposit_info(deps, env, address)?),
     }
 }
 
@@ -293,13 +330,46 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     cfg.as_res()
 }
 
-pub fn query_deposit_info(deps: Deps, address: String) -> StdResult<DepositResponse> {
+pub fn query_deposit_info(deps: Deps, env: Env, address: String) -> StdResult<DepositResponse> {
     let addr = deps.api.addr_validate(&address)?;
+    let launch_config = CONFIG.load(deps.storage)?.launch_config.unwrap();
+    let deposit_info = DEPOSITS.load(deps.storage, &addr).unwrap_or_default();
+    let current_time = env.block.time.seconds();
+
+    let withdrawable_amount =
+        if current_time >= launch_config.phase2_start && !deposit_info.amount.is_zero() {
+            if deposit_info.withdrew_phase2 || current_time >= launch_config.phase2_end {
+                Uint128::zero()
+            } else {
+                let current_slot = (launch_config.phase2_end - current_time) / SECONDS_PER_HOUR;
+                let total_slots =
+                    (launch_config.phase2_end - launch_config.phase2_start) / SECONDS_PER_HOUR;
+                dbg!(current_slot);
+                let withdrawable_portion =
+                    Decimal::from_ratio(current_slot, total_slots).min(Decimal::one());
+
+                deposit_info.amount * withdrawable_portion
+            }
+        } else {
+            deposit_info.amount
+        };
+
+    let total_deposit = TOTAL_DEPOSIT.load(deps.storage)?;
+    let tokens_to_claim = if !total_deposit.is_zero() {
+        launch_config
+            .amount
+            .multiply_ratio(deposit_info.amount, total_deposit)
+    } else {
+        Uint128::zero()
+    };
 
     Ok(DepositResponse {
-        address_deposit: DEPOSITS
-            .load(deps.storage, &addr)
-            .unwrap_or(Uint128::zero()),
-        total_deposit: TOTAL_DEPOSIT.load(deps.storage)?,
+        deposit: deposit_info.amount,
+        total_deposit,
+        withdrawable_amount,
+        tokens_to_claim,
+        can_claim: current_time >= launch_config.phase2_end
+            && !tokens_to_claim.is_zero()
+            && !deposit_info.tokens_claimed,
     })
 }

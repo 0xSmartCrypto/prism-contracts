@@ -16,8 +16,6 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
         owner: "owner0001".to_string(),
         token: "prism0001".to_string(),
         base_denom: "uusd".to_string(),
-        withdraw_fee: Decimal::percent(1),
-        withdraw_threshold: Uint128::from(100000000u128),
     };
 
     let info = mock_info("owner0001", &[]);
@@ -32,7 +30,7 @@ pub fn post_init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) 
         amount: Uint128::from(1_000_000u64),
         phase1_start: env.block.time.seconds(),
         phase2_start: env.block.time.seconds() + 100,
-        phase2_end: env.block.time.seconds() + 200,
+        phase2_end: env.block.time.seconds() + 100 + 60 * 60,
     };
     post_initialize(
         deps.as_mut(),
@@ -54,7 +52,7 @@ fn proper_post_initialize() {
         amount: Uint128::from(1_000_000u64),
         phase1_start: env.block.time.seconds(),
         phase2_start: env.block.time.seconds() + 100,
-        phase2_end: env.block.time.seconds() + 200,
+        phase2_end: env.block.time.seconds() + 100 + 60 * 60,
     };
 
     // unauthorized
@@ -154,28 +152,34 @@ fn proper_deposit() {
     assert_eq!(res.unwrap().messages.len(), 0);
 
     // query deposit responses for addr0001
-    let deposit_info = query_deposit_info(deps.as_ref(), "addr0001".to_string());
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
-            address_deposit: Uint128::from(1_000u128),
+            deposit: Uint128::from(1_000u128),
             total_deposit: Uint128::from(1_000u128),
+            withdrawable_amount: Uint128::from(1_000u128),
+            tokens_to_claim: Uint128::from(1_000_000u64),
+            can_claim: false,
         }
     );
 
     // query deposit responses for addr0002
-    let deposit_info = query_deposit_info(deps.as_ref(), "addr0002".to_string());
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0002".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
-            address_deposit: Uint128::zero(),
+            deposit: Uint128::zero(),
             total_deposit: Uint128::from(1_000u128),
+            withdrawable_amount: Uint128::zero(),
+            tokens_to_claim: Uint128::zero(),
+            can_claim: false,
         }
     );
 
     // failed deposit, after phase 1
     env.block.time = env.block.time.plus_seconds(150u64);
-    let err = deposit(deps.as_mut(), env.clone(), info.clone());
+    let err = deposit(deps.as_mut(), env, info);
     assert_eq!(
         err.unwrap_err(),
         ContractError::InvalidDeposit {
@@ -241,12 +245,15 @@ fn proper_withdraw() {
     };
 
     // query deposit responses for addr0001
-    let deposit_info = query_deposit_info(deps.as_ref(), "addr0001".to_string());
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
-            address_deposit: Uint128::from(900u128),
+            deposit: Uint128::from(900u128),
             total_deposit: Uint128::from(900u128),
+            withdrawable_amount: Uint128::from(900u128),
+            tokens_to_claim: Uint128::from(1_000_000u64),
+            can_claim: false,
         }
     );
 
@@ -269,12 +276,15 @@ fn proper_withdraw() {
     };
 
     // query deposit responses for addr0001
-    let deposit_info = query_deposit_info(deps.as_ref(), "addr0001".to_string());
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
-            address_deposit: Uint128::zero(),
+            deposit: Uint128::zero(),
             total_deposit: Uint128::zero(),
+            withdrawable_amount: Uint128::zero(),
+            tokens_to_claim: Uint128::zero(),
+            can_claim: false,
         }
     );
 
@@ -297,18 +307,7 @@ fn proper_withdraw() {
     let res = deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
-    // fast forward to phase 2, withdraws still allowed
-    env.block.time = env.block.time.plus_seconds(150);
-    let res = withdraw(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        Some(Uint128::from(100u128)),
-    )
-    .unwrap();
-    assert_eq!(res.messages.len(), 1);
-
-    // big withdraw, should charge withdraw fee
+    // execute another withdraw
     let res = withdraw(
         deps.as_mut(),
         env.clone(),
@@ -324,7 +323,7 @@ fn proper_withdraw() {
                 amount[0],
                 Coin {
                     denom: "uusd".to_string(),
-                    amount: Uint128::from(99989990u128) // 101_000_000 * 99% - tax_cap
+                    amount: Uint128::from(100999990u128) // 101_000_000 - tax_cap
                 }
             );
         }
@@ -332,7 +331,7 @@ fn proper_withdraw() {
     };
 
     // fast forward to after phase 2, withdraws not allowed
-    env.block.time = env.block.time.plus_seconds(100);
+    env.block.time = env.block.time.plus_seconds(100 + 60 * 60);
     let err = withdraw(
         deps.as_mut(),
         env.clone(),
@@ -344,6 +343,189 @@ fn proper_withdraw() {
         err,
         ContractError::InvalidWithdraw {
             reason: "withdraw period is over".to_string()
+        }
+    );
+
+    // withdrawable amount should be zero
+    let deposit_info = query_deposit_info(deps.as_ref(), env, "addr0001".to_string());
+    assert_eq!(
+        deposit_info.unwrap(),
+        DepositResponse {
+            deposit: Uint128::from(99_000_000u128),
+            total_deposit: Uint128::from(99_000_000u128),
+            withdrawable_amount: Uint128::zero(),
+            tokens_to_claim: Uint128::from(1_000_000u64),
+            can_claim: true, // phase 2 is over, so possible to claim
+        }
+    );
+}
+
+#[test]
+fn proper_withdraw_phase3() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    let env = mock_env();
+    let info = mock_info("owner0001", &[]);
+    let launch_config = LaunchConfig {
+        amount: Uint128::from(1_000_000u64),
+        phase1_start: env.block.time.seconds(),
+        phase2_start: env.block.time.seconds() + 100,
+        phase2_end: env.block.time.seconds() + 100 + 24 * 60 * 60, // 24 hour phase 2
+    };
+    post_initialize(deps.as_mut(), mock_env(), info, launch_config).unwrap();
+
+    let caps = [(&"uusd".to_string(), &Uint128::from(10u128))];
+    deps.querier.with_tax(Decimal::percent(5u64), &caps);
+
+    let mut alice_info = mock_info("alice0000", &[]);
+    let mut bob_info = mock_info("bob0000", &[]);
+    let mut cindy_info = mock_info("cindy0000", &[]);
+    let mut env = mock_env();
+
+    // successful deposit with 3 accounts
+    alice_info.funds = vec![Coin::new(100_000_000, "uusd")];
+    deposit(deps.as_mut(), env.clone(), alice_info.clone()).unwrap();
+    bob_info.funds = vec![Coin::new(100_000_000, "uusd")];
+    deposit(deps.as_mut(), env.clone(), bob_info.clone()).unwrap();
+    cindy_info.funds = vec![Coin::new(100_000_000, "uusd")];
+    deposit(deps.as_mut(), env.clone(), cindy_info.clone()).unwrap();
+
+    // fast forward to phase 2
+    env.block.time = env.block.time.plus_seconds(100);
+
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "alice0000".to_string());
+    assert_eq!(
+        deposit_info.unwrap(),
+        DepositResponse {
+            deposit: Uint128::from(100_000_000u128),
+            total_deposit: Uint128::from(300_000_000u128),
+            withdrawable_amount: Uint128::from(100_000_000u128),
+            tokens_to_claim: Uint128::from(333333u128),
+            can_claim: false,
+        }
+    );
+
+    // try to withdraw more than withdrawable
+    let err = withdraw(
+        deps.as_mut(),
+        env.clone(),
+        alice_info.clone(),
+        Some(Uint128::from(100_000_001u128)),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidWithdraw {
+            reason: "can not withdraw more than current withrawable amount (100000000)".to_string()
+        }
+    );
+
+    // valid withdraw
+    let res = withdraw(
+        deps.as_mut(),
+        env.clone(),
+        alice_info.clone(),
+        Some(Uint128::from(1_000_000u128)),
+    )
+    .unwrap();
+    let msg = &res.messages[0].msg;
+    match msg {
+        CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+            assert_eq!(to_address, alice_info.sender.as_str());
+            assert_eq!(
+                amount[0],
+                Coin {
+                    denom: "uusd".to_string(),
+                    amount: Uint128::from(999990u128) // 999_990 - tax_cap
+                }
+            );
+        }
+        _ => panic!("Unexpected message: {:?}", msg),
+    };
+
+    // try to withdraw again, expect error
+    let err = withdraw(
+        deps.as_mut(),
+        env.clone(),
+        alice_info.clone(),
+        Some(Uint128::from(1_000u128)),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidWithdraw {
+            reason: "a withdraw was already executed on phase 2".to_string()
+        }
+    );
+
+    // fast forward 6 hours
+    env.block.time = env.block.time.plus_seconds(60 * 60 * 6);
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "bob0000".to_string());
+    assert_eq!(
+        deposit_info.unwrap(),
+        DepositResponse {
+            deposit: Uint128::from(100_000_000u128),
+            total_deposit: Uint128::from(299_000_000u128),
+            withdrawable_amount: Uint128::from(75_000_000u128), // 100M * 18/24 70833333
+            tokens_to_claim: Uint128::from(334448u128),         // 100000000 / 299000000 * 1000000
+            can_claim: false,
+        }
+    );
+    // valid withdraw all remaining
+    let res = withdraw(deps.as_mut(), env.clone(), bob_info.clone(), None).unwrap();
+    let msg = &res.messages[0].msg;
+    match msg {
+        CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+            assert_eq!(to_address, bob_info.sender.as_str());
+            assert_eq!(
+                amount[0],
+                Coin {
+                    denom: "uusd".to_string(),
+                    amount: Uint128::from(74999990u128) // 75_000_000 - tax_cap
+                }
+            );
+        }
+        _ => panic!("Unexpected message: {:?}", msg),
+    };
+
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "bob0000".to_string());
+    assert_eq!(
+        deposit_info.unwrap(),
+        DepositResponse {
+            deposit: Uint128::from(25000000u128), // 100000000 - 75000000
+            total_deposit: Uint128::from(224000000u128),
+            withdrawable_amount: Uint128::zero(), // can not withraw more, only one time
+            tokens_to_claim: Uint128::from(111607u128), // 25000000 / 224000000 * 1000000
+            can_claim: false,
+        }
+    );
+
+    // last slot of phase 2
+    env.block.time = env.block.time.plus_seconds(60 * 60 * 17 + 3599);
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "cindy0000".to_string());
+    assert_eq!(
+        deposit_info.unwrap(),
+        DepositResponse {
+            deposit: Uint128::from(100000000u128),
+            total_deposit: Uint128::from(224000000u128),
+            withdrawable_amount: Uint128::zero(), // 100000000 * 0 / 24
+            tokens_to_claim: Uint128::from(446428u128), // 100000000 / 224000000 * 1000000
+            can_claim: false,
+        }
+    );
+
+    // after phase 2
+    env.block.time = env.block.time.plus_seconds(1);
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "cindy0000".to_string());
+    assert_eq!(
+        deposit_info.unwrap(),
+        DepositResponse {
+            deposit: Uint128::from(100000000u128),
+            total_deposit: Uint128::from(224000000u128),
+            withdrawable_amount: Uint128::zero(), // 100000000 * 0 / 24
+            tokens_to_claim: Uint128::from(446428u128), // 100000000 / 224000000 * 1000000
+            can_claim: true,                      // now can claim tokens
         }
     );
 }
@@ -371,7 +553,7 @@ fn proper_withdraw_tokens1() {
     );
 
     // fast forward past phase 2, withdraw tokens now allowed
-    env.block.time = env.block.time.plus_seconds(250);
+    env.block.time = env.block.time.plus_seconds(100 + 60 * 60);
     let res = withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
@@ -416,7 +598,7 @@ fn proper_withdraw_tokens2() {
     assert_eq!(res.unwrap().messages.len(), 0);
 
     // fast forward past phase 2, withdraw tokens now allowed
-    env.block.time = env.block.time.plus_seconds(250);
+    env.block.time = env.block.time.plus_seconds(100 + 60 * 60);
 
     // addr0001 gets 1M * 1/6
     let res = withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap();
@@ -442,12 +624,12 @@ fn proper_withdraw_tokens2() {
         _ => panic!("Unexpected message: {:?}", msg),
     };
 
-    // addr0001 try to withdraw again, nothing available
+    // addr0001 try to withdraw again, expect error
     let err = withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap_err();
     assert_eq!(
         err,
         ContractError::InvalidWithdrawTokens {
-            reason: "no tokens available for withdraw".to_string()
+            reason: "tokens were already claimed".to_string()
         }
     );
 

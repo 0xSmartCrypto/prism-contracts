@@ -3,14 +3,26 @@
   "title": "DepositResponse",
   "type": "object",
   "required": [
-    "address_deposit",
-    "total_deposit"
+    "can_claim",
+    "deposit",
+    "tokens_to_claim",
+    "total_deposit",
+    "withdrawable_amount"
   ],
   "properties": {
-    "address_deposit": {
+    "can_claim": {
+      "type": "boolean"
+    },
+    "deposit": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "tokens_to_claim": {
       "$ref": "#/definitions/Uint128"
     },
     "total_deposit": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "withdrawable_amount": {
       "$ref": "#/definitions/Uint128"
     }
   },
