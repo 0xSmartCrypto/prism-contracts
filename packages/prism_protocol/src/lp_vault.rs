@@ -1,10 +1,9 @@
-use std::fmt;
-use cosmwasm_std::{Binary, Decimal, Uint128, StdResult, Addr};
-use cw20::Cw20ReceiveMsg;
+use cosmwasm_std::{Addr, Decimal, StdResult, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use cw20::Cw20ReceiveMsg;
+use std::fmt;
 
-// figure out how to use this
 use astroport::asset::{Asset, AssetInfo};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -22,7 +21,7 @@ pub enum ExecuteMsg {
     ////////////////////
     /// Owner's operations
     ////////////////////
-    
+
     // Set the owner
     UpdateConfig {
         owner: Option<String>,
@@ -35,63 +34,88 @@ pub enum ExecuteMsg {
     ////////////////////
     /// User's operations
     ////////////////////
-
     Receive(Cw20ReceiveMsg),
 
     // cLP -> [p/y]LP
-    Split { token: Addr,
-            amount: Uint128, },
+    Split {
+        token: Addr,
+        amount: Uint128,
+    },
 
     // [p/y]LP -> cLP
-    Merge { token: String,
-            amount: Uint128, },
+    Merge {
+        token: Addr,
+        amount: Uint128,
+    },
 
     // unstake yLP
-    Unstake { token: Addr,
-              amount: Option<Uint128>, },
+    Unstake {
+        token: Addr,
+        amount: Option<Uint128>,
+    },
 
     // lets a user update their staking mode
-    UpdateStakingMode { token: Addr,
-                        mode: StakingMode, },
+    UpdateStakingMode {
+        token: Addr,
+        mode: StakingMode,
+    },
 
     // claims staked LP's rewards
-    ClaimRewards { },
+    ClaimRewards {},
 
     ////////////////////
     /// internal operations
     ///////////////////
-    
+
     // performs LP -> cLP conversion
-    Mint { user: String,
-           token: Addr,
-           amount: Uint128, },
-    
+    Mint {
+        user: Addr,
+        token: Addr,
+        amount: Uint128,
+    },
+
     // burns cLP and updates internal state
-    Burn { user: String,
-           token: Addr,
-           amount: Uint128, },
+    Burn {
+        user: Addr,
+        token: Addr,
+        amount: Uint128,
+    },
 
     // create a new set of c/p/y LP tokens given valid LP token
-    CreateTokens { token: Addr, },
+    CreateTokens {
+        token: Addr,
+    },
 
     // update LP rewards for all users staking this LP
-    UpdateLPRewards { token: Addr, },
+    UpdateLPRewards {
+        token: Addr,
+    },
 
     // send all LP rewards to this staker
-    SendStakerRewards { staker: Addr, },
+    SendStakerRewards {
+        staker: Addr,
+    },
+
+    // update internal staker state
+    UpdateStakerInfo {
+        lp_id: u64,
+        sender_addr: Addr,
+        amount: Uint128,
+        stake: bool,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
     // LP -> cLP
-    Bond { },
+    Bond {},
 
     // cLP -> LP
-    Unbond { },
+    Unbond {},
 
-    // stake yLP to get rewards
-    Stake { amount: Uint128, },
+    // user stakes yLP to get rewards
+    Stake {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -111,7 +135,7 @@ pub struct Config {
     // address of astroport factory
     pub factory: String,
 
-    // used to swap assets to prism
+    // used to swap assets to prism and accrue protocol fees
     pub collector: String,
 
     // prism fee of 15%
@@ -121,11 +145,11 @@ pub struct Config {
 impl Config {
     pub fn as_res(&self) -> StdResult<ConfigResponse> {
         let res = ConfigResponse {
-            owner: self.owner.to_string(),
-            generator: self.generator.to_string(),
-            factory: self.factory.to_string(),
-            collector: self.collector.to_string(),
-            fee: self.fee.clone(),
+            owner: self.owner.clone(),
+            generator: self.generator.clone(),
+            factory: self.factory.clone(),
+            collector: self.collector.clone(),
+            fee: self.fee,
         };
         Ok(res)
     }
@@ -139,6 +163,36 @@ pub struct ConfigResponse {
     pub collector: String,
     pub fee: Decimal,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct LPInfo {
+    pub pair_asset_info: [AssetInfo; 2],
+    pub generator_reward_info: Vec<AssetInfo>,
+    pub amt_bonded: Uint128,
+    pub last_liquidity: Decimal,
+    pub pair_contract: Addr,
+    pub lp_contract: Addr,
+    pub clp_contract: Addr,
+    pub plp_contract: Addr,
+    pub ylp_contract: Addr,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct StakerInfo {
+    pub lp_contract: Addr,
+    pub amt_staked: Uint128,
+    pub mode: StakingMode,
+    pub rewards: RewardInfo,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct RewardInfo {
+    // index 0 = ASTRO, index 1 = proxy
+    pub generator_rewards: Vec<Asset>,
+    // order established by messages sent back from Astroport
+    pub amm_rewards: Vec<Asset>,
+}
+
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]

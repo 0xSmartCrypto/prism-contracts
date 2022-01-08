@@ -32,19 +32,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "astroport_old"
-version = "2.4.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw20",
- "schemars",
- "serde",
- "terra-cosmwasm",
- "uint",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
