@@ -178,7 +178,7 @@ pub fn admin_send_withdrawn_rewards(
         };
 
         if !send_asset.amount.is_zero() {
-            messages.push(send_asset.into_msg(&deps.querier, Addr::unchecked(cfg.owner.clone()))?);
+            messages.push(send_asset.into_msg(&deps.querier, cfg.owner.clone())?);
         }
     }
 

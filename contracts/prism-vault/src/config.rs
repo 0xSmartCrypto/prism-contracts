@@ -175,7 +175,7 @@ pub fn execute_register_validator(
         ));
     }
 
-    let validator_addr = Addr::unchecked(&validator);
+    let validator_addr = deps.api.addr_validate(&validator)?;
     store_white_validators(deps.storage, &validator_addr)?;
 
     Ok(Response::new().add_attributes(vec![
@@ -194,7 +194,7 @@ pub fn execute_deregister_validator(
 ) -> StdResult<Response> {
     let token = CONFIG.load(deps.storage)?;
 
-    let validator_addr = Addr::unchecked(&validator);
+    let validator_addr = deps.api.addr_validate(&validator)?;
     if token.creator != info.sender.to_string() {
         return Err(StdError::generic_err("unauthorized"));
     }

@@ -87,12 +87,12 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
     // received pluna amount should always be same as yluna amount
     let yluna_amt = query_token_balance(
         &deps.querier,
-        Addr::unchecked(cfg.yluna_token.clone()),
+        cfg.yluna_token.clone(),
         env.contract.address.clone(),
     )?;
     let pluna_amt = query_token_balance(
         &deps.querier,
-        Addr::unchecked(cfg.pluna_token.clone()),
+        cfg.pluna_token.clone(),
         env.contract.address.clone(),
     )?;
 

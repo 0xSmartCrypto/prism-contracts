@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut,
+    attr, coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut,
     DistributionMsg, Env, FullDelegation, MessageInfo, OwnedDeps, Querier, Response, StakingMsg,
     StdError, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg,
 };
@@ -515,6 +515,14 @@ fn proper_deregister() {
     let owner_info = mock_info(owner.as_str(), &[]);
     let res = execute(deps.as_mut(), mock_env(), owner_info, msg).unwrap();
     assert_eq!(0, res.messages.len());
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "de_register_validator"),
+            attr("validator", validator.address.clone()),
+            attr("new-validator", validator2.address.clone()),
+        ]
+    );
 
     // register_validator 1 again
     do_register_validator(deps.as_mut(), validator.clone());
