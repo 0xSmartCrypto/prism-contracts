@@ -7,8 +7,6 @@ use cw_storage_plus::{Bound, Item, Map, U64Key};
 use prism_protocol::de::deserialize_key;
 use prism_protocol::vault::{Config, State, UnbondHistory, UnbondRequest};
 
-pub type LastBatch = u64;
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Parameters {
     pub epoch_period: u64,
