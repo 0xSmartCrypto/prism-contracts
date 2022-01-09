@@ -439,10 +439,7 @@ fn proper_bond() {
 
     let info = mock_info(&bob, &[]);
     let res = execute(deps.as_mut(), mock_env(), info, failed_bond);
-    assert_eq!(
-        res.unwrap_err(),
-        StdError::generic_err("No uluna assets are provided to bond")
-    );
+    assert_eq!(res.unwrap_err(), StdError::generic_err("No funds sent"));
 
     //send other tokens than luna funds
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
@@ -455,7 +452,7 @@ fn proper_bond() {
     let res = execute(deps.as_mut(), mock_env(), info, failed_bond.clone());
     assert_eq!(
         res.unwrap_err(),
-        StdError::generic_err("No uluna assets are provided to bond")
+        StdError::generic_err("Must send reserve token 'uluna'")
     );
 
     //bond with more than one coin is not possible
@@ -470,7 +467,7 @@ fn proper_bond() {
     let res = execute(deps.as_mut(), mock_env(), info, failed_bond).unwrap_err();
     assert_eq!(
         res,
-        StdError::generic_err("More than one coin is sent; only one asset is supported")
+        StdError::generic_err("Sent more than one denomination")
     );
 }
 
