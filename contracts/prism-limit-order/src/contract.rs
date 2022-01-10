@@ -4,12 +4,16 @@ use cosmwasm_std::{
     to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult, Uint128,
 };
+use cw2::set_contract_version;
 
 use crate::order::{cancel_order, execute_order, submit_order};
 use crate::query::{query_config, query_last_order_id, query_order, query_orders};
 use crate::state::{generate_pair_key, Config, CONFIG, LAST_ORDER_ID, PAIRS};
 use astroport::asset::AssetInfo;
 use prism_protocol::limit_order::{ExecuteMsg, InstantiateMsg, QueryMsg};
+
+const CONTRACT_NAME: &str = "prism-limit-order";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -18,6 +22,8 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     assert_fee(msg.order_fee)?;
     assert_fee(msg.executor_fee_portion)?;
 

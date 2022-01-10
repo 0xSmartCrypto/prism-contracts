@@ -10,6 +10,7 @@ use cosmwasm_std::{
     entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
+use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, VestingStatusResponse,
@@ -21,6 +22,9 @@ use prism_protocol::yasset_staking::{
 use std::cmp::min;
 use std::convert::TryInto;
 
+const CONTRACT_NAME: &str = "prism-launch-pool";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -28,6 +32,8 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
         prism_token: deps.api.addr_validate(&msg.prism_token)?,

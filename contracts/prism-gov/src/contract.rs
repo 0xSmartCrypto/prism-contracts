@@ -12,6 +12,7 @@ use cosmwasm_std::{
     from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply, Response,
     StdError, StdResult, Uint128,
 };
+use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
 
 use crate::xprism::{
@@ -27,6 +28,9 @@ use prism_protocol::gov::{
 pub const POLL_EXECUTE_REPLY_ID: u64 = 1;
 pub const MIN_POLL_GAS_LIMIT: u64 = 1_000_000;
 
+const CONTRACT_NAME: &str = "prism-gov";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -34,6 +38,8 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     validate_quorum(msg.quorum)?;
     validate_threshold(msg.threshold)?;
     validate_poll_gas_limit(msg.poll_gas_limit)?;

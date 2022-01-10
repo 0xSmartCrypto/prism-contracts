@@ -7,12 +7,16 @@ use cosmwasm_std::{
     attr, entry_point, to_binary, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
     Response, StdResult, Uint128, WasmMsg,
 };
+use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
 use prism_protocol::fair_launch::{
     ConfigResponse, DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg,
 };
 
 pub const SECONDS_PER_HOUR: u64 = 60 * 60;
+
+const CONTRACT_NAME: &str = "prism-fair-launch";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -21,6 +25,8 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
         token: deps.api.addr_validate(&msg.token)?,

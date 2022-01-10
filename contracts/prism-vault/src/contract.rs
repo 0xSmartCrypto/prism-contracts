@@ -5,6 +5,7 @@ use cosmwasm_std::{
     Env, MessageInfo, QueryRequest, Response, StakingMsg, StdError, StdResult, SubMsg, Uint128,
     WasmMsg, WasmQuery,
 };
+use cw2::set_contract_version;
 
 use crate::config::{
     execute_deregister_validator, execute_register_validator, execute_update_config,
@@ -29,6 +30,9 @@ use prism_protocol::vault::{
 };
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
 
+const CONTRACT_NAME: &str = "prism-vault";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -36,6 +40,8 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     let sender = info.sender.clone();
 
     let payment = info

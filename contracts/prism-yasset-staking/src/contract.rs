@@ -20,8 +20,12 @@ use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASS
 
 use crate::swaps::{deposit_minted_pyluna_hook, luna_to_pyluna_hook, process_delegator_rewards};
 use astroport::asset::AssetInfo;
+use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
 use terra_cosmwasm::TerraMsgWrapper;
+
+const CONTRACT_NAME: &str = "prism-yasset-staking";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -30,6 +34,8 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     CONFIG.save(
         deps.storage,
         &Config {

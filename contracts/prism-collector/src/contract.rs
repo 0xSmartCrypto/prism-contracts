@@ -12,7 +12,11 @@ use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, Quer
 use astroport::asset::{Asset, AssetInfo, PairInfo};
 use astroport::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 use astroport::querier::{query_balance, query_pair_info, query_token_balance};
+use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
+
+const CONTRACT_NAME: &str = "prism-collector";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -21,6 +25,8 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     let config = Config {
         distribution_contract: deps.api.addr_validate(&msg.distribution_contract)?,
         astroport_factory: deps.api.addr_validate(&msg.astroport_factory)?,
