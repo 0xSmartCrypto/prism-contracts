@@ -3,8 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use astroport::generator_proxy::{Cw20HookMsg, ExecuteMsg, QueryMsg};
-use prism_astro_generator_proxy::msg::InstantiateMsg;
+use astroport::generator_proxy::{Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();

@@ -5,9 +5,11 @@ use cosmwasm_std::{
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg};
 
 use crate::error::ContractError;
-use crate::msg::InstantiateMsg;
 use crate::state::{Config, CONFIG};
-use astroport::generator_proxy::{Cw20HookMsg, ExecuteMsg, QueryMsg};
+use astroport::asset::addr_validate_to_lower;
+use astroport::generator_proxy::{
+    CallbackMsg, ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg,
+};
 use cw2::set_contract_version;
 use prism_protocol::lp_staking::{
     Cw20HookMsg as PrismStakingCw20HookMsg, ExecuteMsg as PrismStakingExecuteMsg,
@@ -28,10 +30,11 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let config = Config {
-        generator_contract_addr: deps.api.addr_validate(&msg.generator_contract_addr)?,
-        lp_token_addr: deps.api.addr_validate(&msg.lp_token_addr)?,
-        reward_contract_addr: deps.api.addr_validate(&msg.reward_contract_addr)?,
-        reward_token_addr: deps.api.addr_validate(&msg.reward_token_addr)?,
+        generator_contract_addr: addr_validate_to_lower(deps.api, &msg.generator_contract_addr)?,
+        pair_addr: addr_validate_to_lower(deps.api, &msg.pair_addr)?,
+        lp_token_addr: addr_validate_to_lower(deps.api, &msg.lp_token_addr)?,
+        reward_contract_addr: addr_validate_to_lower(deps.api, &msg.reward_contract_addr)?,
+        reward_token_addr: addr_validate_to_lower(deps.api, &msg.reward_token_addr)?,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -49,8 +52,11 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::UpdateRewards {} => update_rewards(deps),
         ExecuteMsg::SendRewards { account, amount } => send_rewards(deps, info, account, amount),
-        ExecuteMsg::Withdraw { account, amount } => withdraw(deps, info, account, amount),
-        ExecuteMsg::EmergencyWithdraw { account, amount } => withdraw(deps, info, account, amount),
+        ExecuteMsg::Withdraw { account, amount } => withdraw(deps, env, info, account, amount),
+        ExecuteMsg::EmergencyWithdraw { account, amount } => {
+            withdraw(deps, env, info, account, amount)
+        }
+        ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
     }
 }
 
@@ -130,6 +136,7 @@ fn send_rewards(
 
 fn withdraw(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     account: Addr,
     amount: Uint128,
@@ -138,6 +145,16 @@ fn withdraw(
     let cfg = CONFIG.load(deps.storage)?;
     if info.sender != cfg.generator_contract_addr {
         return Err(ContractError::Unauthorized {});
+    };
+
+    let prev_lp_balance = {
+        let res: BalanceResponse = deps.querier.query_wasm_smart(
+            &cfg.lp_token_addr,
+            &Cw20QueryMsg::Balance {
+                address: env.contract.address.to_string(),
+            },
+        )?;
+        res.balance
     };
 
     // withdraw from the end reward contract here
@@ -151,12 +168,14 @@ fn withdraw(
     }));
 
     response.messages.push(SubMsg::new(WasmMsg::Execute {
-        contract_addr: cfg.lp_token_addr.to_string(),
+        contract_addr: env.contract.address.to_string(),
         funds: vec![],
-        msg: to_binary(&Cw20ExecuteMsg::Transfer {
-            recipient: account.to_string(),
-            amount,
-        })?,
+        msg: to_binary(&ExecuteMsg::Callback(
+            CallbackMsg::TransferLpTokensAfterWithdraw {
+                account,
+                prev_lp_balance,
+            },
+        ))?,
     }));
 
     Ok(response)
@@ -166,6 +185,13 @@ fn withdraw(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let cfg = CONFIG.load(deps.storage)?;
     match msg {
+        QueryMsg::Config {} => to_binary(&ConfigResponse {
+            generator_contract_addr: cfg.generator_contract_addr.to_string(),
+            pair_addr: cfg.pair_addr.to_string(),
+            lp_token_addr: cfg.lp_token_addr.to_string(),
+            reward_contract_addr: cfg.reward_contract_addr.to_string(),
+            reward_token_addr: cfg.reward_token_addr.to_string(),
+        }),
         QueryMsg::Deposit {} => {
             // query the end reward contract for total deposit amount if possible or implement storing local balance
             let res: StdResult<StakerInfoResponse> = deps.querier.query_wasm_smart(
@@ -218,4 +244,50 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&config.reward_token_addr)
         }
     }
+}
+
+pub fn handle_callback(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: CallbackMsg,
+) -> Result<Response, ContractError> {
+    // Callback functions can only be called this contract itself
+    if info.sender != env.contract.address {
+        return Err(ContractError::Unauthorized {});
+    }
+    match msg {
+        CallbackMsg::TransferLpTokensAfterWithdraw {
+            account,
+            prev_lp_balance,
+        } => transfer_lp_tokens_after_withdraw(deps, env, account, prev_lp_balance),
+    }
+}
+
+pub fn transfer_lp_tokens_after_withdraw(
+    deps: DepsMut,
+    env: Env,
+    account: Addr,
+    prev_lp_balance: Uint128,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    let amount = {
+        let res: BalanceResponse = deps.querier.query_wasm_smart(
+            &cfg.lp_token_addr,
+            &Cw20QueryMsg::Balance {
+                address: env.contract.address.to_string(),
+            },
+        )?;
+        res.balance - prev_lp_balance
+    };
+
+    Ok(Response::new().add_message(WasmMsg::Execute {
+        contract_addr: cfg.lp_token_addr.to_string(),
+        funds: vec![],
+        msg: to_binary(&Cw20ExecuteMsg::Transfer {
+            recipient: account.to_string(),
+            amount,
+        })?,
+    }))
 }

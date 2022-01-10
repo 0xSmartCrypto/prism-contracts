@@ -19,10 +19,12 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "astroport"
-version = "2.4.0"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b56c6d8a5a14a5f569a3473a962ed1d12bfec2a19ef43584c86aae5667bdeaa8"
 dependencies = [
- "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-storage-plus",
  "cw20",
  "schemars",
  "serde",
