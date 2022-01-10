@@ -275,14 +275,12 @@ fn withdraw_all_rewards(deps: &DepsMut, delegator: Addr) -> StdResult<Vec<SubMsg
 
 /// Check whether slashing has happened
 /// This is used for checking slashing while bonding or unbonding
-pub fn slashing(deps: &mut DepsMut, env: Env) -> StdResult<()> {
-    //read params
-    let params = PARAMETERS.load(deps.storage)?;
-    let coin_denom = params.underlying_coin_denom;
-
-    // Check the amount that contract thinks is bonded
-    let state_total_bonded = STATE.load(deps.storage)?.total_bond_amount;
-
+pub fn slashing(
+    deps: &mut DepsMut,
+    env: Env,
+    state: &mut State,
+    params: &Parameters,
+) -> StdResult<()> {
     // Check the actual bonded amount
     let delegations = deps.querier.query_all_delegations(env.contract.address)?;
     if delegations.is_empty() {
@@ -290,7 +288,7 @@ pub fn slashing(deps: &mut DepsMut, env: Env) -> StdResult<()> {
     } else {
         let mut actual_total_bonded = Uint128::zero();
         for delegation in delegations {
-            if delegation.amount.denom == coin_denom {
+            if delegation.amount.denom == params.underlying_coin_denom {
                 actual_total_bonded += delegation.amount.amount
             }
         }
@@ -300,12 +298,10 @@ pub fn slashing(deps: &mut DepsMut, env: Env) -> StdResult<()> {
         let current_requested_fee = CURRENT_BATCH.load(deps.storage)?.requested_with_fee;
 
         // Slashing happens if the expected amount is less than stored amount
-        if state_total_bonded.u128() > actual_total_bonded.u128() {
-            STATE.update(deps.storage, |mut state| -> StdResult<State> {
-                state.total_bond_amount = actual_total_bonded;
-                state.update_exchange_rate(total_issued, current_requested_fee);
-                Ok(state)
-            })?;
+        if state.total_bond_amount.u128() > actual_total_bonded.u128() {
+            state.total_bond_amount = actual_total_bonded;
+            state.update_exchange_rate(total_issued, current_requested_fee);
+            STATE.save(deps.storage, state)?;
         }
 
         Ok(())
@@ -396,9 +392,10 @@ pub fn deposit_airdrop_rewards(
 /// Handler for tracking slashing
 pub fn execute_slashing(mut deps: DepsMut, env: Env) -> StdResult<Response> {
     // call slashing
-    slashing(&mut deps, env)?;
+    let params = PARAMETERS.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
+    slashing(&mut deps, env, &mut state, &params)?;
     // read state for log
-    let state = STATE.load(deps.storage)?;
     Ok(Response::new().add_attributes(vec![
         attr("action", "check_slashing"),
         attr("new_exchange_rate", state.exchange_rate.to_string()),
@@ -492,16 +489,14 @@ fn query_params(deps: Deps) -> StdResult<Parameters> {
 }
 
 pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
-    let cluna_address = CONFIG
-        .load(deps.storage)?
+    let cfg = CONFIG.load(deps.storage)?;
+    let cluna_address = cfg
         .cluna_contract
         .expect("cluna contract must have been registered");
-    let pluna_address = CONFIG
-        .load(deps.storage)?
+    let pluna_address = cfg
         .pluna_contract
         .expect("pluna contract must have been registered");
-    let yluna_address = CONFIG
-        .load(deps.storage)?
+    let yluna_address = cfg
         .yluna_contract
         .expect("yluna contract must have been registered");
 

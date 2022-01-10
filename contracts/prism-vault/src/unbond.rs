@@ -30,9 +30,8 @@ pub(crate) fn execute_unbond(
     let mut current_batch = CURRENT_BATCH.load(deps.storage)?;
 
     // Check slashing, update state, and calculate the new exchange rate.
-    slashing(&mut deps, env.clone())?;
-
     let mut state = STATE.load(deps.storage)?;
+    slashing(&mut deps, env.clone(), &mut state, &params)?;
 
     let mut total_supply = query_total_issued(deps.as_ref()).unwrap_or_default();
 

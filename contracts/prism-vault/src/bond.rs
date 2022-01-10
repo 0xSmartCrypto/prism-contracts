@@ -9,7 +9,6 @@ use cosmwasm_std::{
 };
 use cw0::must_pay;
 use cw20::Cw20ExecuteMsg as TokenMsg;
-use prism_protocol::vault::State;
 
 pub fn execute_bond_split(
     deps: DepsMut,
@@ -74,7 +73,6 @@ pub fn _execute_bond(
     }
 
     let params = PARAMETERS.load(deps.storage)?;
-    let coin_denom = params.underlying_coin_denom;
     let threshold = params.er_threshold;
     let recovery_fee = params.peg_recovery_fee;
 
@@ -82,13 +80,13 @@ pub fn _execute_bond(
     let current_batch = CURRENT_BATCH.load(deps.storage)?;
     let requested_with_fee = current_batch.requested_with_fee;
 
-    let payment_amt = must_pay(&info, &coin_denom)
+    let payment_amt = must_pay(&info, &params.underlying_coin_denom)
         .map_err(|error| StdError::generic_err(format!("{}", error)))?;
 
     // check slashing
-    slashing(&mut deps, env.clone())?;
+    let mut state = STATE.load(deps.storage)?;
+    slashing(&mut deps, env.clone(), &mut state, &params)?;
 
-    let state = STATE.load(deps.storage)?;
     let sender = info.sender.clone();
 
     // get the total supply
@@ -109,11 +107,9 @@ pub fn _execute_bond(
     total_supply += mint_amount_with_fee;
 
     // exchange rate should be updated for future
-    STATE.update(deps.storage, |mut prev_state| -> StdResult<State> {
-        prev_state.total_bond_amount += payment_amt;
-        prev_state.update_exchange_rate(total_supply, requested_with_fee);
-        Ok(prev_state)
-    })?;
+    state.total_bond_amount += payment_amt;
+    state.update_exchange_rate(total_supply, requested_with_fee);
+    STATE.save(deps.storage, &state)?;
 
     let config = CONFIG.load(deps.storage)?;
     let token_address = config
@@ -126,7 +122,7 @@ pub fn _execute_bond(
             SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
                 validator: unwrapped_validator.into_string(),
                 amount: Coin {
-                    denom: coin_denom,
+                    denom: params.underlying_coin_denom,
                     amount: payment_amt,
                 },
             })),
