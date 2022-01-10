@@ -293,12 +293,11 @@ pub fn slashing(
             }
         }
 
-        // Need total issued for updating the exchange rate
-        let total_issued = query_total_issued(deps.as_ref())?;
-        let current_requested_fee = CURRENT_BATCH.load(deps.storage)?.requested_with_fee;
-
         // Slashing happens if the expected amount is less than stored amount
         if state.total_bond_amount.u128() > actual_total_bonded.u128() {
+            // Need total issued for updating the exchange rate
+            let total_issued = query_total_issued(deps.as_ref())?;
+            let current_requested_fee = CURRENT_BATCH.load(deps.storage)?.requested_with_fee;
             state.total_bond_amount = actual_total_bonded;
             state.update_exchange_rate(total_issued, current_requested_fee);
             STATE.save(deps.storage, state)?;
