@@ -149,14 +149,8 @@ pub fn read_polls<'a>(
     start_after: Option<u64>,
     limit: Option<u32>,
     order_by: Option<OrderBy>,
-    remove_hard_cap: Option<bool>,
 ) -> StdResult<Vec<Poll>> {
-    let mut limit: usize = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    if let Some(remove_hard_cap) = remove_hard_cap {
-        if remove_hard_cap {
-            limit = usize::MAX;
-        }
-    }
+    let limit: usize = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
     let (start, end, order_by) = match order_by {
         Some(OrderBy::Asc) => (calc_range_start(start_after), None, OrderBy::Asc),
         _ => (None, calc_range_end(start_after), OrderBy::Desc),

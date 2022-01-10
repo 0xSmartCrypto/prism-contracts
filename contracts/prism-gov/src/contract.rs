@@ -341,7 +341,7 @@ fn query_polls(
     limit: Option<u32>,
     order_by: Option<OrderBy>,
 ) -> StdResult<PollsResponse> {
-    let polls = read_polls(deps.storage, filter, start_after, limit, order_by, None)?;
+    let polls = read_polls(deps.storage, filter, start_after, limit, order_by)?;
     let poll_responses: StdResult<Vec<PollResponse>> = polls
         .iter()
         .map(|poll| {
