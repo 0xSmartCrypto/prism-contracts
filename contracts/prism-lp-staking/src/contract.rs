@@ -26,15 +26,21 @@ pub fn instantiate(
         }
     }
 
+    let mut staking_tokens = msg.staking_tokens.clone();
+    staking_tokens.sort();
+    staking_tokens.dedup_by(|item1, item2| item1.0 == item2.0);
+    if staking_tokens.len() != msg.staking_tokens.len() {
+        return Err(ContractError::DuplicateStakingToken{});
+    }
+
     let config = Config {
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
         distribution_schedule: msg.distribution_schedule,
-        staking_tokens: msg
-            .staking_tokens
+        staking_tokens: staking_tokens
             .iter()
             .map(|item| (deps.api.addr_validate(&item.0).unwrap(), item.1))
             .collect(),
-        total_weight: msg.staking_tokens.iter().map(|item| item.1).sum(),
+        total_weight: staking_tokens.iter().map(|item| item.1).sum(),
     };
 
     for (staking_token, weight) in &config.staking_tokens {
