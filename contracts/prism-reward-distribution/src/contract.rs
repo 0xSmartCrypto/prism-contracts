@@ -19,8 +19,12 @@ use crate::querier::{
 use crate::state::{Config, CONFIG, WHITELISTED_ASSETS};
 use astroport::asset::{Asset, AssetInfo};
 use astroport::querier::{query_balance, query_token_balance};
+use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
+
+const CONTRACT_NAME: &str = "prism-reward-distribution";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -29,6 +33,8 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> ContractResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     if msg.protocol_fee > Decimal::one() {
         return Err(ContractError::InvalidConfig {
             reason: "invalid protocol fee".to_string(),

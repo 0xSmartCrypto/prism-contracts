@@ -7,6 +7,7 @@ use cosmwasm_std::{
 
 use crate::error::{ContractError, ContractResult};
 use crate::state::{CONFIG, STATE};
+use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
 
 use prism_protocol::basset_vault::{
@@ -20,6 +21,9 @@ use cw20::Cw20ReceiveMsg;
 use astroport::asset::AssetInfo;
 use beth::reward::ExecuteMsg as BassetRewardExecuteMsg;
 
+const CONTRACT_NAME: &str = "prism-basset-vault";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -27,6 +31,8 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> ContractResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     if !info.funds.is_empty() {
         return Err(ContractError::NonPayable {});
     }

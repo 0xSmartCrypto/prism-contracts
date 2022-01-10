@@ -19,10 +19,14 @@ use crate::state::{Config, CONFIG};
 use astroport::asset::{Asset, AssetInfo};
 use astroport::pair::ExecuteMsg as PairExecuteMsg;
 use astroport::querier::{query_supply, query_token_balance};
+use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, MinterResponse, TokenInfoResponse};
 use cw20_base::msg::InstantiateMsg as TokenInstantiateMsg;
 
 const INSTANTIATE_REPLY_ID: u64 = 1;
+
+const CONTRACT_NAME: &str = "prism-yasset-staking-x";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -31,6 +35,8 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     CONFIG.save(
         deps.storage,
         &Config {
@@ -79,10 +85,9 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> ContractResult<Response> {
     if msg.id != INSTANTIATE_REPLY_ID {
-        return Err(ContractError::InvalidReplyId{});
+        return Err(ContractError::InvalidReplyId {});
     }
-    let res = parse_reply_instantiate_data(msg)
-        .map_err(|_| ContractError::ParseReplyError{})?;
+    let res = parse_reply_instantiate_data(msg).map_err(|_| ContractError::ParseReplyError {})?;
     let xyasset_token_addr = deps.api.addr_validate(&res.contract_address)?;
     CONFIG.update(deps.storage, |mut cfg| -> StdResult<_> {
         cfg.xyasset_token = xyasset_token_addr.clone();
