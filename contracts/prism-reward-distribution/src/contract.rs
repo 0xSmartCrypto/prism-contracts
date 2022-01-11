@@ -104,11 +104,10 @@ pub fn process_delegator_rewards(
 
     for coin in balances {
         if coin.denom == delegator_reward_denom.clone()
-            || exchange_rates
+            || !exchange_rates
                 .exchange_rates
                 .iter()
-                .find(|&x| x.quote_denom == coin.denom)
-                == None
+                .any(|x| x.quote_denom == coin.denom)
         {
             continue;
         }
