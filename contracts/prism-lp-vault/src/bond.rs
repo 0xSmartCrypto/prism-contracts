@@ -16,10 +16,8 @@ use crate::query::{
 };
 use crate::state::{CONFIG, LP_IDS, LP_INFOS, NUM_LPS};
 
-use crate::response::MsgInstantiateContractResponse;
-use protobuf::Message;
+use prism_common::parse_reply_instantiate_data;
 
-use astroport::asset::addr_validate_to_lower;
 use cw20::{Cw20ExecuteMsg, MinterResponse};
 
 const CLP_INSTANTIATE_REPLY_ID: u64 = 1;
@@ -283,14 +281,12 @@ pub fn create_tokens(
 #[allow(dead_code)] // throws warnings on compile because we don't call reply explicitly
 pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
     // grab address from data field and validate
-    let data = msg.result.unwrap().data.unwrap();
-    let res: MsgInstantiateContractResponse =
-        Message::parse_from_bytes(data.as_slice()).map_err(|_| {
-            StdError::parse_err("MsgInstantiateContractResponse", "failed to parse data")
-        })?;
-
+    let id = msg.id;
+    let res = parse_reply_instantiate_data(msg)
+        .map_err(|_| StdError::generic_err("Failed to parse reply"))?;
+    
     // get LPInfo to modify
-    let new_token_addr = addr_validate_to_lower(deps.api, res.get_contract_address())?;
+    let new_token_addr = deps.api.addr_validate(&res.contract_address)?;
     let lp_id = NUM_LPS.load(deps.storage)?;
     let mut lp_info = LP_INFOS.load(deps.storage, lp_id.into())?;
 
@@ -298,7 +294,7 @@ pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
     LP_IDS.save(deps.storage, &new_token_addr, &lp_id.clone())?;
 
     // update the correct contract
-    match msg.id {
+    match id {
         CLP_INSTANTIATE_REPLY_ID => {
             lp_info.clp_contract = new_token_addr;
         }
