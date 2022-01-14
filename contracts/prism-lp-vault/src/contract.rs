@@ -8,11 +8,12 @@ use cw20::Cw20ReceiveMsg;
 
 use prism_protocol::lp_vault::{Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use crate::bond::{bond, burn, create_tokens, mint, unbond};
+use crate::bond::{bond, create_tokens, unbond};
 use crate::query::query_config;
 use crate::refract::{merge, split};
 use crate::stake::{
-    claim_rewards, send_staker_rewards, stake, unstake, update_lp_rewards, update_staking_mode, update_staker_info
+    claim_rewards, send_staker_rewards, stake, unstake, update_lp_rewards, update_staker_info,
+    update_staking_mode,
 };
 use crate::state::{CONFIG, NUM_LPS};
 
@@ -57,22 +58,25 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
 
         ExecuteMsg::Unstake { token, amount } => unstake(deps, env, info, token, amount),
 
-        ExecuteMsg::UpdateStakingMode { token, mode } => update_staking_mode(deps, info, token, mode),
+        ExecuteMsg::UpdateStakingMode { token, mode } => {
+            update_staking_mode(deps, info, token, mode)
+        }
 
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
 
         // internal functions
-        ExecuteMsg::Mint { user, token, amount } => mint(deps, env, info, user, token, amount),
-
-        ExecuteMsg::Burn { user, token, amount } => burn(deps, env, info, user, token, amount),
-
         ExecuteMsg::CreateTokens { token } => create_tokens(deps, env, info, token),
 
         ExecuteMsg::UpdateLPRewards { token } => update_lp_rewards(deps, env, info, token),
 
         ExecuteMsg::SendStakerRewards { staker } => send_staker_rewards(deps, env, info, staker),
 
-        ExecuteMsg::UpdateStakerInfo { lp_id, sender_addr, amount, stake } => update_staker_info(deps, env, info, lp_id, sender_addr, amount, stake),
+        ExecuteMsg::UpdateStakerInfo {
+            lp_id,
+            sender_addr,
+            amount,
+            stake,
+        } => update_staker_info(deps, env, info, lp_id, sender_addr, amount, stake),
     }
 }
 
@@ -84,11 +88,10 @@ pub fn receive_cw20(
 ) -> StdResult<Response> {
     let cw20_sender: Addr = deps.api.addr_validate(&cw20_msg.sender)?;
 
-    match from_binary(&cw20_msg.msg) {
-        Ok(Cw20HookMsg::Bond {}) => bond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
-        Ok(Cw20HookMsg::Unbond {}) => unbond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
-        Ok(Cw20HookMsg::Stake {}) => stake(deps, env, info.sender, cw20_sender, cw20_msg.amount),
-        Err(_) => Err(StdError::generic_err("Invalid CW20 Message".to_string())),
+    match from_binary(&cw20_msg.msg)? {
+        Cw20HookMsg::Bond {} => bond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
+        Cw20HookMsg::Unbond {} => unbond(deps, info.sender, cw20_sender, cw20_msg.amount),
+        Cw20HookMsg::Stake {} => stake(deps, env, info.sender, cw20_sender, cw20_msg.amount),
     }
 }
 
@@ -110,46 +113,17 @@ pub fn update_config(
     collector: Option<String>,
     fee: Option<Decimal>,
 ) -> StdResult<Response> {
-    let conf = CONFIG.load(deps.storage)?;
-
+    let mut conf = CONFIG.load(deps.storage)?;
     if info.sender.as_str() != conf.owner {
         return Err(StdError::generic_err("Unauthorized".to_string()));
     }
 
-    if let Some(creator) = owner {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.owner = creator;
-            Ok(last_config)
-        })?;
-    }
-
-    if let Some(generator_contract) = generator {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.generator = generator_contract;
-            Ok(last_config)
-        })?;
-    }
-
-    if let Some(factory_contract) = factory {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.factory = factory_contract;
-            Ok(last_config)
-        })?;
-    }
-
-    if let Some(fee_contract) = collector {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.collector = fee_contract;
-            Ok(last_config)
-        })?;
-    }
-
-    if let Some(prism_fee) = fee {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.fee = prism_fee;
-            Ok(last_config)
-        })?;
-    }
+    conf.owner = owner.unwrap_or(conf.owner);
+    conf.generator = generator.unwrap_or(conf.generator);
+    conf.factory = factory.unwrap_or(conf.factory);
+    conf.collector = collector.unwrap_or(conf.collector);
+    conf.fee = fee.unwrap_or(conf.fee);
+    CONFIG.save(deps.storage, &conf)?;
 
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }

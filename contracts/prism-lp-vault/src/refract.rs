@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, DepsMut, MessageInfo, Response, 
-    StdError, StdResult, Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, DepsMut, MessageInfo, Response, StdError, StdResult, Uint128,
+    WasmMsg,
 };
 
 use cw20::Cw20ExecuteMsg;
@@ -49,13 +49,12 @@ pub fn split(
         }),
     ];
 
-    Ok(Response::new().add_messages(messages)
-                      .add_attributes(vec![
-                          attr("action", "split"),
-                          attr("from", info.sender.as_str()),
-                          attr("LP", lp_info.lp_contract.as_str()),
-                          attr("amount", amount),
-                      ]))
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "split"),
+        attr("from", info.sender.as_str()),
+        attr("LP", lp_info.lp_contract.as_str()),
+        attr("amount", amount),
+    ]))
 }
 
 pub fn merge(
@@ -99,11 +98,10 @@ pub fn merge(
         }),
     ];
 
-    Ok(Response::new().add_messages(messages)
-                      .add_attributes(vec![
-                          attr("action", "merge"),
-                          attr("from", info.sender.as_str()),
-                          attr("LP", lp_info.lp_contract.as_str()),
-                          attr("amount", amount),
-                      ]))
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "merge"),
+        attr("from", info.sender.as_str()),
+        attr("LP", lp_info.lp_contract.as_str()),
+        attr("amount", amount),
+    ]))
 }

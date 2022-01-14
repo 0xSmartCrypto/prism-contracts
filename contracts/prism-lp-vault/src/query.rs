@@ -1,28 +1,22 @@
 use cosmwasm_std::{
-    to_binary, Addr, Deps, Env, QuerierWrapper, QueryRequest, StdError, 
-    StdResult, Uint128, WasmQuery,
+    to_binary, Addr, Deps, Env, QuerierWrapper, QueryRequest, StdError, StdResult, Uint128,
+    WasmQuery,
 };
 
-use cw20::{Cw20QueryMsg, TokenInfoResponse};
-use prism_protocol::lp_vault::{Config, ConfigResponse};
-use astroport::asset::{
-    Asset, AssetInfo, PairInfo
-};
+use astroport::asset::{Asset, AssetInfo, PairInfo};
 use astroport::factory::{
     ConfigResponse as AstroFactoryConfigResponse, QueryMsg as AstroFactoryQueryMsg,
 };
 use astroport::generator::{
     PendingTokenResponse, QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse,
 };
-use astroport::pair::{
-    PoolResponse, QueryMsg as AstroPairQueryMsg
-};
+use astroport::pair::{PoolResponse, QueryMsg as AstroPairQueryMsg};
+use cw20::{Cw20QueryMsg, TokenInfoResponse};
+use prism_protocol::lp_vault::{Config, ConfigResponse};
 
 use crate::state::{CONFIG, LP_IDS, LP_INFOS};
 
-pub fn query_config(
-    deps: Deps
-) -> StdResult<ConfigResponse> {
+pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;
     config.as_res()
 }
@@ -37,10 +31,7 @@ pub fn query_token_info(
     }))
 }
 
-pub fn query_all_pairs(
-    deps: Deps, 
-    querier: &QuerierWrapper
-) -> StdResult<Vec<PairInfo>> {
+pub fn query_all_pairs(deps: Deps, querier: &QuerierWrapper) -> StdResult<Vec<PairInfo>> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     // grab all pairs info from astroport factory

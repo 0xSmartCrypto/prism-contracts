@@ -2,8 +2,8 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, 
-    Reply, ReplyOn, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Reply, ReplyOn, Response,
+    StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
 
 use prism_protocol::lp_vault::{ExecuteMsg, LPInfo};
@@ -54,7 +54,7 @@ pub fn bond(
     })];
 
     // create LP token set if it doesn't exist
-    if LP_IDS.may_load(deps.storage, &staking_token)? == None {
+    if LP_IDS.load(deps.storage, &staking_token).is_err() {
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.to_string(),
             msg: to_binary(&ExecuteMsg::CreateTokens {
@@ -65,28 +65,23 @@ pub fn bond(
     }
 
     // mint cLP tokens and update internal state
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::Mint {
-            user: sender_addr.clone(),
-            token: staking_token.clone(),
-            amount,
-        })?,
-        funds: vec![],
-    }));
+    messages.push(mint(
+        deps,
+        sender_addr.clone(),
+        staking_token.clone(),
+        amount,
+    )?);
 
-    Ok(Response::new().add_messages(messages)
-                      .add_attributes(vec![
-                          attr("action", "bond"),
-                          attr("from", sender_addr.as_str()),
-                          attr("LP", staking_token.as_str()),
-                          attr("amount", amount),
-                      ]))
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "bond"),
+        attr("from", sender_addr.as_str()),
+        attr("LP", staking_token.as_str()),
+        attr("amount", amount),
+    ]))
 }
 
 pub fn unbond(
     deps: DepsMut,
-    env: Env,
     clp_token: Addr,
     sender_addr: Addr,
     amount: Uint128,
@@ -111,15 +106,7 @@ pub fn unbond(
             funds: vec![],
         }),
         // burn cLP tokens and update internal state
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: env.contract.address.to_string(),
-            msg: to_binary(&ExecuteMsg::Burn {
-                user: sender_addr.clone(),
-                token: clp_token,
-                amount,
-            })?,
-            funds: vec![],
-        }),
+        burn(deps, sender_addr.clone(), clp_token, amount)?,
         // call cw20 transfer LP to user
         CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: lp_contract.to_string(),
@@ -131,27 +118,15 @@ pub fn unbond(
         }),
     ];
 
-    Ok(Response::new().add_messages(messages)
-                      .add_attributes(vec![
-                          attr("action", "unbond"),
-                          attr("from", sender_addr.as_str()),
-                          attr("LP", lp_contract.as_str()),
-                          attr("amount", amount),
-                      ]))
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "unbond"),
+        attr("from", sender_addr.as_str()),
+        attr("LP", lp_contract.as_str()),
+        attr("amount", amount),
+    ]))
 }
 
-pub fn mint(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    user: Addr,
-    token: Addr,
-    amount: Uint128,
-) -> StdResult<Response> {
-    if info.sender.as_str() != env.contract.address {
-        return Err(StdError::generic_err("Unauthorized".to_string()));
-    }
-
+pub fn mint(deps: DepsMut, user: Addr, token: Addr, amount: Uint128) -> StdResult<CosmosMsg> {
     let lp_id = LP_IDS
         .load(deps.storage, &token)
         .map_err(|_| StdError::generic_err("No cLP token exists".to_string()))?;
@@ -164,30 +139,17 @@ pub fn mint(
     LP_INFOS.save(deps.storage, lp_id.into(), &lp_info)?;
 
     // mint cLP to user
-    Ok(Response::new().add_messages(vec![
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: lp_info.clp_contract.clone().into_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Mint {
-                recipient: user.to_string(),
-                amount,
-            })?,
-            funds: vec![],
-        }),
-    ]))
+    Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: lp_info.clp_contract.clone().into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Mint {
+            recipient: user.to_string(),
+            amount,
+        })?,
+        funds: vec![],
+    }))
 }
 
-pub fn burn(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    user: Addr,
-    token: Addr,
-    amount: Uint128,
-) -> StdResult<Response> {
-    if info.sender.as_str() != env.contract.address {
-        return Err(StdError::generic_err("Unauthorized".to_string()));
-    }
-
+pub fn burn(deps: DepsMut, user: Addr, token: Addr, amount: Uint128) -> StdResult<CosmosMsg> {
     let lp_id = LP_IDS
         .load(deps.storage, &token)
         .map_err(|_| StdError::generic_err("No cLP token exists".to_string()))?;
@@ -200,16 +162,14 @@ pub fn burn(
     LP_INFOS.save(deps.storage, lp_id.into(), &lp_info)?;
 
     // burn cLP from user
-    Ok(Response::new().add_messages(vec![
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: lp_info.clp_contract.clone().into_string(),
-            msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
-                owner: user.to_string(),
-                amount,
-            })?,
-            funds: vec![],
-        }),
-    ]))
+    Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: lp_info.clp_contract.clone().into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
+            owner: user.to_string(),
+            amount,
+        })?,
+        funds: vec![],
+    }))
 }
 
 pub fn create_tokens(
@@ -340,33 +300,16 @@ pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
     // update the correct contract
     match msg.id {
         CLP_INSTANTIATE_REPLY_ID => {
-            // check if cLP has already been instantiated
-            if lp_info.clp_contract != Addr::unchecked("") {
-                return Err(StdError::generic_err("Unauthorized"));
-            }
-
             lp_info.clp_contract = new_token_addr;
         }
         PLP_INSTANTIATE_REPLY_ID => {
-            // check if pLP has already been instantiated
-            if lp_info.plp_contract != Addr::unchecked("") {
-                return Err(StdError::generic_err("Unauthorized"));
-            }
-
             lp_info.plp_contract = new_token_addr;
         }
         YLP_INSTANTIATE_REPLY_ID => {
-            // check if yLP has already been instantiated
-            if lp_info.ylp_contract != Addr::unchecked("") {
-                return Err(StdError::generic_err("Unauthorized"));
-            }
-
             lp_info.ylp_contract = new_token_addr;
 
             // update LP id on last token instantiation
-            NUM_LPS.update(deps.storage, |lp_id| -> StdResult<u64> {
-                Ok(lp_id + 1)
-            })?;
+            NUM_LPS.update(deps.storage, |lp_id| -> StdResult<u64> { Ok(lp_id + 1) })?;
         }
         _ => {
             return Err(StdError::generic_err("Bad Reply ID".to_string()));

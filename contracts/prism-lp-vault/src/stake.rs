@@ -1,12 +1,12 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Order, 
-    Response, StdError, StdResult, Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, Order, Response,
+    StdError, StdResult, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 
-use prism_protocol::lp_vault::{Config, ExecuteMsg, RewardInfo, StakerInfo, StakingMode};
 use prism_protocol::collector::ExecuteMsg as PrismCollectorExecuteMsg;
+use prism_protocol::lp_vault::{Config, ExecuteMsg, RewardInfo, StakerInfo, StakingMode};
 
 use astroport::asset::{Asset, AssetInfo};
 use astroport::generator::{ExecuteMsg as AstroGenExecuteMsg, PendingTokenResponse};
@@ -70,13 +70,12 @@ pub fn stake(
         }),
     ];
 
-    Ok(Response::new().add_messages(messages)
-                      .add_attributes(vec![
-                        attr("action", "stake"),
-                        attr("from", sender_addr.as_str()),
-                        attr("LP", token.as_str()),
-                        attr("amount", amount),
-                      ]))
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "stake"),
+        attr("from", sender_addr.as_str()),
+        attr("LP", token.as_str()),
+        attr("amount", amount),
+    ]))
 }
 
 pub fn unstake(
@@ -152,21 +151,16 @@ pub fn unstake(
         }),
     ];
 
-    Ok(Response::new().add_messages(messages)
-                      .add_attributes(vec![
-                          attr("action", "unstake"),
-                          attr("from", sender_addr.as_str()),
-                          attr("LP", token.as_str()),
-                          attr("amount", unstake_amt),
-                      ]))
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "unstake"),
+        attr("from", sender_addr.as_str()),
+        attr("LP", token.as_str()),
+        attr("amount", unstake_amt),
+    ]))
 }
 
 // QUES: This feels pretty inefficient, is it enough of an amount to matter?
-pub fn claim_rewards(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo
-) -> StdResult<Response> {
+pub fn claim_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
     let staker = deps.api.addr_validate(info.sender.as_str())?;
 
     // update rewards of all relevant LP tokens
@@ -174,12 +168,18 @@ pub fn claim_rewards(
         .range(deps.storage, None, None, Order::Ascending)
         .filter_map(|item| {
             let (user, staker_info) = item.unwrap();
-            if staker == deps.api.addr_validate(&String::from_utf8(user).unwrap()).unwrap() {
+            if staker
+                == deps
+                    .api
+                    .addr_validate(&String::from_utf8(user).unwrap())
+                    .unwrap()
+            {
                 Some(CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: env.contract.address.clone().to_string(),
                     msg: to_binary(&ExecuteMsg::UpdateLPRewards {
                         token: staker_info.lp_contract,
-                    }).ok()?,
+                    })
+                    .ok()?,
                     funds: vec![],
                 }))
             } else {
@@ -191,15 +191,16 @@ pub fn claim_rewards(
     // send all rewards to staker
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::SendStakerRewards { staker: staker.clone() })?,
+        msg: to_binary(&ExecuteMsg::SendStakerRewards {
+            staker: staker.clone(),
+        })?,
         funds: vec![],
     }));
 
-    Ok(Response::new().add_messages(messages)
-                      .add_attributes(vec![
-                        attr("action", "claim rewards"),
-                        attr("from", staker.as_str()),
-                    ]))
+    Ok(Response::new().add_messages(messages).add_attributes(vec![
+        attr("action", "claim rewards"),
+        attr("from", staker.as_str()),
+    ]))
 }
 
 pub fn update_staking_mode(
@@ -212,16 +213,22 @@ pub fn update_staking_mode(
         .load(deps.storage, &token)
         .map_err(|_| StdError::generic_err("No LP token exists".to_string()))?;
 
-    STAKER_INFO.update(deps.storage, (lp_id.into(), &info.sender), |stake| -> StdResult<StakerInfo> {
-        let mut stake_info = stake.unwrap();
-        stake_info.mode = mode;
-        Ok(stake_info)
-    }).map_err(|_| StdError::generic_err("No LP token exists".to_string()))?;
+    STAKER_INFO
+        .update(
+            deps.storage,
+            (lp_id.into(), &info.sender),
+            |stake| -> StdResult<StakerInfo> {
+                let mut stake_info = stake.unwrap();
+                stake_info.mode = mode;
+                Ok(stake_info)
+            },
+        )
+        .map_err(|_| StdError::generic_err("No LP token exists".to_string()))?;
 
     Ok(Response::new().add_attributes(vec![
-                          attr("action", "update staking mode"),
-                          attr("from", info.sender.as_str()),
-                          attr("LP", token.as_str()),
+        attr("action", "update staking mode"),
+        attr("from", info.sender.as_str()),
+        attr("LP", token.as_str()),
     ]))
 }
 
@@ -275,7 +282,8 @@ pub fn update_lp_rewards(
     let s = Decimal::from_ratio(
         pool_info.assets[0].amount * pool_info.assets[1].amount,
         Uint128::new(1),
-    ).sqrt();
+    )
+    .sqrt();
     let new_liquidity: Decimal = s / pool_info.total_share;
     let inv_new_liquidity = decimal_division(Uint128::new(1), new_liquidity);
     let inv_last_liquidity = decimal_division(Uint128::new(1), lp_info.last_liquidity);
@@ -289,7 +297,9 @@ pub fn update_lp_rewards(
         tokens_to_burn,
     )?;
 
-    if pending_amm_rewards[0].amount > Uint128::zero() || pending_amm_rewards[1].amount > Uint128::zero() {
+    if pending_amm_rewards[0].amount > Uint128::zero()
+        || pending_amm_rewards[1].amount > Uint128::zero()
+    {
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: token.into_string(),
             msg: to_binary(&Cw20ExecuteMsg::Send {
@@ -391,16 +401,24 @@ pub fn update_lp_rewards(
 
     // add unclaimed rewards to fee
     let unclaimed_rewards = vec![
-        pending_gen_rewards.pending.checked_sub(distributed_rewards[0]),
+        pending_gen_rewards
+            .pending
+            .checked_sub(distributed_rewards[0]),
         pending_proxy.checked_sub(distributed_rewards[1]),
-        pending_amm_rewards[0].amount.checked_sub(distributed_rewards[2]),
-        pending_amm_rewards[1].amount.checked_sub(distributed_rewards[3]),
+        pending_amm_rewards[0]
+            .amount
+            .checked_sub(distributed_rewards[2]),
+        pending_amm_rewards[1]
+            .amount
+            .checked_sub(distributed_rewards[3]),
     ];
 
     for (i, unclaimed_fees) in unclaimed_rewards.iter().enumerate() {
         match unclaimed_fees {
-            Ok(fee) => { prism_fees[i] += fee; }
-            Err(_) => { }
+            Ok(fee) => {
+                prism_fees[i] += fee;
+            }
+            Err(_) => {}
         }
     }
 
@@ -474,7 +492,12 @@ pub fn send_staker_rewards(
         .range(deps.storage, None, None, Order::Ascending)
         .filter_map(|item| {
             let (user, staker_info) = item.unwrap();
-            if staker == deps.api.addr_validate(&String::from_utf8(user).unwrap()).unwrap() {
+            if staker
+                == deps
+                    .api
+                    .addr_validate(&String::from_utf8(user).unwrap())
+                    .unwrap()
+            {
                 Some(LP_IDS.load(deps.storage, &staker_info.lp_contract).unwrap())
             } else {
                 None
@@ -590,9 +613,12 @@ pub fn update_staker_info(
             // QUES: Is there some cleaner way to do all this?
             Err(_) => {
                 // grab generator reward info
-                let generator_info =
-                    query_generator_rewards(deps.as_ref(), &deps.querier, lp_info.lp_contract.clone())?;
-    
+                let generator_info = query_generator_rewards(
+                    deps.as_ref(),
+                    &deps.querier,
+                    lp_info.lp_contract.clone(),
+                )?;
+
                 let mut generator_rewards = vec![
                     Asset {
                         info: generator_info[0].clone(),
@@ -611,7 +637,7 @@ pub fn update_staker_info(
                     generator_rewards[1].info = generator_info[1].clone();
                     generator_rewards[1].amount = Uint128::zero();
                 }
-    
+
                 // grab amm reward info
                 let amm_info =
                     query_pair_info(deps.as_ref(), &deps.querier, lp_info.lp_contract.clone())?;
@@ -625,7 +651,7 @@ pub fn update_staker_info(
                         amount: Uint128::zero(),
                     },
                 ];
-    
+
                 StakerInfo {
                     lp_contract: lp_info.lp_contract,
                     amt_staked: amount,
@@ -639,11 +665,15 @@ pub fn update_staker_info(
         };
         STAKER_INFO.save(deps.storage, (lp_id.into(), &sender_addr), &stake_info)?;
     } else {
-        STAKER_INFO.update(deps.storage, (lp_id.into(), &sender_addr), |stake| -> StdResult<StakerInfo> {
-            let mut stake_info = stake.unwrap();
-            stake_info.amt_staked = stake_info.amt_staked.checked_sub(amount)?;
-            Ok(stake_info)
-        })?;
+        STAKER_INFO.update(
+            deps.storage,
+            (lp_id.into(), &sender_addr),
+            |stake| -> StdResult<StakerInfo> {
+                let mut stake_info = stake.unwrap();
+                stake_info.amt_staked = stake_info.amt_staked.checked_sub(amount)?;
+                Ok(stake_info)
+            },
+        )?;
     }
 
     Ok(Response::new())

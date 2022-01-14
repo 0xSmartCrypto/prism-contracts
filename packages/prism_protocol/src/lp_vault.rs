@@ -67,20 +67,6 @@ pub enum ExecuteMsg {
     /// internal operations
     ///////////////////
 
-    // performs LP -> cLP conversion
-    Mint {
-        user: Addr,
-        token: Addr,
-        amount: Uint128,
-    },
-
-    // burns cLP and updates internal state
-    Burn {
-        user: Addr,
-        token: Addr,
-        amount: Uint128,
-    },
-
     // create a new set of c/p/y LP tokens given valid LP token
     CreateTokens {
         token: Addr,
