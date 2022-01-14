@@ -1,4 +1,3 @@
-use std::fmt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -8,16 +7,7 @@ use astroport::asset::{Asset, AssetInfo};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    pub vault: String,
-    pub gov: String,
-    pub collector: String,
-    pub reward_denom: String,
-    pub protocol_fee: Decimal,
-    pub cluna_token: String,
-    pub yluna_token: String,
-    pub pluna_token: String,
-    pub prism_token: String,
-    pub withdraw_fee: Decimal,
+    pub yasset_token: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -34,28 +24,14 @@ pub enum ExecuteMsg {
     /// Withdraw pending rewards
     ClaimRewards {},
 
-    ////////////////////////
-    /// Internal operations
-    ////////////////////////
-    /// Process delegator rewards swaps to luna
-    /// and calls the internal hooks
-    /// 1) Swap delegator rewards to luna
-    /// 2) LunaToPyluna
-    /// 3) DepositMintedPylunaHook
-    ProcessDelegatorRewards {},
-    LunaToPylunaHook {},
-    DepositMintedPylunaHook {},
-
-    /// Deposit rewards to yLuna stakers
+    /// Deposit rewards to staker reward pools
     DepositRewards {
         assets: Vec<Asset>,
     },
-
-    ////////////////////////
-    /// Gov operations
-    ////////////////////////
-    WhitelistRewardAsset {
-        asset: AssetInfo,
+    
+    /// PostInitialize to set the reward distribution contract
+    PostInitialize {
+        reward_distribution_contract: String,
     }
 }
 
@@ -63,35 +39,28 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
     /// Bond yLuna to start receiving luna staking rewards
-    Bond { mode: Option<StakingMode> },
+    Bond {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-    PoolInfo { asset_token: String },
+    PoolInfo { asset_info: AssetInfo },
     RewardInfo { staker_addr: String },
-    RewardAssetWhitelist {},
+    State {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    pub vault: String,
-    pub gov: String,
-    pub collector: String,
-    pub reward_denom: String,
-    pub protocol_fee: Decimal,
-    pub cluna_token: String,
-    pub yluna_token: String,
-    pub pluna_token: String,
-    pub prism_token: String,
-    pub withdraw_fee: Decimal,
+    pub owner: String,
+    pub yasset_token: String,
+    pub reward_distribution_contract: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolInfoResponse {
-    pub asset_token: String,
+    pub asset_info: AssetInfo,
     pub reward_index: Decimal,
 }
 
@@ -99,24 +68,10 @@ pub struct PoolInfoResponse {
 pub struct RewardInfoResponse {
     pub staker_addr: String,
     pub staked_amount: Uint128,
-    pub staking_mode: Option<StakingMode>,
     pub rewards: Vec<Asset>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct RewardAssetWhitelistResponse {
-    pub assets: Vec<AssetInfo>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum StakingMode {
-    XPrism,
-    Default,
-}
-
-impl fmt::Display for StakingMode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
+pub struct StateResponse {
+    pub total_bond_amount: Uint128,
 }

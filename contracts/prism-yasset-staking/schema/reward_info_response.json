@@ -19,16 +19,6 @@
     },
     "staker_addr": {
       "type": "string"
-    },
-    "staking_mode": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/StakingMode"
-        },
-        {
-          "type": "null"
-        }
-      ]
     }
   },
   "definitions": {
@@ -93,13 +83,6 @@
           },
           "additionalProperties": false
         }
-      ]
-    },
-    "StakingMode": {
-      "type": "string",
-      "enum": [
-        "x_prism",
-        "default"
       ]
     },
     "Uint128": {

@@ -51,7 +51,7 @@ pub fn execute_update_config(
     _env: Env,
     info: MessageInfo,
     owner: Option<String>,
-    yluna_staking: Option<String>,
+    reward_distribution_contract: Option<String>,
     cluna_contract: Option<String>,
     yluna_contract: Option<String>,
     pluna_contract: Option<String>,
@@ -72,9 +72,9 @@ pub fn execute_update_config(
             Ok(last_config)
         })?;
     }
-    if let Some(reward) = yluna_staking {
+    if let Some(reward) = reward_distribution_contract {
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.yluna_staking = Some(reward.clone());
+            last_config.reward_distribution_contract = Some(reward.clone());
             Ok(last_config)
         })?;
 

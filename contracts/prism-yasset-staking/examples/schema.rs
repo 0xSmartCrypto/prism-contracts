@@ -4,7 +4,7 @@ use std::fs::create_dir_all;
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 use prism_protocol::yasset_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardAssetWhitelistResponse, RewardInfoResponse,
+    RewardInfoResponse,
 };
 
 fn main() {
@@ -20,5 +20,4 @@ fn main() {
     export_schema(&schema_for!(ConfigResponse), &out_dir);
     export_schema(&schema_for!(PoolInfoResponse), &out_dir);
     export_schema(&schema_for!(RewardInfoResponse), &out_dir);
-    export_schema(&schema_for!(RewardAssetWhitelistResponse), &out_dir);
 }

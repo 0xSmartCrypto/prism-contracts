@@ -29,7 +29,7 @@ pub struct State {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub creator: String,
-    pub yluna_staking: Option<String>,
+    pub reward_distribution_contract: Option<String>,
     pub cluna_contract: Option<String>,
     pub yluna_contract: Option<String>,
     pub pluna_contract: Option<String>,
@@ -57,7 +57,7 @@ pub enum ExecuteMsg {
     /// Set the owener
     UpdateConfig {
         owner: Option<String>,
-        yluna_staking: Option<String>,
+        reward_distribution_contract: Option<String>,
         cluna_contract: Option<String>,
         yluna_contract: Option<String>,
         pluna_contract: Option<String>,
@@ -133,6 +133,7 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     Config {},
     State {},
+    BondedAmount {},
     WhitelistedValidators {},
     CurrentBatch {},
     WithdrawableUnbonded {
@@ -175,10 +176,16 @@ pub struct StateResponse {
     pub last_processed_batch: u64,
 }
 
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct BondedAmountResponse {
+    pub total_bond_amount: Uint128,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub yluna_staking: Option<String>,
+    pub reward_distribution_contract: Option<String>,
     pub cluna_contract: Option<String>,
     pub pluna_contract: Option<String>,
     pub yluna_contract: Option<String>,

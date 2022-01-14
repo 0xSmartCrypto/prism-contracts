@@ -10,31 +10,10 @@
       ],
       "properties": {
         "bond": {
-          "type": "object",
-          "properties": {
-            "mode": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/StakingMode"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          }
+          "type": "object"
         }
       },
       "additionalProperties": false
     }
-  ],
-  "definitions": {
-    "StakingMode": {
-      "type": "string",
-      "enum": [
-        "x_prism",
-        "default"
-      ]
-    }
-  }
+  ]
 }

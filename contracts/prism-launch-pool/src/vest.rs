@@ -1,9 +1,8 @@
 use crate::contract::{pull_pending_rewards, update_reward_index};
+use crate::error::ContractError;
 use crate::state::{CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
 use astroport::asset::{Asset, AssetInfo};
-use cosmwasm_std::{
-    DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Storage, Uint128,
-};
+use cosmwasm_std::{DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage, Uint128};
 use std::convert::TryInto;
 
 // seconds in a day, make time discrete per day
@@ -40,7 +39,11 @@ pub fn update_vest(
     PENDING_WITHDRAW.save(storage, address.as_bytes(), &can_withdraw)
 }
 
-pub fn withdraw_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
+pub fn withdraw_rewards(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
     update_reward_index(deps.storage, &env)?;
     pull_pending_rewards(deps.storage, &info.sender.clone().to_string())?;
 
@@ -73,7 +76,11 @@ pub fn withdraw_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult
     Ok(Response::new().add_attribute("withdraw_amount", to_withdraw.to_string()))
 }
 
-pub fn claim_withdrawn_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
+pub fn claim_withdrawn_rewards(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     update_vest(
         deps.storage,
@@ -82,7 +89,9 @@ pub fn claim_withdrawn_rewards(deps: DepsMut, env: Env, info: MessageInfo) -> St
     )?;
     let amount = PENDING_WITHDRAW.load(deps.storage, info.sender.to_string().as_bytes())?;
     if amount.is_zero() {
-        return Err(StdError::generic_err("There are no claimable rewards"));
+        return Err(ContractError::InvalidClaimWithdrawnRewards {
+            reason: "There are no claimable rewards".to_string(),
+        });
     }
 
     PENDING_WITHDRAW.save(

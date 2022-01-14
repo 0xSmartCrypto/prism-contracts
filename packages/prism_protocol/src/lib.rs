@@ -10,3 +10,6 @@ pub mod yasset_staking;
 pub mod lp_staking;
 pub mod limit_order;
 pub mod lp_vault;
+pub mod basset_vault;
+pub mod reward_distribution;
+pub mod yasset_staking_x;
