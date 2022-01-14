@@ -1,6 +1,5 @@
 mod bond;
 pub mod contract;
-mod math;
 mod query;
 mod refract;
 mod stake;

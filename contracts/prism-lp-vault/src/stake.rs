@@ -7,12 +7,12 @@ use cw20::Cw20ExecuteMsg;
 
 use prism_protocol::collector::ExecuteMsg as PrismCollectorExecuteMsg;
 use prism_protocol::lp_vault::{Config, ExecuteMsg, RewardInfo, StakerInfo, StakingMode};
+use prism_common::decimal_division;
 
 use astroport::asset::{Asset, AssetInfo};
 use astroport::generator::{ExecuteMsg as AstroGenExecuteMsg, PendingTokenResponse};
 use astroport::pair::Cw20HookMsg as AstroPairHookMsg;
 
-use crate::math::decimal_division;
 use crate::query::{
     query_generator_rewards, query_lp_burn_rewards, query_pair_info,
     query_pending_generator_rewards, query_pool_info,

@@ -1,5 +1,4 @@
 use crate::contract::{query_total_issued, slashing};
-use crate::math::decimal_division;
 use crate::state::{
     is_valid_validator, read_valid_validators, CONFIG, CURRENT_BATCH, PARAMETERS, STATE,
 };
@@ -9,6 +8,7 @@ use cosmwasm_std::{
 };
 use cw20::Cw20ExecuteMsg as TokenMsg;
 use prism_protocol::vault::State;
+use prism_common::decimal_division;
 
 pub fn execute_bond_split(
     deps: DepsMut,
