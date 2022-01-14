@@ -1112,6 +1112,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-lp-vault-factory"
+version = "1.0.0"
+dependencies = [
+ "astroport",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-storage-plus",
+ "cw2",
+ "cw20",
+ "cw20-base",
+ "prism-common",
+ "prism-protocol",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+ "thiserror",
+]
+
+[[package]]
 name = "prism-protocol"
 version = "1.0.0"
 dependencies = [
