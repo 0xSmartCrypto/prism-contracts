@@ -11,13 +11,12 @@ use astroport::pair::Cw20HookMsg as AstroPairHookMsg;
 use crate::error::{ContractError, ContractResult};
 use crate::query::{query_lp_burn_rewards, query_pending_generator_rewards, query_pool_info};
 
-use crate::state::{CONFIG, LP_INFO};
+use crate::state::{CONFIG, LP_INFO, STATE};
 use cw20::Cw20ExecuteMsg;
 
 // takes in amount of LP to bond
 pub fn bond(
     deps: DepsMut,
-    env: Env,
     staking_token: Addr,
     sender_addr: Addr,
     amount: Uint128,
@@ -28,10 +27,16 @@ pub fn bond(
     let config = CONFIG.load(deps.storage)?;
 
     // update rewards
-    let (liquidity, lp_to_burn, mut messages) = update_rewards(deps.as_ref(), env)?;
+    let (liquidity, lp_to_burn) = update_rewards(deps.as_ref())?;
+
+    // update state with new lp_to_burn
+    STATE.update(deps.storage, |mut prev_state| -> ContractResult<Uint128> {
+        prev_state += lp_to_burn;
+        Ok(prev_state)
+    })?;
 
     // attempt to send LP to astro generator
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+    let mut messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: staking_token.clone().into_string(),
         msg: to_binary(&Cw20ExecuteMsg::Send {
             contract: config.generator.into_string(),
@@ -39,9 +44,9 @@ pub fn bond(
             amount,
         })?,
         funds: vec![],
-    }));
+    })];
 
-    // save internal state and calculate tokens to mint
+    // save internal lp_info and calculate tokens to mint
     // rounding issues?
     let mut lp_info = LP_INFO.load(deps.storage)?;
     lp_info.last_liquidity = liquidity;
@@ -75,7 +80,6 @@ pub fn bond(
 // takes in amount of LP to unbond, not cLP
 pub fn unbond(
     deps: DepsMut,
-    env: Env,
     sender_addr: Addr,
     amount: Uint128,
 ) -> ContractResult<Response> {
@@ -88,19 +92,25 @@ pub fn unbond(
     let lp_contract = lp_info.lp_contract;
 
     // update rewards
-    let (liquidity, lp_to_burn, mut messages) = update_rewards(deps.as_ref(), env)?;
+    let (liquidity, lp_to_burn) = update_rewards(deps.as_ref())?;
+
+    // update state with new lp_to_burn
+    STATE.update(deps.storage, |mut prev_state| -> ContractResult<Uint128> {
+        prev_state += lp_to_burn;
+        Ok(prev_state)
+    })?;
 
     // attempt to withdraw LP from astro generator
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+    let mut messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.generator.into_string(),
         msg: to_binary(&AstroGenExecuteMsg::Withdraw {
             lp_token: lp_contract.clone(),
             amount,
         })?,
         funds: vec![],
-    }));
+    })];
 
-    // save internal state and calculate tokens to burn
+    // save internal lp info and calculate tokens to burn
     // rounding issues?
     let mut lp_info = LP_INFO.load(deps.storage)?;
     lp_info.last_liquidity = liquidity;
@@ -141,11 +151,8 @@ pub fn unbond(
     ]))
 }
 
-// generates at most 6 messages
-pub fn update_rewards(deps: Deps, env: Env) -> ContractResult<(Decimal, Uint128, Vec<CosmosMsg>)> {
-    let config = CONFIG.load(deps.storage)?;
+pub fn update_rewards(deps: Deps) -> ContractResult<(Decimal, Uint128)> {
     let lp_info = LP_INFO.load(deps.storage)?;
-    let token = lp_info.lp_contract.clone();
 
     // calculate and amount of LP to withdraw and burn
     let pool_info = query_pool_info(deps, &deps.querier)?;
@@ -164,45 +171,61 @@ pub fn update_rewards(deps: Deps, env: Env) -> ContractResult<(Decimal, Uint128,
     let lp_to_burn =
         (Uint128::new(1).checked_sub(inv_new_liquidity / inv_last_liquidity)?) * lp_info.amt_lp;
 
+    Ok((new_liquidity, lp_to_burn))
+}
+
+pub fn update_global_index(deps: DepsMut, env: Env) -> ContractResult<Response> {
+    // restrict who can call this maybe?
+
+    // check if we need to withdraw
+    let lp_to_withdraw = STATE.load(deps.storage)?;
+    if lp_to_withdraw == Uint128::zero() {
+        return Ok(Response::new());
+    }
+
+    let config = CONFIG.load(deps.storage)?;
+    let lp_info = LP_INFO.load(deps.storage)?;
+    let token = lp_info.lp_contract;
+
     // query generator reward
-    let pending_gen_rewards = query_pending_generator_rewards(deps, env, &deps.querier)?;
+    let pending_gen_rewards = query_pending_generator_rewards(deps.as_ref(), env, &deps.querier)?;
 
     // query amm reward
-    let pending_amm_rewards = query_lp_burn_rewards(deps, &deps.querier, lp_to_burn)?;
+    let pending_amm_rewards = query_lp_burn_rewards(deps.as_ref(), &deps.querier, lp_to_withdraw)?;
 
     // claim generator reward, withdrawn and burn LP
-    let mut messages = vec![];
-    if lp_to_burn > Uint128::zero() {
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+    let mut messages = vec![
+        CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.generator.clone().into_string(),
             msg: to_binary(&AstroGenExecuteMsg::Withdraw {
                 lp_token: token.clone(),
-                amount: lp_to_burn,
+                amount: lp_to_withdraw,
             })?,
             funds: vec![],
-        }));
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        }),
+        CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: token.into_string(),
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: lp_info.pair_contract.into_string(),
                 msg: to_binary(&AstroPairHookMsg::WithdrawLiquidity {})?,
-                amount: lp_to_burn,
+                amount: lp_to_withdraw,
             })?,
             funds: vec![],
-        }));
-    }
+        }),
+    ];
 
     // send rewards to reward-dist
     for reward in pending_gen_rewards {
+        // generator might have 0 rewards even if we burn LP
         if reward.amount > Uint128::zero() {
             messages.push(reward.into_msg(&deps.querier, config.reward_dist.clone())?);
         }
     }
     for reward in pending_amm_rewards {
-        if reward.amount > Uint128::zero() {
-            messages.push(reward.into_msg(&deps.querier, config.reward_dist.clone())?);
-        }
+        messages.push(reward.into_msg(&deps.querier, config.reward_dist.clone())?);
     }
 
-    Ok((new_liquidity, lp_to_burn, messages))
+    // reset state
+    STATE.save(deps.storage, &Uint128::zero())?;
+    Ok(Response::new().add_messages(messages))
 }

@@ -47,8 +47,9 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-    Vault { amm: u64, lp: Addr, },
-    //AMMConfig { amm: u64 },
+    AstroAMMConfig {},
+    TerraswapAMMConfig {},
+    Vault { lp: Addr, },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -99,5 +100,10 @@ pub struct LPContracts {
 pub struct AstroConfig {
     pub lp_astro_vault_id: u64,
     pub generator: Addr,
+    pub factory: Addr,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct TerraswapConfig {
     pub factory: Addr,
 }

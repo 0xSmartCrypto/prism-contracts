@@ -5,21 +5,21 @@ use cw20::{Cw20QueryMsg, TokenInfoResponse};
 use prism_protocol::collector::{
     ConfigResponse as CollectorConfigResponse, QueryMsg as CollectorQueryMsg,
 };
-use prism_protocol::lp_vault_factory::{AstroConfig, Config, LPContracts};
+use prism_protocol::lp_vault_factory::{AstroConfig, TerraswapConfig, Config, LPContracts};
 
 use astroport::asset::{AssetInfo, PairInfo};
 use astroport::factory::QueryMsg as AstroFactoryQueryMsg;
 use astroport::generator::{QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse};
 
 use crate::error::{ContractError, ContractResult};
-use crate::state::{ASTRO_CONFIG, CONFIG, VAULTS};
+use crate::state::{ASTRO_CONFIG, TERRASWAP_CONFIG, CONFIG, VAULTS};
 
 pub fn query_config(deps: Deps) -> StdResult<Config> {
     CONFIG.load(deps.storage)
 }
 
-pub fn query_vault(deps: Deps, amm: u64, lp: &Addr) -> StdResult<LPContracts> {
-    VAULTS.load(deps.storage, (amm.into(), lp))
+pub fn query_vault(deps: Deps, lp: &Addr) -> StdResult<LPContracts> {
+    VAULTS.load(deps.storage, lp)
 }
 
 pub fn query_token_info(
@@ -73,7 +73,7 @@ pub fn query_generator_rewards(
 }
 
 pub fn query_all_pairs(deps: Deps, querier: &QuerierWrapper) -> StdResult<Vec<PairInfo>> {
-    let config: AstroConfig = ASTRO_CONFIG.load(deps.storage)?;
+    let config = ASTRO_CONFIG.load(deps.storage)?;
 
     // grab all pairs info from astroport factory
     querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
@@ -95,4 +95,14 @@ pub fn query_pair_info(
         .into_iter()
         .find(|x| x.liquidity_token == token_addr)
         .ok_or(ContractError::DoesNotExist {})
+}
+
+pub fn query_astro_amm_info(deps: Deps) -> StdResult<AstroConfig>
+{
+    ASTRO_CONFIG.load(deps.storage)
+}
+
+pub fn query_terraswap_amm_info(deps: Deps) -> StdResult<TerraswapConfig>
+{
+    TERRASWAP_CONFIG.load(deps.storage)
 }

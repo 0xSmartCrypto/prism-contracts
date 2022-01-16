@@ -41,6 +41,9 @@ pub enum ExecuteMsg {
 
     // [p/y]LP -> cLP
     Merge { amount: Uint128 },
+
+    // withdraws rewards from generator/amm and distributes to reward-dist
+    UpdateGlobalIndex { },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -303,7 +303,7 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> ContractResult<Response<Ter
             }));
 
             // everything has been instantiated at this point, so add to state
-            VAULTS.save(deps.storage, (lp_info.amm.into(), &lp_info.lp), &lp_info)?;
+            VAULTS.save(deps.storage, &lp_info.lp, &lp_info)?;
         }
         _ => {
             return Err(ContractError::InvalidReplyID {});

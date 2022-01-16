@@ -9,11 +9,11 @@ use prism_protocol::astroport_lp_vault::{
     Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, LPInfo, QueryMsg,
 };
 
-use crate::bond::{bond, unbond};
+use crate::bond::{bond, unbond, update_global_index};
 use crate::error::{ContractError, ContractResult};
 use crate::query::{query_config, query_generator_rewards_info, query_pair_info};
 use crate::refract::{merge, split};
-use crate::state::{CONFIG, LP_INFO};
+use crate::state::{CONFIG, LP_INFO, STATE};
 
 use cw2::set_contract_version;
 
@@ -36,6 +36,7 @@ pub fn instantiate(
         fee: msg.fee,
     };
     CONFIG.save(deps.storage, &data)?;
+    STATE.save(deps.storage, &Uint128::zero())?;
 
     // Get relevant info to create new LP token set
     let token = deps.api.addr_validate(&msg.lp_contract)?;
@@ -76,23 +77,23 @@ pub fn execute(
         } => update_config(deps, info, owner, generator, factory, reward_dist, fee),
 
         // user functions
-        ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
-        ExecuteMsg::Unbond { amount } => unbond(deps, env, info.sender, amount),
+        ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
+        ExecuteMsg::Unbond { amount } => unbond(deps, info.sender, amount),
         ExecuteMsg::Merge { amount } => merge(deps, info, amount),
         ExecuteMsg::Split { amount } => split(deps, info, amount),
+        ExecuteMsg::UpdateGlobalIndex { } => update_global_index(deps, env),
     }
 }
 
 pub fn receive_cw20(
     deps: DepsMut,
-    env: Env,
     info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
 ) -> ContractResult<Response> {
     let cw20_sender: Addr = deps.api.addr_validate(&cw20_msg.sender)?;
 
     match from_binary(&cw20_msg.msg)? {
-        Cw20HookMsg::Bond {} => bond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
+        Cw20HookMsg::Bond {} => bond(deps, info.sender, cw20_sender, cw20_msg.amount),
     }
 }
 

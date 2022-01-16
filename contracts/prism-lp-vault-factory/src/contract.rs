@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
     attr, entry_point, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult,
+    StdResult
 };
 
 use prism_protocol::lp_vault_factory::{
@@ -10,7 +10,7 @@ use prism_protocol::lp_vault_factory::{
 
 use crate::create::{create_astroport_vault, create_terraswap_vault};
 use crate::error::{ContractError, ContractResult};
-use crate::query::{query_config, query_vault};
+use crate::query::{query_config, query_vault, query_astro_amm_info, query_terraswap_amm_info};
 use crate::state::{ASTRO_CONFIG, CONFIG, TEMP_LP_INFO, VAULTS};
 
 use cw2::set_contract_version;
@@ -90,7 +90,9 @@ pub fn execute(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::Vault { amm, lp } => to_binary(&query_vault(deps, amm, &lp)?),
+        QueryMsg::AstroAMMConfig {} => to_binary(&query_astro_amm_info(deps)?),
+        QueryMsg::TerraswapAMMConfig {} => to_binary(&query_terraswap_amm_info(deps)?),
+        QueryMsg::Vault { lp } => to_binary(&query_vault(deps, &lp)?),
     }
 }
 
@@ -140,7 +142,7 @@ pub fn create_new_vault(
         return Err(ContractError::Unauthorized {});
     }
 
-    if VAULTS.load(deps.storage, (amm.into(), &lp)).is_ok() {
+    if VAULTS.load(deps.storage, &lp).is_ok() {
         return Err(ContractError::AlreadyExists {});
     }
 
