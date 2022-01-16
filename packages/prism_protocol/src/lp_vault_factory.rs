@@ -41,7 +41,6 @@ pub enum ExecuteMsg {
         amm: u64,
         lp: Addr,
     },
-
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -49,6 +48,7 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     Config {},
     Vault { amm: u64, lp: Addr, },
+    //AMMConfig { amm: u64 },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

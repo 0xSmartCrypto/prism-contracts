@@ -1,4 +1,4 @@
-use cw_storage_plus::{Item};
+use cw_storage_plus::Item;
 
 use prism_protocol::astroport_lp_vault::{Config, LPInfo};
 

@@ -1,22 +1,18 @@
-use cosmwasm_std::{
-    Addr, Deps, StdResult, QuerierWrapper, QueryRequest, WasmQuery, to_binary
+use cosmwasm_std::{to_binary, Addr, Deps, QuerierWrapper, QueryRequest, StdResult, WasmQuery};
+
+use cw20::{Cw20QueryMsg, TokenInfoResponse};
+
+use prism_protocol::collector::{
+    ConfigResponse as CollectorConfigResponse, QueryMsg as CollectorQueryMsg,
 };
-
-use cw20::{TokenInfoResponse, Cw20QueryMsg};
-
-use prism_protocol::lp_vault_factory::{Config, LPContracts, AstroConfig};
-use prism_protocol::collector::{QueryMsg as CollectorQueryMsg, ConfigResponse as CollectorConfigResponse};
+use prism_protocol::lp_vault_factory::{AstroConfig, Config, LPContracts};
 
 use astroport::asset::{AssetInfo, PairInfo};
-use astroport::factory::{
-    QueryMsg as AstroFactoryQueryMsg,
-};
-use astroport::generator::{
-    QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse,
-};
+use astroport::factory::QueryMsg as AstroFactoryQueryMsg;
+use astroport::generator::{QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse};
 
 use crate::error::{ContractError, ContractResult};
-use crate::state::{CONFIG, VAULTS, ASTRO_CONFIG};
+use crate::state::{ASTRO_CONFIG, CONFIG, VAULTS};
 
 pub fn query_config(deps: Deps) -> StdResult<Config> {
     CONFIG.load(deps.storage)
@@ -98,5 +94,5 @@ pub fn query_pair_info(
     query_all_pairs(deps, querier)?
         .into_iter()
         .find(|x| x.liquidity_token == token_addr)
-        .ok_or_else(|| ContractError::DoesNotExist {})
+        .ok_or(ContractError::DoesNotExist {})
 }

@@ -1,18 +1,20 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
-    attr, entry_point, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdResult,
+    attr, entry_point, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult,
 };
 
-use prism_protocol::lp_vault_factory::{Config, AstroConfig, LPContracts, ExecuteMsg, InstantiateMsg, QueryMsg};
+use prism_protocol::lp_vault_factory::{
+    AstroConfig, Config, ExecuteMsg, InstantiateMsg, LPContracts, QueryMsg,
+};
 
-use crate::error::{ContractError, ContractResult};
 use crate::create::{create_astroport_vault, create_terraswap_vault};
+use crate::error::{ContractError, ContractResult};
 use crate::query::{query_config, query_vault};
-use crate::state::{CONFIG, ASTRO_CONFIG, VAULTS, TEMP_LP_INFO};
+use crate::state::{ASTRO_CONFIG, CONFIG, TEMP_LP_INFO, VAULTS};
 
-use terra_cosmwasm::{TerraMsgWrapper};
 use cw2::set_contract_version;
+use terra_cosmwasm::TerraMsgWrapper;
 
 const CONTRACT_NAME: &str = "prism-lp-vault-factory";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -38,7 +40,7 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &cfg)?;
 
-    let astro_cfg = AstroConfig { 
+    let astro_cfg = AstroConfig {
         lp_astro_vault_id: msg.lp_astro_vault_id,
         generator: deps.api.addr_validate(&msg.generator)?,
         factory: deps.api.addr_validate(&msg.factory)?,
@@ -49,7 +51,12 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> ContractResult<Response<TerraMsgWrapper>> {
+pub fn execute(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
+) -> ContractResult<Response<TerraMsgWrapper>> {
     match msg {
         ExecuteMsg::UpdateConfig {
             owner,
@@ -61,12 +68,21 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> C
             yasset_contract_id,
             yasset_x_contract_id,
             reward_dist_contract_id,
-        } => update_config(deps, info, owner, gov, prism_yasset_pair, collector, fee, token_code_id, yasset_contract_id, yasset_x_contract_id, reward_dist_contract_id),
+        } => update_config(
+            deps,
+            info,
+            owner,
+            gov,
+            prism_yasset_pair,
+            collector,
+            fee,
+            token_code_id,
+            yasset_contract_id,
+            yasset_x_contract_id,
+            reward_dist_contract_id,
+        ),
 
-        ExecuteMsg::CreateNewVault {
-            amm,
-            lp,
-        } => create_new_vault(deps, env, info, amm, lp),
+        ExecuteMsg::CreateNewVault { amm, lp } => create_new_vault(deps, env, info, amm, lp),
     }
 }
 
@@ -78,6 +94,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
@@ -123,7 +140,7 @@ pub fn create_new_vault(
         return Err(ContractError::Unauthorized {});
     }
 
-    if !(VAULTS.load(deps.storage, (amm.into(), &lp)).is_err()) {
+    if VAULTS.load(deps.storage, (amm.into(), &lp)).is_ok() {
         return Err(ContractError::AlreadyExists {});
     }
 
@@ -145,8 +162,8 @@ pub fn create_new_vault(
 
     // match to the correct amm's instantiation protocol
     match amm {
-        1 => { create_astroport_vault(deps, env, lp) }
-        2 => { create_terraswap_vault(deps, lp) }
-        _ => { Err(ContractError::AmmNotSupported {}) }
+        1 => create_astroport_vault(deps, env, lp),
+        2 => create_terraswap_vault(deps, lp),
+        _ => Err(ContractError::AmmNotSupported {}),
     }
 }

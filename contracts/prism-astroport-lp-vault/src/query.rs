@@ -4,9 +4,7 @@ use cosmwasm_std::{
 };
 
 use astroport::asset::{Asset, AssetInfo, PairInfo};
-use astroport::factory::{
-    QueryMsg as AstroFactoryQueryMsg,
-};
+use astroport::factory::QueryMsg as AstroFactoryQueryMsg;
 use astroport::generator::{
     PendingTokenResponse, QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse,
 };
@@ -45,10 +43,7 @@ pub fn query_pair_info(
         .ok_or_else(|| StdError::generic_err("LP Token not found in Astroport"))
 }
 
-pub fn query_pool_info(
-    deps: Deps,
-    querier: &QuerierWrapper,
-) -> StdResult<PoolResponse> {
+pub fn query_pool_info(deps: Deps, querier: &QuerierWrapper) -> StdResult<PoolResponse> {
     let lp_info = LP_INFO.load(deps.storage)?;
 
     querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
@@ -68,7 +63,9 @@ pub fn query_generator_rewards_info(
     let gen_reward_info: RewardInfoResponse =
         querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: config.generator.into_string(),
-            msg: to_binary(&AstroGeneratorQueryMsg::RewardInfo { lp_token: lp_info.lp_contract })?,
+            msg: to_binary(&AstroGeneratorQueryMsg::RewardInfo {
+                lp_token: lp_info.lp_contract,
+            })?,
         }))?;
 
     // if there exists a proxy reward, send back both
@@ -87,6 +84,7 @@ pub fn query_generator_rewards_info(
     }
 }
 
+#[allow(clippy::or_fun_call)]
 pub fn query_pending_generator_rewards(
     deps: Deps,
     env: Env,
@@ -105,19 +103,15 @@ pub fn query_pending_generator_rewards(
     let pending_proxy = res.pending_on_proxy.unwrap_or(Uint128::zero());
 
     // form into Asset types for easy transfer
-    let mut assets = vec![
-        Asset {
-            info: lp_info.generator_reward_info[0].clone(),
-            amount: res.pending,
-        },
-    ];
+    let mut assets = vec![Asset {
+        info: lp_info.generator_reward_info[0].clone(),
+        amount: res.pending,
+    }];
     if pending_proxy > Uint128::zero() {
-        assets.push(
-            Asset {
-                info: lp_info.generator_reward_info[1].clone(),
-                amount: pending_proxy,
-            },
-        );
+        assets.push(Asset {
+            info: lp_info.generator_reward_info[1].clone(),
+            amount: pending_proxy,
+        });
     }
 
     Ok(assets)

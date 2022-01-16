@@ -1,9 +1,9 @@
 mod bond;
 pub mod contract;
+mod error;
 mod query;
 mod refract;
 mod state;
-mod error;
 
 #[cfg(test)]
 mod testing;

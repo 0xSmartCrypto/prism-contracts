@@ -30,23 +30,17 @@ pub enum ExecuteMsg {
         fee: Option<Decimal>,
     },
 
-    ////////////////////
-    /// User's operations
-    ////////////////////
+    // User operations
     Receive(Cw20ReceiveMsg),
 
     // cLP -> LP
     Unbond { amount: Uint128 },
 
     // cLP -> [p/y]LP
-    Split {
-        amount: Uint128,
-    },
+    Split { amount: Uint128 },
 
     // [p/y]LP -> cLP
-    Merge {
-        amount: Uint128,
-    },
+    Merge { amount: Uint128 },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -54,12 +48,17 @@ pub enum ExecuteMsg {
 pub enum Cw20HookMsg {
     // LP -> cLP
     Bond {},
+
+    // LP -> cLP -> [p/y]LP
+    //BondSplit {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
+    //BondedAmount {},
+    //LPInfo {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

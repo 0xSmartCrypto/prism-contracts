@@ -1,7 +1,7 @@
 use cosmwasm_std::Addr;
 use cw_storage_plus::{Item, Map, U64Key};
 
-use prism_protocol::lp_vault_factory::{Config, AstroConfig, LPContracts};
+use prism_protocol::lp_vault_factory::{AstroConfig, Config, LPContracts};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 // amm id, lp addr -> lp contracts

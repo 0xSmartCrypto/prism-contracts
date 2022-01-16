@@ -1,18 +1,12 @@
 #[cfg(not(feature = "library"))]
-use cosmwasm_std::{
-    attr, to_binary, CosmosMsg, DepsMut, MessageInfo, Response, StdResult, Uint128,
-    WasmMsg,
-};
+use cosmwasm_std::{attr, to_binary, CosmosMsg, DepsMut, MessageInfo, Response, Uint128, WasmMsg};
 
 use cw20::Cw20ExecuteMsg;
 
-use crate::state::{LP_INFO};
+use crate::error::ContractResult;
+use crate::state::LP_INFO;
 
-pub fn split(
-    deps: DepsMut,
-    info: MessageInfo,
-    amount: Uint128,
-) -> StdResult<Response> {
+pub fn split(deps: DepsMut, info: MessageInfo, amount: Uint128) -> ContractResult<Response> {
     let lp_info = LP_INFO.load(deps.storage)?;
 
     // burn cLP, mint p/yLP
@@ -51,11 +45,7 @@ pub fn split(
     ]))
 }
 
-pub fn merge(
-    deps: DepsMut,
-    info: MessageInfo,
-    amount: Uint128,
-) -> StdResult<Response> {
+pub fn merge(deps: DepsMut, info: MessageInfo, amount: Uint128) -> ContractResult<Response> {
     let lp_info = LP_INFO.load(deps.storage)?;
 
     // burn p/yLP, mint cLP

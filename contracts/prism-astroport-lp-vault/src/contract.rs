@@ -1,16 +1,24 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
     attr, entry_point, from_binary, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdError, StdResult, Uint128
+    MessageInfo, Response, StdResult, Uint128,
 };
 
 use cw20::Cw20ReceiveMsg;
-use prism_protocol::astroport_lp_vault::{Config, LPInfo, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
+use prism_protocol::astroport_lp_vault::{
+    Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, LPInfo, QueryMsg,
+};
 
-use crate::query::{query_config, query_pair_info, query_generator_rewards_info};
 use crate::bond::{bond, unbond};
+use crate::error::{ContractError, ContractResult};
+use crate::query::{query_config, query_generator_rewards_info, query_pair_info};
 use crate::refract::{merge, split};
 use crate::state::{CONFIG, LP_INFO};
+
+use cw2::set_contract_version;
+
+const CONTRACT_NAME: &str = "prism-astroport-lp-vault";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -18,7 +26,8 @@ pub fn instantiate(
     _env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
-) -> StdResult<Response> {
+) -> ContractResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     let data = Config {
         owner: info.sender,
         generator: deps.api.addr_validate(&msg.generator)?,
@@ -50,9 +59,14 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
+pub fn execute(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
+) -> ContractResult<Response> {
     match msg {
-        // owner functions
+        // owner function
         ExecuteMsg::UpdateConfig {
             owner,
             generator,
@@ -63,11 +77,8 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
 
         // user functions
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
-
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info.sender, amount),
-
         ExecuteMsg::Merge { amount } => merge(deps, info, amount),
-
         ExecuteMsg::Split { amount } => split(deps, info, amount),
     }
 }
@@ -77,7 +88,7 @@ pub fn receive_cw20(
     env: Env,
     info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
-) -> StdResult<Response> {
+) -> ContractResult<Response> {
     let cw20_sender: Addr = deps.api.addr_validate(&cw20_msg.sender)?;
 
     match from_binary(&cw20_msg.msg)? {
@@ -103,10 +114,10 @@ pub fn update_config(
     factory: Option<Addr>,
     reward_dist: Option<Addr>,
     fee: Option<Decimal>,
-) -> StdResult<Response> {
+) -> ContractResult<Response> {
     let mut conf = CONFIG.load(deps.storage)?;
     if info.sender.as_str() != conf.owner {
-        return Err(StdError::generic_err("Unauthorized".to_string()));
+        return Err(ContractError::Unauthorized {});
     }
 
     conf.owner = owner.unwrap_or(conf.owner);
