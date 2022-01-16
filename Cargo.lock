@@ -952,6 +952,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-astroport-lp-vault"
+version = "1.0.0"
+dependencies = [
+ "astroport",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-storage-plus",
+ "cw20",
+ "prism-common",
+ "prism-protocol",
+ "protobuf",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+ "thiserror",
+]
+
+[[package]]
 name = "prism-basset-vault"
 version = "0.1.0"
 dependencies = [
@@ -1089,25 +1108,6 @@ dependencies = [
  "prism-protocol",
  "schemars",
  "serde",
- "thiserror",
-]
-
-[[package]]
-name = "prism-lp-vault"
-version = "1.0.0"
-dependencies = [
- "astroport",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cosmwasm-storage",
- "cw-storage-plus",
- "cw20",
- "prism-common",
- "prism-protocol",
- "protobuf",
- "schemars",
- "serde",
- "terra-cosmwasm",
  "thiserror",
 ]
 

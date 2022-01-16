@@ -1,25 +1,19 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, DepsMut, MessageInfo, Response, StdError, StdResult, Uint128,
+    attr, to_binary, CosmosMsg, DepsMut, MessageInfo, Response, StdResult, Uint128,
     WasmMsg,
 };
 
 use cw20::Cw20ExecuteMsg;
 
-use crate::state::{LP_IDS, LP_INFOS};
+use crate::state::{LP_INFO};
 
 pub fn split(
     deps: DepsMut,
     info: MessageInfo,
-    token: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
-    let lp_id = LP_IDS
-        .load(deps.storage, &token)
-        .map_err(|_| StdError::generic_err("No LP token exists".to_string()))?;
-    let lp_info = LP_INFOS
-        .load(deps.storage, lp_id.into())
-        .map_err(|_| StdError::generic_err("No LP token exists".to_string()))?;
+    let lp_info = LP_INFO.load(deps.storage)?;
 
     // burn cLP, mint p/yLP
     let messages = vec![
@@ -60,15 +54,9 @@ pub fn split(
 pub fn merge(
     deps: DepsMut,
     info: MessageInfo,
-    token: Addr,
     amount: Uint128,
 ) -> StdResult<Response> {
-    let lp_id = LP_IDS
-        .load(deps.storage, &token)
-        .map_err(|_| StdError::generic_err("No LP address exists".to_string()))?;
-    let lp_info = LP_INFOS
-        .load(deps.storage, lp_id.into())
-        .map_err(|_| StdError::generic_err("No LP address exists".to_string()))?;
+    let lp_info = LP_INFO.load(deps.storage)?;
 
     // burn p/yLP, mint cLP
     let messages = vec![

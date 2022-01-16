@@ -1,21 +1,16 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
     attr, entry_point, from_binary, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdError, StdResult,
+    MessageInfo, Response, StdError, StdResult, Uint128
 };
 
 use cw20::Cw20ReceiveMsg;
+use prism_protocol::astroport_lp_vault::{Config, LPInfo, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use prism_protocol::lp_vault::{Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
-
-use crate::bond::{bond, create_tokens, unbond};
-use crate::query::query_config;
+use crate::query::{query_config, query_pair_info, query_generator_rewards_info};
+use crate::bond::{bond, unbond};
 use crate::refract::{merge, split};
-use crate::stake::{
-    claim_rewards, send_staker_rewards, stake, unstake, update_lp_rewards, update_staker_info,
-    update_staking_mode,
-};
-use crate::state::{CONFIG, NUM_LPS};
+use crate::state::{CONFIG, LP_INFO};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -25,16 +20,33 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
     let data = Config {
-        owner: info.sender.to_string(),
-        generator: msg.generator,
-        factory: msg.factory,
-        collector: msg.collector,
+        owner: info.sender,
+        generator: deps.api.addr_validate(&msg.generator)?,
+        factory: deps.api.addr_validate(&msg.factory)?,
+        reward_dist: Addr::unchecked(""),
         fee: msg.fee,
     };
     CONFIG.save(deps.storage, &data)?;
-    NUM_LPS.save(deps.storage, &0)?;
 
-    Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
+    // Get relevant info to create new LP token set
+    let token = deps.api.addr_validate(&msg.lp_contract)?;
+    let pair_info = query_pair_info(deps.as_ref(), &deps.querier, token.clone())?;
+    let generator_rewards_info = query_generator_rewards_info(deps.as_ref(), &deps.querier)?;
+
+    let lp_info = LPInfo {
+        pair_asset_info: pair_info.asset_infos.clone(),
+        generator_reward_info: generator_rewards_info,
+        amt_lp: Uint128::zero(),
+        amt_clp: Uint128::zero(),
+        last_liquidity: Decimal::zero(),
+        pair_contract: pair_info.contract_addr,
+        lp_contract: token,
+        clp_contract: deps.api.addr_validate(&msg.clp_contract)?,
+        plp_contract: deps.api.addr_validate(&msg.plp_contract)?,
+        ylp_contract: deps.api.addr_validate(&msg.ylp_contract)?,
+    };
+    LP_INFO.save(deps.storage, &lp_info)?;
+    Ok(Response::new().add_attributes(vec![attr("action", "instantiate")]))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -45,38 +57,18 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             owner,
             generator,
             factory,
-            collector,
+            reward_dist,
             fee,
-        } => update_config(deps, info, owner, generator, factory, collector, fee),
+        } => update_config(deps, info, owner, generator, factory, reward_dist, fee),
 
         // user functions
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
 
-        ExecuteMsg::Merge { token, amount } => merge(deps, info, token, amount),
+        ExecuteMsg::Unbond { amount } => unbond(deps, env, info.sender, amount),
 
-        ExecuteMsg::Split { token, amount } => split(deps, info, token, amount),
+        ExecuteMsg::Merge { amount } => merge(deps, info, amount),
 
-        ExecuteMsg::Unstake { token, amount } => unstake(deps, env, info, token, amount),
-
-        ExecuteMsg::UpdateStakingMode { token, mode } => {
-            update_staking_mode(deps, info, token, mode)
-        }
-
-        ExecuteMsg::ClaimRewards {} => claim_rewards(deps, env, info),
-
-        // internal functions
-        ExecuteMsg::CreateTokens { token } => create_tokens(deps, env, info, token),
-
-        ExecuteMsg::UpdateLPRewards { token } => update_lp_rewards(deps, env, info, token),
-
-        ExecuteMsg::SendStakerRewards { staker } => send_staker_rewards(deps, env, info, staker),
-
-        ExecuteMsg::UpdateStakerInfo {
-            lp_id,
-            sender_addr,
-            amount,
-            stake,
-        } => update_staker_info(deps, env, info, lp_id, sender_addr, amount, stake),
+        ExecuteMsg::Split { amount } => split(deps, info, amount),
     }
 }
 
@@ -90,8 +82,6 @@ pub fn receive_cw20(
 
     match from_binary(&cw20_msg.msg)? {
         Cw20HookMsg::Bond {} => bond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
-        Cw20HookMsg::Unbond {} => unbond(deps, info.sender, cw20_sender, cw20_msg.amount),
-        Cw20HookMsg::Stake {} => stake(deps, env, info.sender, cw20_sender, cw20_msg.amount),
     }
 }
 
@@ -101,16 +91,17 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         // provide query for individual StakerInfo
         // provide query for all StakerInfo for an individual user
+        // bonded amount info
     }
 }
 
 pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
-    owner: Option<String>,
-    generator: Option<String>,
-    factory: Option<String>,
-    collector: Option<String>,
+    owner: Option<Addr>,
+    generator: Option<Addr>,
+    factory: Option<Addr>,
+    reward_dist: Option<Addr>,
     fee: Option<Decimal>,
 ) -> StdResult<Response> {
     let mut conf = CONFIG.load(deps.storage)?;
@@ -121,9 +112,8 @@ pub fn update_config(
     conf.owner = owner.unwrap_or(conf.owner);
     conf.generator = generator.unwrap_or(conf.generator);
     conf.factory = factory.unwrap_or(conf.factory);
-    conf.collector = collector.unwrap_or(conf.collector);
+    conf.reward_dist = reward_dist.unwrap_or(conf.reward_dist);
     conf.fee = fee.unwrap_or(conf.fee);
     CONFIG.save(deps.storage, &conf)?;
-
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }

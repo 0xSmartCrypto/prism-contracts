@@ -6,15 +6,16 @@ use serde::{Deserialize, Serialize};
 pub struct InstantiateMsg {
     pub owner: String,
     pub gov: String,
+    pub prism_yasset_pair: String,
     pub collector: String,
-    pub yasset_contract: String,
-    pub yasset_x_contract: String,
-    pub reward_dist_contract: String,
     pub fee: Decimal,
     pub token_code_id: u64,
+    pub yasset_contract_id: u64,
+    pub yasset_x_contract_id: u64,
+    pub reward_dist_contract_id: u64,
 
     // astroport
-    pub lp_astro_vault: String,
+    pub lp_astro_vault_id: u64,
     pub generator: String,
     pub factory: String,
 }
@@ -26,10 +27,11 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<Addr>,
         gov: Option<Addr>,
+        prism_yasset_pair: Option<Addr>,
         collector: Option<Addr>,
-        yasset_contract: Option<Addr>,
-        yasset_x_contract: Option<Addr>,
-        reward_dist_contract: Option<Addr>,
+        yasset_contract_id: Option<u64>,
+        yasset_x_contract_id: Option<u64>,
+        reward_dist_contract_id: Option<u64>,
         fee: Option<Decimal>,
         token_code_id: Option<u64>,
     },
@@ -57,23 +59,26 @@ pub struct Config {
     // address of governance contract
     pub gov: Addr,
 
+    // needed for yasset-x-staking
+    pub prism_yasset_pair: Addr,
+
     // address of collector contract
     pub collector: Addr,
-
-    // address of yasset-staking contract for instantiation
-    pub yasset_contract: Addr,
-
-    // address of yasset-staking-x contract for instantiation
-    pub yasset_x_contract: Addr,
-
-    // used to swap assets to prism and accrue protocol fees
-    pub reward_dist_contract: Addr,
 
     // prism LP fee of 15%
     pub fee: Decimal,
 
     // for token instantiation
     pub token_code_id: u64,
+
+    // for yasset-staking instantiation
+    pub yasset_contract_id: u64,
+
+    // for yasset-x-staking instantiation
+    pub yasset_x_contract_id: u64,
+
+    // for reward-distribution instantiation
+    pub reward_dist_contract_id: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -92,7 +97,7 @@ pub struct LPContracts {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AstroConfig {
-    pub lp_astro_vault: Addr,
+    pub lp_astro_vault_id: u64,
     pub generator: Addr,
     pub factory: Addr,
 }

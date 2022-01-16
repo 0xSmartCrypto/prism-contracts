@@ -5,30 +5,19 @@ use cosmwasm_std::{
 
 use astroport::asset::{Asset, AssetInfo, PairInfo};
 use astroport::factory::{
-    ConfigResponse as AstroFactoryConfigResponse, QueryMsg as AstroFactoryQueryMsg,
+    QueryMsg as AstroFactoryQueryMsg,
 };
 use astroport::generator::{
     PendingTokenResponse, QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse,
 };
 use astroport::pair::{PoolResponse, QueryMsg as AstroPairQueryMsg};
-use cw20::{Cw20QueryMsg, TokenInfoResponse};
-use prism_protocol::lp_vault::{Config, ConfigResponse};
+use prism_protocol::astroport_lp_vault::{Config, ConfigResponse};
 
-use crate::state::{CONFIG, LP_IDS, LP_INFOS};
+use crate::state::{CONFIG, LP_INFO};
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;
     config.as_res()
-}
-
-pub fn query_token_info(
-    querier: &QuerierWrapper,
-    contract_addr: Addr,
-) -> StdResult<TokenInfoResponse> {
-    querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: contract_addr.into_string(),
-        msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
-    }))
 }
 
 pub fn query_all_pairs(deps: Deps, querier: &QuerierWrapper) -> StdResult<Vec<PairInfo>> {
@@ -36,7 +25,7 @@ pub fn query_all_pairs(deps: Deps, querier: &QuerierWrapper) -> StdResult<Vec<Pa
 
     // grab all pairs info from astroport factory
     querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: config.factory,
+        contract_addr: config.factory.into_string(),
         msg: to_binary(&AstroFactoryQueryMsg::Pairs {
             limit: None,
             start_after: None,
@@ -44,8 +33,6 @@ pub fn query_all_pairs(deps: Deps, querier: &QuerierWrapper) -> StdResult<Vec<Pa
     }))
 }
 
-// called whenever a new LP token is found
-// IDEA: we can keep a cache of astroport pairs to avoid the QueryMsg call for future tokens
 pub fn query_pair_info(
     deps: Deps,
     querier: &QuerierWrapper,
@@ -61,10 +48,8 @@ pub fn query_pair_info(
 pub fn query_pool_info(
     deps: Deps,
     querier: &QuerierWrapper,
-    token_addr: Addr,
 ) -> StdResult<PoolResponse> {
-    let lp_id = LP_IDS.load(deps.storage, &token_addr)?;
-    let lp_info = LP_INFOS.load(deps.storage, lp_id.into())?;
+    let lp_info = LP_INFO.load(deps.storage)?;
 
     querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: lp_info.pair_contract.into_string(),
@@ -72,34 +57,21 @@ pub fn query_pool_info(
     }))
 }
 
-pub fn query_factory_config(
+pub fn query_generator_rewards_info(
     deps: Deps,
     querier: &QuerierWrapper,
-) -> StdResult<AstroFactoryConfigResponse> {
-    let config: Config = CONFIG.load(deps.storage)?;
-
-    querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: config.factory,
-        msg: to_binary(&AstroFactoryQueryMsg::Config {})?,
-    }))
-}
-
-pub fn query_generator_rewards(
-    deps: Deps,
-    querier: &QuerierWrapper,
-    token: Addr,
 ) -> StdResult<Vec<AssetInfo>> {
-    let config: Config = CONFIG.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let lp_info = LP_INFO.load(deps.storage)?;
 
     // query for generator reward infos
     let gen_reward_info: RewardInfoResponse =
         querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: config.generator,
-            msg: to_binary(&AstroGeneratorQueryMsg::RewardInfo { lp_token: token })?,
+            contract_addr: config.generator.into_string(),
+            msg: to_binary(&AstroGeneratorQueryMsg::RewardInfo { lp_token: lp_info.lp_contract })?,
         }))?;
 
     // if there exists a proxy reward, send back both
-    // QUES: is there some cleaner way to do this?
     match gen_reward_info.proxy_reward_token {
         Some(addr) => Ok(vec![
             AssetInfo::Token {
@@ -119,27 +91,44 @@ pub fn query_pending_generator_rewards(
     deps: Deps,
     env: Env,
     querier: &QuerierWrapper,
-    token: Addr,
-) -> StdResult<PendingTokenResponse> {
-    let config: Config = CONFIG.load(deps.storage)?;
+) -> StdResult<Vec<Asset>> {
+    let config = CONFIG.load(deps.storage)?;
+    let lp_info = LP_INFO.load(deps.storage)?;
 
-    querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: config.factory,
+    let res: PendingTokenResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.factory.into_string(),
         msg: to_binary(&AstroGeneratorQueryMsg::PendingToken {
-            lp_token: token,
+            lp_token: lp_info.lp_contract,
             user: env.contract.address,
         })?,
-    }))
+    }))?;
+    let pending_proxy = res.pending_on_proxy.unwrap_or(Uint128::zero());
+
+    // form into Asset types for easy transfer
+    let mut assets = vec![
+        Asset {
+            info: lp_info.generator_reward_info[0].clone(),
+            amount: res.pending,
+        },
+    ];
+    if pending_proxy > Uint128::zero() {
+        assets.push(
+            Asset {
+                info: lp_info.generator_reward_info[1].clone(),
+                amount: pending_proxy,
+            },
+        );
+    }
+
+    Ok(assets)
 }
 
 pub fn query_lp_burn_rewards(
     deps: Deps,
     querier: &QuerierWrapper,
-    token: Addr,
     amount: Uint128,
 ) -> StdResult<Vec<Asset>> {
-    let lp_id = LP_IDS.load(deps.storage, &token)?;
-    let lp_info = LP_INFOS.load(deps.storage, lp_id.into())?;
+    let lp_info = LP_INFO.load(deps.storage)?;
 
     querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: lp_info.pair_contract.into_string(),

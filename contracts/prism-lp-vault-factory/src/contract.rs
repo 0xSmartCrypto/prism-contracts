@@ -28,17 +28,18 @@ pub fn instantiate(
     let cfg = Config {
         owner: info.sender,
         gov: deps.api.addr_validate(&msg.gov)?,
+        prism_yasset_pair: deps.api.addr_validate(&msg.prism_yasset_pair)?,
         collector: deps.api.addr_validate(&msg.collector)?,
-        yasset_contract: deps.api.addr_validate(&msg.yasset_contract)?,
-        yasset_x_contract: deps.api.addr_validate(&msg.yasset_x_contract)?,
-        reward_dist_contract: deps.api.addr_validate(&msg.reward_dist_contract)?,
         fee: msg.fee,
         token_code_id: msg.token_code_id,
+        yasset_contract_id: msg.yasset_contract_id,
+        yasset_x_contract_id: msg.yasset_x_contract_id,
+        reward_dist_contract_id: msg.reward_dist_contract_id,
     };
     CONFIG.save(deps.storage, &cfg)?;
 
     let astro_cfg = AstroConfig { 
-        lp_astro_vault: deps.api.addr_validate(&msg.lp_astro_vault)?,
+        lp_astro_vault_id: msg.lp_astro_vault_id,
         generator: deps.api.addr_validate(&msg.generator)?,
         factory: deps.api.addr_validate(&msg.factory)?,
     };
@@ -53,13 +54,14 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> C
         ExecuteMsg::UpdateConfig {
             owner,
             gov,
+            prism_yasset_pair,
             collector,
-            yasset_contract,
-            yasset_x_contract,
-            reward_dist_contract,
             fee,
             token_code_id,
-        } => update_config(deps, info, owner, gov, collector, yasset_contract, yasset_x_contract, reward_dist_contract, fee, token_code_id),
+            yasset_contract_id,
+            yasset_x_contract_id,
+            reward_dist_contract_id,
+        } => update_config(deps, info, owner, gov, prism_yasset_pair, collector, fee, token_code_id, yasset_contract_id, yasset_x_contract_id, reward_dist_contract_id),
 
         ExecuteMsg::CreateNewVault {
             amm,
@@ -81,12 +83,13 @@ pub fn update_config(
     info: MessageInfo,
     owner: Option<Addr>,
     gov: Option<Addr>,
+    prism_yasset_pair: Option<Addr>,
     collector: Option<Addr>,
-    yasset_contract: Option<Addr>,
-    yasset_x_contract: Option<Addr>,
-    reward_dist_contract: Option<Addr>,
     fee: Option<Decimal>,
     token_code_id: Option<u64>,
+    yasset_contract: Option<u64>,
+    yasset_x_contract: Option<u64>,
+    reward_dist_contract: Option<u64>,
 ) -> ContractResult<Response<TerraMsgWrapper>> {
     let mut cfg = CONFIG.load(deps.storage)?;
     if info.sender.as_str() != cfg.owner {
@@ -95,12 +98,13 @@ pub fn update_config(
 
     cfg.owner = owner.unwrap_or(cfg.owner);
     cfg.gov = gov.unwrap_or(cfg.gov);
+    cfg.prism_yasset_pair = prism_yasset_pair.unwrap_or(cfg.prism_yasset_pair);
     cfg.collector = collector.unwrap_or(cfg.collector);
-    cfg.yasset_contract = yasset_contract.unwrap_or(cfg.yasset_contract);
-    cfg.yasset_x_contract = yasset_x_contract.unwrap_or(cfg.yasset_x_contract);
-    cfg.reward_dist_contract = reward_dist_contract.unwrap_or(cfg.reward_dist_contract);
     cfg.fee = fee.unwrap_or(cfg.fee);
     cfg.token_code_id = token_code_id.unwrap_or(cfg.token_code_id);
+    cfg.yasset_contract_id = yasset_contract.unwrap_or(cfg.yasset_contract_id);
+    cfg.yasset_x_contract_id = yasset_x_contract.unwrap_or(cfg.yasset_x_contract_id);
+    cfg.reward_dist_contract_id = reward_dist_contract.unwrap_or(cfg.reward_dist_contract_id);
     CONFIG.save(deps.storage, &cfg)?;
 
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
