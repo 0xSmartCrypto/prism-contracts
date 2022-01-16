@@ -4,6 +4,7 @@ use cosmwasm_std::{
 };
 
 use prism_common::decimal_division;
+use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 
 use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroGenExecuteMsg};
 use astroport::pair::Cw20HookMsg as AstroPairHookMsg;
@@ -78,11 +79,7 @@ pub fn bond(
 }
 
 // takes in amount of LP to unbond, not cLP
-pub fn unbond(
-    deps: DepsMut,
-    sender_addr: Addr,
-    amount: Uint128,
-) -> ContractResult<Response> {
+pub fn unbond(deps: DepsMut, sender_addr: Addr, amount: Uint128) -> ContractResult<Response> {
     if amount <= Uint128::zero() {
         return Err(ContractError::BadUnbondAmount {});
     }
@@ -215,15 +212,33 @@ pub fn update_global_index(deps: DepsMut, env: Env) -> ContractResult<Response> 
     ];
 
     // send rewards to reward-dist
+    let mut asset_infos = vec![];
     for reward in pending_gen_rewards {
         // generator might have 0 rewards even if we burn LP
         if reward.amount > Uint128::zero() {
-            messages.push(reward.into_msg(&deps.querier, config.reward_dist.clone())?);
+            messages.push(
+                reward
+                    .clone()
+                    .into_msg(&deps.querier, config.reward_dist.clone())?,
+            );
+            asset_infos.push(reward.info);
         }
     }
     for reward in pending_amm_rewards {
-        messages.push(reward.into_msg(&deps.querier, config.reward_dist.clone())?);
+        messages.push(
+            reward
+                .clone()
+                .into_msg(&deps.querier, config.reward_dist.clone())?,
+        );
+        asset_infos.push(reward.info);
     }
+
+    // tell reward-dist to distribute rewards
+    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: config.reward_dist.into_string(),
+        msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards { asset_infos })?,
+        funds: vec![],
+    }));
 
     // reset state
     STATE.save(deps.storage, &Uint128::zero())?;

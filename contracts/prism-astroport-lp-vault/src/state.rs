@@ -1,5 +1,5 @@
-use cw_storage_plus::Item;
 use cosmwasm_std::Uint128;
+use cw_storage_plus::Item;
 
 use prism_protocol::astroport_lp_vault::{Config, LPInfo};
 

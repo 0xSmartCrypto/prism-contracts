@@ -81,7 +81,7 @@ pub fn execute(
         ExecuteMsg::Unbond { amount } => unbond(deps, info.sender, amount),
         ExecuteMsg::Merge { amount } => merge(deps, info, amount),
         ExecuteMsg::Split { amount } => split(deps, info, amount),
-        ExecuteMsg::UpdateGlobalIndex { } => update_global_index(deps, env),
+        ExecuteMsg::UpdateGlobalIndex {} => update_global_index(deps, env),
     }
 }
 
