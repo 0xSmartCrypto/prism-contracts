@@ -2,8 +2,8 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    Uint128,
+    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, Uint128,
 };
 
 use prism_protocol::yasset_staking::{
@@ -11,7 +11,10 @@ use prism_protocol::yasset_staking::{
     RewardAssetWhitelistResponse,
 };
 
-use crate::rewards::{claim_rewards, deposit_rewards, query_reward_info, whitelist_reward_asset};
+use crate::rewards::{
+    claim_rewards, deposit_rewards, query_reward_info, remove_whitelisted_reward_asset,
+    whitelist_reward_asset,
+};
 use crate::staking::{bond, unbond};
 use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
 
@@ -33,13 +36,12 @@ pub fn instantiate(
             vault: deps.api.addr_validate(&msg.vault)?,
             gov: deps.api.addr_validate(&msg.gov)?,
             collector: deps.api.addr_validate(&msg.collector)?,
-            reward_denom: msg.reward_denom,
             protocol_fee: msg.protocol_fee,
             cluna_token: deps.api.addr_validate(&msg.cluna_token)?,
             yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
             pluna_token: deps.api.addr_validate(&msg.pluna_token)?,
             prism_token: deps.api.addr_validate(&msg.prism_token)?,
-            withdraw_fee: msg.withdraw_fee,
+            withdraw_fee: validate_rate(msg.withdraw_fee)?,
         },
     )?;
 
@@ -74,6 +76,9 @@ pub fn execute(
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
         ExecuteMsg::DepositMintedPylunaHook {} => deposit_minted_pyluna_hook(deps, env),
         ExecuteMsg::WhitelistRewardAsset { asset } => whitelist_reward_asset(deps, info, asset),
+        ExecuteMsg::RemoveRewardAsset { asset } => {
+            remove_whitelisted_reward_asset(deps, info, asset)
+        }
     }
 }
 
@@ -121,7 +126,6 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         vault: cfg.vault.to_string(),
         gov: cfg.gov.to_string(),
         collector: cfg.collector.to_string(),
-        reward_denom: cfg.reward_denom,
         protocol_fee: cfg.protocol_fee,
         cluna_token: cfg.cluna_token.to_string(),
         yluna_token: cfg.yluna_token.to_string(),
@@ -138,4 +142,15 @@ pub fn query_pool_info(deps: Deps, asset_token: String) -> StdResult<PoolInfoRes
         asset_token,
         reward_index: pool_info.reward_index,
     })
+}
+
+fn validate_rate(rate: Decimal) -> StdResult<Decimal> {
+    if rate > Decimal::one() {
+        return Err(StdError::generic_err(format!(
+            "Rate can not be bigger than one (given value: {})",
+            rate
+        )));
+    }
+
+    Ok(rate)
 }

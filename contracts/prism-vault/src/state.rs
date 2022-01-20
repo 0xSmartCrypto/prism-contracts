@@ -70,10 +70,29 @@ pub fn read_unbond_wait_list(
     UNBOND_WAITLIST.load(storage, (sender_addr, batch_id.into()))
 }
 
-pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<UnbondRequest> {
+const DEFAULT_UNBOND_WAITLIST_READ_LIMIT: u32 = 30u32;
+
+pub fn get_unbond_requests(
+    storage: &dyn Storage,
+    sender_addr: &Addr,
+    start: Option<u64>,
+    limit: Option<u32>,
+) -> StdResult<UnbondRequest> {
+    let start = U64Key::from(start.unwrap_or_default());
+
     let sender_requests: Vec<_> = UNBOND_WAITLIST
         .prefix(sender_addr)
-        .range(storage, None, None, Order::Ascending)
+        .range(
+            storage,
+            Some(Bound::Exclusive(start.into())),
+            None,
+            Order::Ascending,
+        )
+        .take(
+            limit
+                .unwrap_or(DEFAULT_UNBOND_WAITLIST_READ_LIMIT)
+                .min(MAX_LIMIT) as usize,
+        )
         .map(|item| {
             let (k, v) = item.unwrap();
             let batch_id = deserialize_key::<u64>(k).unwrap();
@@ -83,10 +102,19 @@ pub fn get_unbond_requests(storage: &dyn Storage, sender_addr: &Addr) -> StdResu
     Ok(sender_requests)
 }
 
-pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<Vec<u64>> {
+pub fn get_unbond_batches(
+    storage: &dyn Storage,
+    sender_addr: &Addr,
+    limit: Option<u32>,
+) -> StdResult<Vec<u64>> {
     let deprecated_batches: Vec<u64> = UNBOND_WAITLIST
         .prefix(sender_addr)
         .range(storage, None, None, Order::Ascending)
+        .take(
+            limit
+                .unwrap_or(DEFAULT_UNBOND_WAITLIST_READ_LIMIT)
+                .min(MAX_LIMIT) as usize,
+        )
         .filter_map(|item| {
             let (k, _) = item.unwrap();
             let batch_id = deserialize_key::<u64>(k).unwrap();
@@ -108,10 +136,19 @@ pub fn get_unbond_batches(storage: &dyn Storage, sender_addr: &Addr) -> StdResul
 /// This needs to be called after process withdraw rate function.
 /// If the batch is released, this will return user's requested
 /// amount proportional to withdraw rate.
-pub fn get_finished_amount(storage: &dyn Storage, sender_addr: &Addr) -> StdResult<Uint128> {
+pub fn get_finished_amount(
+    storage: &dyn Storage,
+    sender_addr: &Addr,
+    limit: Option<u32>,
+) -> StdResult<Uint128> {
     let withdrawable_amount = UNBOND_WAITLIST
         .prefix(sender_addr)
         .range(storage, None, None, Order::Ascending)
+        .take(
+            limit
+                .unwrap_or(DEFAULT_UNBOND_WAITLIST_READ_LIMIT)
+                .min(MAX_LIMIT) as usize,
+        )
         .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
             let batch_id = deserialize_key::<u64>(k).unwrap();
@@ -133,10 +170,16 @@ pub fn query_get_finished_amount(
     storage: &dyn Storage,
     sender_addr: &Addr,
     block_time: u64,
+    limit: Option<u32>,
 ) -> StdResult<Uint128> {
     let withdrawable_amount = UNBOND_WAITLIST
         .prefix(sender_addr)
         .range(storage, None, None, Order::Ascending)
+        .take(
+            limit
+                .unwrap_or(DEFAULT_UNBOND_WAITLIST_READ_LIMIT)
+                .min(MAX_LIMIT) as usize,
+        )
         .fold(Uint128::zero(), |acc, item| {
             let (k, v) = item.unwrap();
             let batch_id = deserialize_key::<u64>(k).unwrap();

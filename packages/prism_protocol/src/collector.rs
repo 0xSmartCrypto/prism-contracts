@@ -1,6 +1,6 @@
+use astroport::asset::Asset;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use astroport::asset::Asset;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -16,10 +16,8 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     /// Any user can call convert to swap the asset tokens that collector holds
     /// for $PRISM, the resulting $PRISM is sent to distribution_contract
-    Distribute {
-        asset_tokens: Vec<String>,
-    },
-    /// Any user can call ConvertAndSend to swap the provided assets to 
+    Distribute { asset_tokens: Vec<String> },
+    /// Any user can call ConvertAndSend to swap the provided assets to
     /// $PRISM and send to the reciver address (or sender if empty)
     /// Requires the sender to increase allowance for the requested assets
     ConvertAndSend {
@@ -28,9 +26,7 @@ pub enum ExecuteMsg {
     },
     /// Hook to swap base_denom for $PRISM,
     /// Called when there is not direct pair with requested asset_token
-    BaseSwapHook {
-        receiver: Option<String>,
-    },
+    BaseSwapHook { receiver: Option<String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

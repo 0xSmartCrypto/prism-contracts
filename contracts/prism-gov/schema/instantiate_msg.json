@@ -4,17 +4,22 @@
   "type": "object",
   "required": [
     "effective_delay",
+    "poll_gas_limit",
     "prism_token",
     "proposal_deposit",
     "quorum",
     "redemption_time",
     "snapshot_period",
     "threshold",
-    "voting_period",
-    "xprism_token"
+    "voting_period"
   ],
   "properties": {
     "effective_delay": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "poll_gas_limit": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
@@ -45,9 +50,6 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
-    },
-    "xprism_token": {
-      "type": "string"
     }
   },
   "definitions": {

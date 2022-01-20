@@ -9,7 +9,6 @@
     "pluna_token",
     "prism_token",
     "protocol_fee",
-    "reward_denom",
     "vault",
     "withdraw_fee",
     "yluna_token"
@@ -32,9 +31,6 @@
     },
     "protocol_fee": {
       "$ref": "#/definitions/Decimal"
-    },
-    "reward_denom": {
-      "type": "string"
     },
     "vault": {
       "type": "string"

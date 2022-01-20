@@ -20,7 +20,6 @@ pub struct Config {
     pub vault: Addr,
     pub gov: Addr,
     pub collector: Addr,
-    pub reward_denom: String,
     pub protocol_fee: Decimal,
     pub cluna_token: Addr,
     pub yluna_token: Addr,

@@ -8,6 +8,8 @@ use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::ExecuteMsg;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
 
+pub const REWARD_DENOM: &str = "uluna";
+
 /// 1. Swap all native tokens to uluna
 /// 2. Use the uluna to mint pluna and yluna
 /// 4. Deposit pluna and yluna as reward to stakers
@@ -16,13 +18,11 @@ pub fn process_delegator_rewards(
     env: Env,
     _info: MessageInfo,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-
     let contr_addr = env.contract.address.clone();
     let balances = deps.querier.query_all_balances(contr_addr)?;
     let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
 
-    let reward_denom = cfg.reward_denom;
+    let reward_denom = String::from(REWARD_DENOM);
 
     let denoms: Vec<String> = balances.iter().map(|item| item.denom.clone()).collect();
 
@@ -55,10 +55,12 @@ pub fn process_delegator_rewards(
 
 pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
+    let reward_denom = String::from(REWARD_DENOM);
+
     let luna_amt = query_balance(
         &deps.querier,
         env.contract.address.clone(),
-        cfg.reward_denom.clone(),
+        reward_denom.clone(),
     )?;
 
     Ok(Response::new()
@@ -67,7 +69,7 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
                 contract_addr: cfg.vault.to_string(),
                 msg: to_binary(&VaultExecuteMsg::BondSplit { validator: None })?,
                 funds: vec![Coin {
-                    denom: cfg.reward_denom,
+                    denom: reward_denom,
                     amount: luna_amt,
                 }],
             }),

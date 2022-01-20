@@ -442,6 +442,19 @@ fn unbond() {
         ]
     );
 
+    assert_eq!(
+        from_binary::<DistributionStatusResponse>(
+            &query(deps.as_ref(), mock_env(), QueryMsg::DistributionStatus {},).unwrap(),
+        )
+        .unwrap(),
+        DistributionStatusResponse {
+            total_distributed: Uint128::zero(),
+            total_bond_amount: Uint128::from(75u128),
+            pending_reward: Uint128::zero(),
+            reward_index: Decimal::zero(),
+        }
+    );
+
     // successful unbond of remaining 75 (using None as amount)
     let remaining_amt = Uint128::from(75u128);
     let info = mock_info("addr0000", &[]);
@@ -496,7 +509,7 @@ fn unbond() {
         .unwrap(),
         DistributionStatusResponse {
             total_distributed: Uint128::zero(),
-            total_bond_amount: Uint128::from(100u128),
+            total_bond_amount: Uint128::zero(),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::zero(),
         }

@@ -57,19 +57,6 @@
       "additionalProperties": false
     },
     {
-      "description": "Deposit PRISM rewards, increasing PRISM/xPRISM ratio",
-      "type": "object",
-      "required": [
-        "deposit_reward"
-      ],
-      "properties": {
-        "deposit_reward": {
-          "type": "object"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
       "type": "object",
       "required": [
         "mint_xprism"

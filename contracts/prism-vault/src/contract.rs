@@ -75,8 +75,8 @@ pub fn instantiate(
         epoch_period: msg.epoch_period,
         underlying_coin_denom: msg.underlying_coin_denom,
         unbonding_period: msg.unbonding_period,
-        peg_recovery_fee: msg.peg_recovery_fee,
-        er_threshold: msg.er_threshold,
+        peg_recovery_fee: validate_rate(msg.peg_recovery_fee)?,
+        er_threshold: validate_rate(msg.er_threshold)?,
     };
 
     PARAMETERS.save(deps.storage, &params)?;
@@ -416,7 +416,11 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&query_withdrawable_unbonded(deps, address, env)?)
         }
         QueryMsg::Parameters {} => to_binary(&query_params(deps)?),
-        QueryMsg::UnbondRequests { address } => to_binary(&query_unbond_requests(deps, address)?),
+        QueryMsg::UnbondRequests {
+            address,
+            start_from,
+            limit,
+        } => to_binary(&query_unbond_requests(deps, address, start_from, limit)?),
         QueryMsg::AllHistory { start_from, limit } => {
             to_binary(&query_unbond_requests_limitation(deps, start_from, limit)?)
         }
@@ -475,7 +479,8 @@ fn query_withdrawable_unbonded(
     let params = PARAMETERS.load(deps.storage)?;
     let historical_time = env.block.time.seconds() - params.unbonding_period;
     let addr = deps.api.addr_validate(&address)?;
-    let all_requests = query_get_finished_amount(deps.storage, &addr, historical_time)?;
+    // query the finished amount with the default limit (None), to obtain the same value as the result of the actual unbond operation
+    let all_requests = query_get_finished_amount(deps.storage, &addr, historical_time, None)?;
 
     let withdrawable = WithdrawableUnbondedResponse {
         withdrawable: all_requests,
@@ -519,12 +524,20 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
 
-    Ok(cluna_token_info.total_supply + pluna_token_info.total_supply.min(yluna_token_info.total_supply))
+    Ok(cluna_token_info.total_supply
+        + pluna_token_info
+            .total_supply
+            .min(yluna_token_info.total_supply))
 }
 
-fn query_unbond_requests(deps: Deps, address: String) -> StdResult<UnbondRequestsResponse> {
+fn query_unbond_requests(
+    deps: Deps,
+    address: String,
+    start: Option<u64>,
+    limit: Option<u32>,
+) -> StdResult<UnbondRequestsResponse> {
     let addr = deps.api.addr_validate(&address)?;
-    let requests = get_unbond_requests(deps.storage, &addr)?;
+    let requests = get_unbond_requests(deps.storage, &addr, start, limit)?;
     let res = UnbondRequestsResponse { address, requests };
     Ok(res)
 }
@@ -537,4 +550,15 @@ fn query_unbond_requests_limitation(
     let requests = all_unbond_history(deps.storage, start, limit)?;
     let res = AllHistoryResponse { history: requests };
     Ok(res)
+}
+
+pub fn validate_rate(rate: Decimal) -> StdResult<Decimal> {
+    if rate > Decimal::one() {
+        return Err(StdError::generic_err(format!(
+            "Rate can not be bigger than one (given value: {})",
+            rate
+        )));
+    }
+
+    Ok(rate)
 }

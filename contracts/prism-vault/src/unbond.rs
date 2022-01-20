@@ -172,7 +172,7 @@ pub fn execute_withdraw_unbonded(
     // calculate withdraw rate for user requests
     process_withdraw_rate(deps.storage, historical_time, vault_balance)?;
 
-    let withdraw_amount = get_finished_amount(deps.storage, &sender_human).unwrap();
+    let withdraw_amount = get_finished_amount(deps.storage, &sender_human, None).unwrap();
 
     if withdraw_amount.is_zero() {
         return Err(StdError::generic_err(format!(
@@ -182,7 +182,7 @@ pub fn execute_withdraw_unbonded(
     }
 
     // remove the previous batches for the user
-    let deprecated_batches = get_unbond_batches(deps.storage, &sender_human)?;
+    let deprecated_batches = get_unbond_batches(deps.storage, &sender_human, None)?;
     remove_unbond_wait_list(deps.storage, deprecated_batches, &sender_human)?;
 
     // Update previous balance used for calculation in next Luna batch release

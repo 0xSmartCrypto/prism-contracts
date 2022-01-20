@@ -6,9 +6,7 @@ use crate::state::{
     config_read, config_store, poll_read, poll_voter_read, read_poll_voters, read_polls,
     read_tmp_poll_id, store_last_poll_id, Config,
 };
-use crate::voting::{
-    query_voting_tokens, stake_voting_tokens, withdraw_voting_tokens,
-};
+use crate::voting::{query_voting_tokens, stake_voting_tokens, withdraw_voting_tokens};
 
 use cosmwasm_std::{
     from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply, Response,
@@ -27,6 +25,7 @@ use prism_protocol::gov::{
 };
 
 pub const POLL_EXECUTE_REPLY_ID: u64 = 1;
+pub const MIN_POLL_GAS_LIMIT: u64 = 1_000_000;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -37,6 +36,7 @@ pub fn instantiate(
 ) -> StdResult<Response> {
     validate_quorum(msg.quorum)?;
     validate_threshold(msg.threshold)?;
+    validate_poll_gas_limit(msg.poll_gas_limit)?;
 
     let config = Config {
         prism_token: deps.api.addr_canonicalize(&msg.prism_token)?,
@@ -49,6 +49,7 @@ pub fn instantiate(
         proposal_deposit: msg.proposal_deposit,
         snapshot_period: msg.snapshot_period,
         redemption_time: msg.redemption_time,
+        poll_gas_limit: msg.poll_gas_limit,
     };
 
     config_store(deps.storage).save(&config)?;
@@ -73,6 +74,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             proposal_deposit,
             snapshot_period,
             redemption_time,
+            poll_gas_limit,
         } => update_config(
             deps,
             info,
@@ -84,6 +86,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             proposal_deposit,
             snapshot_period,
             redemption_time,
+            poll_gas_limit,
         ),
         ExecuteMsg::WithdrawVotingTokens { amount } => withdraw_voting_tokens(deps, info, amount),
         ExecuteMsg::CastVote {
@@ -189,6 +192,7 @@ pub fn update_config(
     proposal_deposit: Option<Uint128>,
     snapshot_period: Option<u64>,
     redemption_time: Option<u64>,
+    poll_gas_limit: Option<u64>,
 ) -> StdResult<Response> {
     let api = deps.api;
     config_store(deps.storage).update(|mut config| {
@@ -228,6 +232,11 @@ pub fn update_config(
 
         if let Some(redemption_time) = redemption_time {
             config.redemption_time = redemption_time;
+        }
+
+        if let Some(poll_gas_limit) = poll_gas_limit {
+            validate_poll_gas_limit(poll_gas_limit)?;
+            config.poll_gas_limit = poll_gas_limit;
         }
 
         Ok(config)
@@ -285,6 +294,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         proposal_deposit: config.proposal_deposit,
         snapshot_period: config.snapshot_period,
         redemption_time: config.redemption_time,
+        poll_gas_limit: config.poll_gas_limit,
     })
 }
 
@@ -315,6 +325,8 @@ fn query_poll(deps: Deps, poll_id: u64) -> StdResult<PollResponse> {
         no_votes: poll.no_votes,
         abstain_votes: poll.abstain_votes,
         supply_snapshot: poll.supply_snapshot,
+        required_quorum: poll.required_quorum,
+        required_threshold: poll.required_threshold,
     })
 }
 
@@ -350,6 +362,8 @@ fn query_polls(
                 no_votes: poll.no_votes,
                 abstain_votes: poll.abstain_votes,
                 supply_snapshot: poll.supply_snapshot,
+                required_quorum: poll.required_quorum,
+                required_threshold: poll.required_threshold,
             })
         })
         .collect();
@@ -419,6 +433,19 @@ fn validate_quorum(quorum: Decimal) -> StdResult<()> {
 fn validate_threshold(threshold: Decimal) -> StdResult<()> {
     if threshold > Decimal::one() {
         Err(StdError::generic_err("threshold must be 0 to 1"))
+    } else {
+        Ok(())
+    }
+}
+
+/// validate_threshold returns an error if the threshold is invalid
+/// (we require 0-1)
+fn validate_poll_gas_limit(poll_gas_limit: u64) -> StdResult<()> {
+    if poll_gas_limit < MIN_POLL_GAS_LIMIT {
+        Err(StdError::generic_err(format!(
+            "gas limit can not be smaller than {}",
+            MIN_POLL_GAS_LIMIT
+        )))
     } else {
         Ok(())
     }

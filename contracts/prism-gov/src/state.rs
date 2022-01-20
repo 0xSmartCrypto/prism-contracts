@@ -33,6 +33,7 @@ pub struct Config {
     pub proposal_deposit: Uint128,
     pub snapshot_period: u64,
     pub redemption_time: u64,
+    pub poll_gas_limit: u64,
 }
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -56,6 +57,8 @@ pub struct Poll {
     pub execute_data: Option<ExecuteData>,
     pub deposit_amount: Uint128,
     pub supply_snapshot: Option<Uint128>,
+    pub required_quorum: Decimal,
+    pub required_threshold: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

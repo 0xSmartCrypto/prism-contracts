@@ -48,7 +48,7 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AirdropInfo {
     pub airdrop_contract: String,
-    pub claim_type: ClaimType
+    pub claim_type: ClaimType,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

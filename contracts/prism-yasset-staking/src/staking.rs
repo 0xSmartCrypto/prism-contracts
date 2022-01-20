@@ -98,8 +98,8 @@ pub fn unbond(
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.yluna_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: staker_addr.to_string(),
-                amount: unbonded_amt,
+                recipient: cfg.collector.to_string(),
+                amount: fee,
             })?,
             funds: vec![],
         }));

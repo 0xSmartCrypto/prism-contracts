@@ -89,9 +89,7 @@ pub enum ExecuteMsg {
     Bond { validator: Option<String> },
 
     /// do bond, then split cluna into yluna and pluna
-    BondSplit {
-        validator: Option<String>
-    },
+    BondSplit { validator: Option<String> },
 
     /// Update global index
     UpdateGlobalIndex { airdrop_hooks: Option<Vec<Binary>> },
@@ -141,6 +139,8 @@ pub enum QueryMsg {
     Parameters {},
     UnbondRequests {
         address: String,
+        start_from: Option<u64>,
+        limit: Option<u32>,
     },
     AllHistory {
         start_from: Option<u64>,

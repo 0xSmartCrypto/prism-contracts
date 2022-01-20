@@ -17,6 +17,26 @@
     {
       "type": "object",
       "required": [
+        "post_initialize"
+      ],
+      "properties": {
+        "post_initialize": {
+          "type": "object",
+          "required": [
+            "xprism_token"
+          ],
+          "properties": {
+            "xprism_token": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
         "update_config"
       ],
       "properties": {
@@ -36,6 +56,14 @@
                 "string",
                 "null"
               ]
+            },
+            "poll_gas_limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
             },
             "proposal_deposit": {
               "anyOf": [

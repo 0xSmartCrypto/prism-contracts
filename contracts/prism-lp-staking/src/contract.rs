@@ -19,6 +19,13 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    // validate distribution schedule
+    for schedule in msg.distribution_schedule.clone() {
+        if schedule.1 <= schedule.0 {
+            return Err(ContractError::InvalidDistributionSchedule {});
+        }
+    }
+
     let config = Config {
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
         distribution_schedule: msg.distribution_schedule,

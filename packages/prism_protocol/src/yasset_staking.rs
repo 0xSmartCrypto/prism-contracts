@@ -1,17 +1,16 @@
-use std::fmt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
+use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::{Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
-use astroport::asset::{Asset, AssetInfo};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub vault: String,
     pub gov: String,
     pub collector: String,
-    pub reward_denom: String,
     pub protocol_fee: Decimal,
     pub cluna_token: String,
     pub yluna_token: String,
@@ -56,7 +55,10 @@ pub enum ExecuteMsg {
     ////////////////////////
     WhitelistRewardAsset {
         asset: AssetInfo,
-    }
+    },
+    RemoveRewardAsset {
+        asset: AssetInfo,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -80,7 +82,6 @@ pub struct ConfigResponse {
     pub vault: String,
     pub gov: String,
     pub collector: String,
-    pub reward_denom: String,
     pub protocol_fee: Decimal,
     pub cluna_token: String,
     pub yluna_token: String,

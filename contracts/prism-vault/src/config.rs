@@ -1,6 +1,9 @@
-use crate::state::{
-    read_validators, remove_white_validators, store_white_validators, Parameters, CONFIG,
-    PARAMETERS,
+use crate::{
+    contract::validate_rate,
+    state::{
+        read_validators, remove_white_validators, store_white_validators, Parameters, CONFIG,
+        PARAMETERS,
+    },
 };
 use cosmwasm_std::{
     attr, to_binary, Addr, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, MessageInfo,
@@ -9,6 +12,8 @@ use cosmwasm_std::{
 use prism_protocol::vault::{Config, ExecuteMsg};
 
 use rand::{Rng, SeedableRng, XorShiftRng};
+
+pub const MAX_VALIDATORS: u64 = 20;
 
 /// Update general parameters
 /// Only creator/owner is allowed to execute
@@ -35,8 +40,8 @@ pub fn execute_update_params(
         epoch_period: epoch_period.unwrap_or(params.epoch_period),
         underlying_coin_denom: params.underlying_coin_denom,
         unbonding_period: unbonding_period.unwrap_or(params.unbonding_period),
-        peg_recovery_fee: peg_recovery_fee.unwrap_or(params.peg_recovery_fee),
-        er_threshold: er_threshold.unwrap_or(params.er_threshold),
+        peg_recovery_fee: validate_rate(peg_recovery_fee.unwrap_or(params.peg_recovery_fee))?,
+        er_threshold: validate_rate(er_threshold.unwrap_or(params.er_threshold))?,
     };
 
     PARAMETERS.save(deps.storage, &new_params)?;
@@ -73,6 +78,9 @@ pub fn execute_update_config(
         })?;
     }
     if let Some(reward) = yluna_staking {
+        if conf.yluna_staking.is_some() {
+            return Err(StdError::generic_err("yluna_staking already set"));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.yluna_staking = Some(reward.clone());
             Ok(last_config)
@@ -85,6 +93,9 @@ pub fn execute_update_config(
     }
 
     if let Some(token) = cluna_contract {
+        if conf.cluna_contract.is_some() {
+            return Err(StdError::generic_err("cluna_contract already set"));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.cluna_contract = Some(token);
             Ok(last_config)
@@ -92,6 +103,9 @@ pub fn execute_update_config(
     }
 
     if let Some(token) = yluna_contract {
+        if conf.yluna_contract.is_some() {
+            return Err(StdError::generic_err("yluna_contract already set"));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.yluna_contract = Some(token);
             Ok(last_config)
@@ -99,6 +113,9 @@ pub fn execute_update_config(
     }
 
     if let Some(token) = pluna_contract {
+        if conf.pluna_contract.is_some() {
+            return Err(StdError::generic_err("pluna_contract already set"));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.pluna_contract = Some(token);
             Ok(last_config)
@@ -106,6 +123,11 @@ pub fn execute_update_config(
     }
 
     if let Some(airdrop) = airdrop_registry_contract {
+        if conf.airdrop_registry_contract.is_some() {
+            return Err(StdError::generic_err(
+                "airdrop_registry_contract already set",
+            ));
+        }
         CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
             last_config.airdrop_registry_contract = Some(airdrop);
             Ok(last_config)
@@ -131,6 +153,14 @@ pub fn execute_register_validator(
         && env.contract.address.as_str() != info.sender.as_str()
     {
         return Err(StdError::generic_err("unauthorized"));
+    }
+
+    // check if validator count exceeds max
+    if read_validators(deps.storage)?.len() >= MAX_VALIDATORS as usize {
+        return Err(StdError::generic_err(format!(
+            "Can't register more than {} validators",
+            MAX_VALIDATORS
+        )));
     }
 
     // given validator must be first a validator in the system.
