@@ -15,6 +15,7 @@ pub struct LaunchConfig {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
+    pub receiver: String,
     pub token: String,
     pub base_denom: String,
 }
@@ -27,6 +28,7 @@ pub enum ExecuteMsg {
     WithdrawTokens {},
     PostInitialize { launch_config: LaunchConfig },
     AdminWithdraw {},
+    ReleaseTokens {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -39,9 +41,11 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
+    pub receiver: String,
     pub token: String,
     pub launch_config: Option<LaunchConfig>,
     pub base_denom: String,
+    pub tokens_released: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

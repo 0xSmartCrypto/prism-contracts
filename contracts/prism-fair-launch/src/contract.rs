@@ -23,9 +23,11 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
+        receiver: deps.api.addr_validate(&msg.receiver)?,
         token: deps.api.addr_validate(&msg.token)?,
         launch_config: None,
         base_denom: msg.base_denom,
+        tokens_released: false,
     };
     TOTAL_DEPOSIT.save(deps.storage, &Uint128::zero())?;
     CONFIG.save(deps.storage, &cfg)?;
@@ -47,6 +49,7 @@ pub fn execute(
             post_initialize(deps, env, info, launch_config)
         }
         ExecuteMsg::AdminWithdraw {} => admin_withdraw(deps, env, info),
+        ExecuteMsg::ReleaseTokens {} => release_tokens(deps, env, info),
     }
 }
 
@@ -235,7 +238,7 @@ pub fn withdraw_tokens(
     let cfg = CONFIG.load(deps.storage)?;
     let launch_cfg = cfg.launch_config.unwrap();
 
-    if env.block.time.seconds() < launch_cfg.phase2_end {
+    if env.block.time.seconds() < launch_cfg.phase2_end || !cfg.tokens_released {
         return Err(ContractError::InvalidWithdrawTokens {
             reason: "cannot withdraw tokens yet".to_string(),
         });
@@ -280,6 +283,37 @@ pub fn withdraw_tokens(
         ]))
 }
 
+pub fn release_tokens(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+    let launch_cfg = cfg.launch_config.clone().unwrap();
+
+    if info.sender.as_str() != cfg.owner.as_str() {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if env.block.time.seconds() < launch_cfg.phase2_end {
+        return Err(ContractError::InvalidReleaseTokens {
+            reason: "cannot release tokens yet".to_string(),
+        });
+    }
+
+    if cfg.tokens_released {
+        return Err(ContractError::InvalidReleaseTokens {
+            reason: "tokens are already released".to_string(),
+        });
+    }
+
+    cfg.tokens_released = true;
+
+    CONFIG.save(deps.storage, &cfg)?;
+
+    Ok(Response::new().add_attribute("action", "release_tokens"))
+}
+
 pub fn admin_withdraw(
     deps: DepsMut,
     env: Env,
@@ -308,7 +342,8 @@ pub fn admin_withdraw(
     };
 
     let tax_amount = withdraw_asset.compute_tax(&deps.querier)?;
-    let msg = withdraw_asset.into_msg(&deps.querier, info.sender)?;
+    // send the UST to the receiver specified in the contract config
+    let msg = withdraw_asset.into_msg(&deps.querier, cfg.receiver)?;
     Ok(Response::new().add_message(msg).add_attributes(vec![
         attr("action", "admin_withdraw"),
         attr("withdraw_amount", balance.to_string()),
@@ -332,7 +367,8 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 
 pub fn query_deposit_info(deps: Deps, env: Env, address: String) -> StdResult<DepositResponse> {
     let addr = deps.api.addr_validate(&address)?;
-    let launch_config = CONFIG.load(deps.storage)?.launch_config.unwrap();
+    let cfg = CONFIG.load(deps.storage)?;
+    let launch_config = cfg.launch_config.clone().unwrap();
     let deposit_info = DEPOSITS.load(deps.storage, &addr).unwrap_or_default();
     let current_time = env.block.time.seconds();
 
@@ -344,7 +380,7 @@ pub fn query_deposit_info(deps: Deps, env: Env, address: String) -> StdResult<De
                 let current_slot = (launch_config.phase2_end - current_time) / SECONDS_PER_HOUR;
                 let total_slots =
                     (launch_config.phase2_end - launch_config.phase2_start) / SECONDS_PER_HOUR;
-                dbg!(current_slot);
+
                 let withdrawable_portion =
                     Decimal::from_ratio(current_slot, total_slots).min(Decimal::one());
 
@@ -370,6 +406,7 @@ pub fn query_deposit_info(deps: Deps, env: Env, address: String) -> StdResult<De
         tokens_to_claim,
         can_claim: current_time >= launch_config.phase2_end
             && !tokens_to_claim.is_zero()
+            && cfg.tokens_released
             && !deposit_info.tokens_claimed,
     })
 }

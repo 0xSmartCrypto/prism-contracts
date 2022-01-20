@@ -1,20 +1,22 @@
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi};
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, MemoryStorage, OwnedDeps, Uint128, WasmMsg,
+    attr, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, MemoryStorage, OwnedDeps, SubMsg,
+    Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 
 use crate::contract::{
-    deposit, instantiate, post_initialize, query_deposit_info, withdraw, withdraw_tokens,
-    SECONDS_PER_HOUR,
+    admin_withdraw, deposit, instantiate, post_initialize, query_deposit_info, release_tokens,
+    withdraw, withdraw_tokens, SECONDS_PER_HOUR,
 };
 use crate::error::ContractError;
-use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
+use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier, MOCK_CONTRACT_ADDR};
 use prism_protocol::fair_launch::{DepositResponse, InstantiateMsg, LaunchConfig};
 
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let msg = InstantiateMsg {
         owner: "owner0001".to_string(),
+        receiver: "receiver0000".to_string(),
         token: "prism0001".to_string(),
         base_denom: "uusd".to_string(),
     };
@@ -356,7 +358,7 @@ fn proper_withdraw() {
             total_deposit: Uint128::from(99_000_000u128),
             withdrawable_amount: Uint128::zero(),
             tokens_to_claim: Uint128::from(1_000_000u64),
-            can_claim: true, // phase 2 is over, so possible to claim
+            can_claim: false, // phase 2 is over, but tokens not released, so cant claim yet
         }
     );
 }
@@ -526,7 +528,7 @@ fn proper_withdraw_phase3() {
             total_deposit: Uint128::from(224000000u128),
             withdrawable_amount: Uint128::zero(), // 100000000 * 0 / 24
             tokens_to_claim: Uint128::from(446428u128), // 100000000 / 224000000 * 1000000
-            can_claim: true,                      // now can claim tokens
+            can_claim: false,                     // tokens not released, cant claim tokens yet
         }
     );
 }
@@ -553,8 +555,27 @@ fn proper_withdraw_tokens1() {
         }
     );
 
-    // fast forward past phase 2, withdraw tokens now allowed
+    // fast forward past phase 2
     env.block.time = env.block.time.plus_seconds(100 + SECONDS_PER_HOUR);
+
+    // tokens have not yet been released, so should still return error
+    let err = withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidWithdrawTokens {
+            reason: "cannot withdraw tokens yet".to_string()
+        }
+    );
+
+    // admin executes release tokens --  unauthorized attempt
+    let err = release_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
+    assert_eq!(err, ContractError::Unauthorized {});
+
+    // valid attempt
+    let owner_info = mock_info("owner0001", &[]);
+    release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
+
+    // now users can withdraw tokens
     let res = withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
@@ -598,8 +619,12 @@ fn proper_withdraw_tokens2() {
     let res = deposit(deps.as_mut(), env.clone(), info2.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
-    // fast forward past phase 2, withdraw tokens now allowed
+    // fast forward past phase 2
     env.block.time = env.block.time.plus_seconds(100 + SECONDS_PER_HOUR);
+
+    // admin releases tokens, now users can claim
+    let owner_info = mock_info("owner0001", &[]);
+    release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
 
     // addr0001 gets 1M * 1/6
     let res = withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap();
@@ -657,4 +682,98 @@ fn proper_withdraw_tokens2() {
         }
         _ => panic!("Unexpected message: {:?}", msg),
     };
+}
+
+#[test]
+fn proper_admin_withdraw() {
+    let mut deps = mock_dependencies(&[]);
+    deps.querier.with_tax(
+        Decimal::percent(1),
+        &[(&"uusd".to_string(), &Uint128::new(1000000u128))],
+    );
+    init(&mut deps);
+    post_init(&mut deps);
+
+    let mut info1 = mock_info("addr0001", &[]);
+    let mut info2 = mock_info("addr0002", &[]);
+    let mut env = mock_env();
+
+    // successful deposits -- total 6,000 uusd
+    info1.funds = vec![Coin::new(1_000, "uusd")];
+    let res = deposit(deps.as_mut(), env.clone(), info1.clone());
+    assert_eq!(res.unwrap().messages.len(), 0);
+
+    info2.funds = vec![Coin::new(5_000, "uusd")];
+    let res = deposit(deps.as_mut(), env.clone(), info2);
+    assert_eq!(res.unwrap().messages.len(), 0);
+
+    // update contract balance after deposits
+    deps.querier
+        .with_native_balances(&[(MOCK_CONTRACT_ADDR.to_string(), Coin::new(6_000, "uusd"))]);
+
+    // admin tries to withdraw before phase 3, expect error
+    let owner_info = mock_info("owner0001", &[]);
+    let err = admin_withdraw(deps.as_mut(), env.clone(), owner_info.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidAdminWithdraw {
+            reason: "cannot withdraw funds yet".to_string()
+        }
+    );
+
+    // fast forward past phase 2
+    env.block.time = env.block.time.plus_seconds(100 + SECONDS_PER_HOUR);
+
+    // now admin can withdraw uusd -- unauthorized attempt
+    let err = admin_withdraw(deps.as_mut(), env.clone(), info1).unwrap_err();
+    assert_eq!(err, ContractError::Unauthorized {});
+
+    // valid attempt
+    let res = admin_withdraw(deps.as_mut(), env.clone(), owner_info.clone()).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "admin_withdraw"),
+            attr("withdraw_amount", "6000"),
+            attr("tax_amount", "60"), // 1% * 6000
+        ]
+    );
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+            to_address: "receiver0000".to_string(), // receiver address specified on contract instantiation
+            amount: vec![Coin {
+                denom: "uusd".to_string(),
+                amount: Uint128::from(5_940u128), // 6000 - 1% tax
+            }],
+        }))]
+    );
+
+    // check that users can not claim yet, even after withdraw admin
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
+    assert_eq!(
+        deposit_info.unwrap(),
+        DepositResponse {
+            deposit: Uint128::from(1_000u128),
+            total_deposit: Uint128::from(6_000u128),
+            withdrawable_amount: Uint128::zero(), // can not withdraw on phase 3
+            tokens_to_claim: Uint128::from(166666u128), // 1000000 * 1000 / 6000
+            can_claim: false,                     // tokens not released, cant claim tokens yet
+        }
+    );
+
+    // admin releases tokens, now users can claim
+    release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
+
+    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
+    assert_eq!(
+        deposit_info.unwrap(),
+        DepositResponse {
+            deposit: Uint128::from(1_000u128),
+            total_deposit: Uint128::from(6_000u128),
+            withdrawable_amount: Uint128::zero(), // can not withdraw on phase 3
+            tokens_to_claim: Uint128::from(166666u128), // 1000000 * 1000 / 6000
+            can_claim: true,                      // now users can claim tokens
+        }
+    );
 }

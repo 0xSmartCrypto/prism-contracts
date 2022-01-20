@@ -13,18 +13,22 @@ pub const DEPOSITS: Map<&Addr, DepositInfo> = Map::new("deposits");
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: Addr,
+    pub receiver: Addr,
     pub token: Addr,
     pub launch_config: Option<LaunchConfig>,
     pub base_denom: String,
+    pub tokens_released: bool,
 }
 
 impl Config {
     pub fn as_res(&self) -> StdResult<ConfigResponse> {
         let res = ConfigResponse {
             owner: self.owner.to_string(),
+            receiver: self.receiver.to_string(),
             token: self.token.to_string(),
             launch_config: self.launch_config.clone(),
             base_denom: self.base_denom.clone(),
+            tokens_released: self.tokens_released,
         };
         Ok(res)
     }

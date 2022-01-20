@@ -5,7 +5,9 @@
   "required": [
     "base_denom",
     "owner",
-    "token"
+    "receiver",
+    "token",
+    "tokens_released"
   ],
   "properties": {
     "base_denom": {
@@ -24,8 +26,14 @@
     "owner": {
       "type": "string"
     },
+    "receiver": {
+      "type": "string"
+    },
     "token": {
       "type": "string"
+    },
+    "tokens_released": {
+      "type": "boolean"
     }
   },
   "definitions": {
