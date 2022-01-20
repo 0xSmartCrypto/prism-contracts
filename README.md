@@ -11,11 +11,11 @@ This repository contains the source code for the first version of Prism Protocol
 | [`astro-generator-proxy`](./contracts/prism-astro-generator-proxy) | [doc]()   | Interface to lp-staking fro Astroport generator                                             |
 | [`collector`](./contracts/prism-collector)                         | [doc]()   | Gathers protocol fees and distributes to xPRISM holders, manages reward swap logic          |
 | [`fair-launch`](./contracts/prism-fair-launch)                     | [doc]()   | Pool to fairly distribute PRISM tokens at launch                                            |
-| [`launch-pool`](../contracts/prism-launch-pool)                    | [doc]()   | yLuna staking pool event                                                                    |
-| [`lp-staking`](../contracts/prism-lp-staking)                      | [doc]()   | Staking contract for PRISM LP tokens                                                        |
-| [`vault`](../contracts/prism-vault)                                | [doc]()   | Manages luna delegations and yLuna/pLuna minting                                            |
-| [`yasset-staking`](../contracts/prism-yasset-staking)              | [doc]()   | Staking contract for yLuna tokens, stakers receiver all delegated luna rewards and airdrops |
-| [`limit-order`](../contracts/prism-limit-order)                    | [doc]()   | Allows users to submit swap orders that can be filled by executors                          |
+| [`launch-pool`](./contracts/prism-launch-pool)                    | [doc]()   | yLuna staking pool event                                                                    |
+| [`lp-staking`](./contracts/prism-lp-staking)                      | [doc]()   | Staking contract for PRISM LP tokens                                                        |
+| [`vault`](./contracts/prism-vault)                                | [doc]()   | Manages luna delegations and yLuna/pLuna minting                                            |
+| [`yasset-staking`](./contracts/prism-yasset-staking)              | [doc]()   | Staking contract for yLuna tokens, stakers receiver all delegated luna rewards and airdrops |
+| [`limit-order`](./contracts/prism-limit-order)                    | [doc]()   | Allows users to submit swap orders that can be filled by executors                          |
 
 ## Development
 
