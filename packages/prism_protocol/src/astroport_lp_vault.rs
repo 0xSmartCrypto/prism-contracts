@@ -60,8 +60,8 @@ pub enum Cw20HookMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-    //BondedAmount {},
-    //LPInfo {},
+    LPInfo {},
+    BondedAmount {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

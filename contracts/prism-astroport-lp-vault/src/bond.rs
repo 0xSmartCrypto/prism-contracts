@@ -172,8 +172,6 @@ pub fn update_rewards(deps: Deps) -> ContractResult<(Decimal, Uint128)> {
 }
 
 pub fn update_global_index(deps: DepsMut, env: Env) -> ContractResult<Response> {
-    // restrict who can call this maybe?
-
     // check if we need to withdraw
     let lp_to_withdraw = STATE.load(deps.storage)?;
     if lp_to_withdraw == Uint128::zero() {
@@ -190,7 +188,7 @@ pub fn update_global_index(deps: DepsMut, env: Env) -> ContractResult<Response> 
     // query amm reward
     let pending_amm_rewards = query_lp_burn_rewards(deps.as_ref(), &deps.querier, lp_to_withdraw)?;
 
-    // claim generator reward, withdrawn and burn LP
+    // claim generator reward, withdraw and burn LP
     let mut messages = vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.generator.clone().into_string(),

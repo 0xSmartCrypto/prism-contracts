@@ -105,5 +105,6 @@ pub struct AstroConfig {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TerraswapConfig {
+    pub lp_terraswap_vault_id: u64,
     pub factory: Addr,
 }

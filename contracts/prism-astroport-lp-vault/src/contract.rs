@@ -11,7 +11,7 @@ use prism_protocol::astroport_lp_vault::{
 
 use crate::bond::{bond, unbond, update_global_index};
 use crate::error::{ContractError, ContractResult};
-use crate::query::{query_config, query_generator_rewards_info, query_pair_info};
+use crate::query::{query_config, query_generator_rewards_info, query_pair_info, query_lp_info, query_bonded_amount};
 use crate::refract::{merge, split};
 use crate::state::{CONFIG, LP_INFO, STATE};
 
@@ -101,9 +101,8 @@ pub fn receive_cw20(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        // provide query for individual StakerInfo
-        // provide query for all StakerInfo for an individual user
-        // bonded amount info
+        QueryMsg::LPInfo {} => to_binary(&query_lp_info(deps)?),
+        QueryMsg::BondedAmount {} => to_binary(&query_bonded_amount(deps)?),
     }
 }
 

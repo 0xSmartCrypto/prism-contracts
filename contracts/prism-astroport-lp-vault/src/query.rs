@@ -9,7 +9,7 @@ use astroport::generator::{
     PendingTokenResponse, QueryMsg as AstroGeneratorQueryMsg, RewardInfoResponse,
 };
 use astroport::pair::{PoolResponse, QueryMsg as AstroPairQueryMsg};
-use prism_protocol::astroport_lp_vault::{Config, ConfigResponse};
+use prism_protocol::astroport_lp_vault::{Config, ConfigResponse, LPInfo};
 
 use crate::state::{CONFIG, LP_INFO};
 
@@ -128,4 +128,18 @@ pub fn query_lp_burn_rewards(
         contract_addr: lp_info.pair_contract.into_string(),
         msg: to_binary(&AstroPairQueryMsg::Share { amount })?,
     }))
+}
+
+pub fn query_lp_info(
+    deps: Deps,
+) -> StdResult<LPInfo> {
+    LP_INFO.load(deps.storage)
+}
+
+pub fn query_bonded_amount(
+    deps: Deps,
+) -> StdResult<Uint128> {
+    // should this be cLP?
+    let lp_info = LP_INFO.load(deps.storage)?;
+    Ok(lp_info.amt_lp)
 }
