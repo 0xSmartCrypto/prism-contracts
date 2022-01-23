@@ -3,12 +3,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use cw20::Cw20ReceiveMsg;
 
-use astroport::asset::{AssetInfo};
+use terraswap::asset::{AssetInfo};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
-    pub generator: String,
     pub factory: String,
     pub fee: Decimal,
 
@@ -24,7 +23,6 @@ pub enum ExecuteMsg {
     // Set the owner
     UpdateConfig {
         owner: Option<Addr>,
-        generator: Option<Addr>,
         factory: Option<Addr>,
         reward_dist: Option<Addr>,
         fee: Option<Decimal>,
@@ -69,10 +67,7 @@ pub struct Config {
     // owner of contract
     pub owner: Addr,
 
-    // address of astroport generator
-    pub generator: Addr,
-
-    // address of astroport factory
+    // address of terraswap factory
     pub factory: Addr,
 
     // used to distribute rewards to stakers and protocol
@@ -86,7 +81,6 @@ impl Config {
     pub fn as_res(&self) -> StdResult<ConfigResponse> {
         let res = ConfigResponse {
             owner: self.owner.clone().into_string(),
-            generator: self.generator.clone().into_string(),
             factory: self.factory.clone().into_string(),
             reward_dist: self.reward_dist.clone().into_string(),
             fee: self.fee,
@@ -98,7 +92,6 @@ impl Config {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub generator: String,
     pub factory: String,
     pub reward_dist: String,
     pub fee: Decimal,
@@ -108,7 +101,6 @@ pub struct ConfigResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LPInfo {
     pub pair_asset_info: [AssetInfo; 2],
-    pub generator_reward_info: Vec<AssetInfo>,
     pub amt_lp: Uint128,
     pub amt_clp: Uint128,
     pub last_liquidity: Decimal,

@@ -1,16 +1,17 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, Response, Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, Decimal, Deps, DepsMut, Response, Uint128, WasmMsg,
 };
 
 use prism_common::decimal_division;
 use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 
-use astroport::generator::{Cw20HookMsg as AstroHookMsg, ExecuteMsg as AstroGenExecuteMsg};
+use astroport::asset::AssetInfo as AstroAssetInfo;
 use astroport::pair::Cw20HookMsg as AstroPairHookMsg;
+use terraswap::asset::AssetInfo as TerraAssetInfo;
 
 use crate::error::{ContractError, ContractResult};
-use crate::query::{query_lp_burn_rewards, query_pending_generator_rewards, query_pool_info};
+use crate::query::{query_lp_burn_rewards, query_pool_info};
 
 use crate::state::{CONFIG, LP_INFO, STATE};
 use cw20::Cw20ExecuteMsg;
@@ -25,7 +26,6 @@ pub fn bond(
     if amount <= Uint128::zero() {
         return Err(ContractError::BadBondAmount {});
     }
-    let config = CONFIG.load(deps.storage)?;
 
     // update rewards
     let (liquidity, lp_to_burn) = update_rewards(deps.as_ref())?;
@@ -35,17 +35,6 @@ pub fn bond(
         prev_state += lp_to_burn;
         Ok(prev_state)
     })?;
-
-    // attempt to send LP to astro generator
-    let mut messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: staking_token.clone().into_string(),
-        msg: to_binary(&Cw20ExecuteMsg::Send {
-            contract: config.generator.into_string(),
-            msg: to_binary(&AstroHookMsg::Deposit {})?,
-            amount,
-        })?,
-        funds: vec![],
-    })];
 
     // save internal lp_info and calculate tokens to mint
     // rounding issues?
@@ -61,14 +50,14 @@ pub fn bond(
     LP_INFO.save(deps.storage, &lp_info)?;
 
     // mint cLP tokens
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+    let messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: lp_info.clp_contract.clone().into_string(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
             recipient: sender_addr.to_string(),
             amount: clp_to_mint,
         })?,
         funds: vec![],
-    }));
+    })];
 
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "bond"),
@@ -83,8 +72,6 @@ pub fn unbond(deps: DepsMut, sender_addr: Addr, amount: Uint128) -> ContractResu
     if amount <= Uint128::zero() {
         return Err(ContractError::BadUnbondAmount {});
     }
-
-    let config = CONFIG.load(deps.storage)?;
     let lp_info = LP_INFO.load(deps.storage)?;
     let lp_contract = lp_info.lp_contract;
 
@@ -96,16 +83,6 @@ pub fn unbond(deps: DepsMut, sender_addr: Addr, amount: Uint128) -> ContractResu
         prev_state += lp_to_burn;
         Ok(prev_state)
     })?;
-
-    // attempt to withdraw LP from astro generator
-    let mut messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.generator.into_string(),
-        msg: to_binary(&AstroGenExecuteMsg::Withdraw {
-            lp_token: lp_contract.clone(),
-            amount,
-        })?,
-        funds: vec![],
-    })];
 
     // save internal lp info and calculate tokens to burn
     // rounding issues?
@@ -120,25 +97,26 @@ pub fn unbond(deps: DepsMut, sender_addr: Addr, amount: Uint128) -> ContractResu
     lp_info.amt_clp = lp_info.amt_clp.checked_sub(clp_to_burn)?;
     LP_INFO.save(deps.storage, &lp_info)?;
 
-    // burn cLP tokens from user
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: lp_info.clp_contract.clone().into_string(),
-        msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
-            owner: sender_addr.to_string(),
-            amount: clp_to_burn,
-        })?,
-        funds: vec![],
-    }));
-
-    // transfer LP to user
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: lp_contract.to_string(),
-        msg: to_binary(&Cw20ExecuteMsg::Transfer {
-            recipient: sender_addr.to_string(),
-            amount,
-        })?,
-        funds: vec![],
-    }));
+    let messages = vec![
+        // burn cLP from user
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: lp_info.clp_contract.clone().into_string(),
+            msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
+                owner: sender_addr.to_string(),
+                amount: clp_to_burn,
+            })?,
+            funds: vec![],
+        }),
+        // transfer LP to user
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: lp_contract.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: sender_addr.to_string(),
+                amount,
+            })?,
+            funds: vec![],
+        }),
+    ];
 
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "unbond"),
@@ -171,7 +149,7 @@ pub fn update_rewards(deps: Deps) -> ContractResult<(Decimal, Uint128)> {
     Ok((new_liquidity, lp_to_burn))
 }
 
-pub fn update_global_index(deps: DepsMut, env: Env) -> ContractResult<Response> {
+pub fn update_global_index(deps: DepsMut) -> ContractResult<Response> {
     // check if we need to withdraw
     let lp_to_withdraw = STATE.load(deps.storage)?;
     if lp_to_withdraw == Uint128::zero() {
@@ -182,53 +160,42 @@ pub fn update_global_index(deps: DepsMut, env: Env) -> ContractResult<Response> 
     let lp_info = LP_INFO.load(deps.storage)?;
     let token = lp_info.lp_contract;
 
-    // query generator reward
-    let pending_gen_rewards = query_pending_generator_rewards(deps.as_ref(), env, &deps.querier)?;
-
     // query amm reward
     let pending_amm_rewards = query_lp_burn_rewards(deps.as_ref(), &deps.querier, lp_to_withdraw)?;
 
-    // claim generator reward, withdraw and burn LP
-    let mut messages = vec![
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.generator.clone().into_string(),
-            msg: to_binary(&AstroGenExecuteMsg::Withdraw {
-                lp_token: token.clone(),
-                amount: lp_to_withdraw,
-            })?,
-            funds: vec![],
-        }),
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: token.into_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: lp_info.pair_contract.into_string(),
-                msg: to_binary(&AstroPairHookMsg::WithdrawLiquidity {})?,
-                amount: lp_to_withdraw,
-            })?,
-            funds: vec![],
-        }),
-    ];
+    // withdraw and burn LP
+    let mut messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: token.into_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Send {
+            contract: lp_info.pair_contract.into_string(),
+            msg: to_binary(&AstroPairHookMsg::WithdrawLiquidity {})?,
+            amount: lp_to_withdraw,
+        })?,
+        funds: vec![],
+    })];
 
     // send rewards to reward-dist
-    let mut asset_infos = vec![];
-    for reward in pending_gen_rewards {
-        // generator might have 0 rewards even if we burn LP
-        if reward.amount > Uint128::zero() {
-            messages.push(
-                reward
-                    .clone()
-                    .into_msg(&deps.querier, config.reward_dist.clone())?,
-            );
-            asset_infos.push(reward.info);
-        }
-    }
+    // convert terraswap asset info interface to astroport asset info interface for reward-dist
+    let mut asset_infos: Vec<AstroAssetInfo> = vec![];
     for reward in pending_amm_rewards {
         messages.push(
             reward
                 .clone()
                 .into_msg(&deps.querier, config.reward_dist.clone())?,
         );
-        asset_infos.push(reward.info);
+
+        match reward.info {
+            TerraAssetInfo::Token { contract_addr, .. } => {
+                asset_infos.push(AstroAssetInfo::Token {
+                    contract_addr: deps.api.addr_validate(&contract_addr.clone())?,
+                })
+            }
+            TerraAssetInfo::NativeToken { denom, .. } => {
+                asset_infos.push(AstroAssetInfo::NativeToken {
+                    denom: denom.clone(),
+                })
+            }
+        };
     }
 
     // tell reward-dist to distribute rewards

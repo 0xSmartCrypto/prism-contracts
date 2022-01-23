@@ -11,9 +11,7 @@ use prism_protocol::terraswap_lp_vault::{
 
 use crate::bond::{bond, unbond, update_global_index};
 use crate::error::{ContractError, ContractResult};
-use crate::query::{
-    query_bonded_amount, query_config, query_generator_rewards_info, query_lp_info, query_pair_info,
-};
+use crate::query::{query_bonded_amount, query_config, query_lp_info, query_pair_info};
 use crate::refract::{merge, split};
 use crate::state::{CONFIG, LP_INFO, STATE};
 
@@ -32,7 +30,6 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     let data = Config {
         owner: info.sender,
-        generator: deps.api.addr_validate(&msg.generator)?,
         factory: deps.api.addr_validate(&msg.factory)?,
         reward_dist: Addr::unchecked(""),
         fee: msg.fee,
@@ -43,15 +40,13 @@ pub fn instantiate(
     // Get relevant info to create new LP token set
     let token = deps.api.addr_validate(&msg.lp_contract)?;
     let pair_info = query_pair_info(deps.as_ref(), &deps.querier, token.clone())?;
-    let generator_rewards_info = query_generator_rewards_info(deps.as_ref(), &deps.querier)?;
 
     let lp_info = LPInfo {
         pair_asset_info: pair_info.asset_infos.clone(),
-        generator_reward_info: generator_rewards_info,
         amt_lp: Uint128::zero(),
         amt_clp: Uint128::zero(),
         last_liquidity: Decimal::zero(),
-        pair_contract: pair_info.contract_addr,
+        pair_contract: deps.api.addr_validate(&pair_info.contract_addr)?,
         lp_contract: token,
         clp_contract: deps.api.addr_validate(&msg.clp_contract)?,
         plp_contract: deps.api.addr_validate(&msg.plp_contract)?,
@@ -62,28 +57,22 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    msg: ExecuteMsg,
-) -> ContractResult<Response> {
+pub fn execute(deps: DepsMut, info: MessageInfo, msg: ExecuteMsg) -> ContractResult<Response> {
     match msg {
         // owner function
         ExecuteMsg::UpdateConfig {
             owner,
-            generator,
             factory,
             reward_dist,
             fee,
-        } => update_config(deps, info, owner, generator, factory, reward_dist, fee),
+        } => update_config(deps, info, owner, factory, reward_dist, fee),
 
         // user functions
         ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
         ExecuteMsg::Unbond { amount } => unbond(deps, info.sender, amount),
         ExecuteMsg::Merge { amount } => merge(deps, info, amount),
         ExecuteMsg::Split { amount } => split(deps, info, amount),
-        ExecuteMsg::UpdateGlobalIndex {} => update_global_index(deps, env),
+        ExecuteMsg::UpdateGlobalIndex {} => update_global_index(deps),
     }
 }
 
@@ -112,7 +101,6 @@ pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<Addr>,
-    generator: Option<Addr>,
     factory: Option<Addr>,
     reward_dist: Option<Addr>,
     fee: Option<Decimal>,
@@ -123,7 +111,6 @@ pub fn update_config(
     }
 
     conf.owner = owner.unwrap_or(conf.owner);
-    conf.generator = generator.unwrap_or(conf.generator);
     conf.factory = factory.unwrap_or(conf.factory);
     conf.reward_dist = reward_dist.unwrap_or(conf.reward_dist);
     conf.fee = fee.unwrap_or(conf.fee);

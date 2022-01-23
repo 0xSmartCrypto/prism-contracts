@@ -9,6 +9,9 @@ pub enum ContractError {
     #[error("{0}")]
     OverflowError(#[from] OverflowError),
 
+    #[error("LP does not exist")]
+    DoesNotExist {},
+
     #[error("Unauthorized")]
     Unauthorized {},
 
