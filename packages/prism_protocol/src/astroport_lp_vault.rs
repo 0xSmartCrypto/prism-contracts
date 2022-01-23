@@ -104,6 +104,7 @@ pub struct ConfigResponse {
     pub fee: Decimal,
 }
 
+// should we provide a stripped down version of LPInfo as_res?
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LPInfo {
     pub pair_asset_info: [AssetInfo; 2],

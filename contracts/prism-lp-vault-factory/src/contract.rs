@@ -1,17 +1,15 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
     attr, entry_point, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult
+    StdResult,
 };
 
-use prism_protocol::lp_vault_factory::{
-    AstroConfig, Config, ExecuteMsg, InstantiateMsg, LPContracts, QueryMsg,
-};
+use prism_protocol::lp_vault_factory::{Config, ExecuteMsg, InstantiateMsg, LPContracts, QueryMsg};
 
-use crate::create::{create_astroport_vault, create_terraswap_vault};
+use crate::create::{create_new_lp_vault};
 use crate::error::{ContractError, ContractResult};
-use crate::query::{query_config, query_vault, query_astro_amm_info, query_terraswap_amm_info};
-use crate::state::{ASTRO_CONFIG, CONFIG, TEMP_LP_INFO, VAULTS};
+use crate::query::{query_astro_amm_info, query_config, query_terraswap_amm_info, query_vault};
+use crate::state::{ASTRO_CONFIG, CONFIG, TEMP_LP_INFO, TERRASWAP_CONFIG, VAULTS};
 
 use cw2::set_contract_version;
 use terra_cosmwasm::TerraMsgWrapper;
@@ -39,14 +37,6 @@ pub fn instantiate(
         reward_dist_contract_id: msg.reward_dist_contract_id,
     };
     CONFIG.save(deps.storage, &cfg)?;
-
-    let astro_cfg = AstroConfig {
-        lp_astro_vault_id: msg.lp_astro_vault_id,
-        generator: deps.api.addr_validate(&msg.generator)?,
-        factory: deps.api.addr_validate(&msg.factory)?,
-    };
-    ASTRO_CONFIG.save(deps.storage, &astro_cfg)?;
-
     Ok(Response::default())
 }
 
@@ -81,6 +71,17 @@ pub fn execute(
             yasset_x_contract_id,
             reward_dist_contract_id,
         ),
+
+        ExecuteMsg::UpdateAstroportConfig {
+            lp_astro_vault_id,
+            generator,
+            factory,
+        } => update_astroport_config(deps, info, lp_astro_vault_id, generator, factory),
+
+        ExecuteMsg::UpdateTerraswapConfig {
+            lp_terraswap_vault_id,
+            factory,
+        } => update_terraswap_config(deps, info, lp_terraswap_vault_id, factory),
 
         ExecuteMsg::CreateNewVault { amm, lp } => create_new_vault(deps, env, info, amm, lp),
     }
@@ -129,6 +130,45 @@ pub fn update_config(
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }
 
+pub fn update_astroport_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    lp_astro_vault_id: Option<u64>,
+    generator: Option<Addr>,
+    factory: Option<Addr>,
+) -> ContractResult<Response<TerraMsgWrapper>> {
+    let cfg = CONFIG.load(deps.storage)?;
+    if info.sender.as_str() != cfg.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+    let mut astro_cfg = ASTRO_CONFIG.load(deps.storage)?;
+    astro_cfg.lp_astro_vault_id = lp_astro_vault_id.unwrap_or(astro_cfg.lp_astro_vault_id);
+    astro_cfg.generator = generator.unwrap_or(astro_cfg.generator);
+    astro_cfg.factory = factory.unwrap_or(astro_cfg.factory);
+    ASTRO_CONFIG.save(deps.storage, &astro_cfg)?;
+
+    Ok(Response::new().add_attributes(vec![attr("action", "update_astroport_config")]))
+}
+
+pub fn update_terraswap_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    lp_terraswap_vault_id: Option<u64>,
+    factory: Option<Addr>,
+) -> ContractResult<Response<TerraMsgWrapper>> {
+    let cfg = CONFIG.load(deps.storage)?;
+    if info.sender.as_str() != cfg.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+    let mut terra_cfg = TERRASWAP_CONFIG.load(deps.storage)?;
+    terra_cfg.lp_terraswap_vault_id =
+        lp_terraswap_vault_id.unwrap_or(terra_cfg.lp_terraswap_vault_id);
+    terra_cfg.factory = factory.unwrap_or(terra_cfg.factory);
+    TERRASWAP_CONFIG.save(deps.storage, &terra_cfg)?;
+
+    Ok(Response::new().add_attributes(vec![attr("action", "update_astroport_config")]))
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn create_new_vault(
     deps: DepsMut,
@@ -162,10 +202,6 @@ pub fn create_new_vault(
     // create temp lp contract struct
     TEMP_LP_INFO.save(deps.storage, &new_lp)?;
 
-    // match to the correct amm's instantiation protocol
-    match amm {
-        1 => create_astroport_vault(deps, env, lp),
-        2 => create_terraswap_vault(deps, lp),
-        _ => Err(ContractError::AmmNotSupported {}),
-    }
+    // start vault instantiation
+    create_new_lp_vault(deps, env, lp)
 }

@@ -13,11 +13,6 @@ pub struct InstantiateMsg {
     pub yasset_contract_id: u64,
     pub yasset_x_contract_id: u64,
     pub reward_dist_contract_id: u64,
-
-    // astroport
-    pub lp_astro_vault_id: u64,
-    pub generator: String,
-    pub factory: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -34,6 +29,19 @@ pub enum ExecuteMsg {
         reward_dist_contract_id: Option<u64>,
         fee: Option<Decimal>,
         token_code_id: Option<u64>,
+    },
+
+    // update astroport config
+    UpdateAstroportConfig {
+        lp_astro_vault_id: Option<u64>,
+        generator: Option<Addr>,
+        factory: Option<Addr>,
+    },
+
+    // update terraswap config
+    UpdateTerraswapConfig {
+        lp_terraswap_vault_id: Option<u64>,
+        factory: Option<Addr>,
     },
 
     // support new LP

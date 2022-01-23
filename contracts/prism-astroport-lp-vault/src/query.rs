@@ -139,7 +139,6 @@ pub fn query_lp_info(
 pub fn query_bonded_amount(
     deps: Deps,
 ) -> StdResult<Uint128> {
-    // should this be cLP?
     let lp_info = LP_INFO.load(deps.storage)?;
-    Ok(lp_info.amt_lp)
+    Ok(lp_info.amt_clp)
 }

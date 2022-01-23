@@ -1129,6 +1129,7 @@ dependencies = [
  "schemars",
  "serde",
  "terra-cosmwasm",
+ "terraswap",
  "thiserror",
 ]
 
@@ -1159,6 +1160,26 @@ dependencies = [
  "cw20",
  "prism-common",
  "prism-protocol",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+ "thiserror",
+]
+
+[[package]]
+name = "prism-terraswap-lp-vault"
+version = "1.0.0"
+dependencies = [
+ "astroport",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-storage-plus",
+ "cw2",
+ "cw20",
+ "prism-common",
+ "prism-protocol",
+ "protobuf",
  "schemars",
  "serde",
  "terra-cosmwasm",
@@ -1716,6 +1737,19 @@ dependencies = [
  "cosmwasm-std",
  "schemars",
  "serde",
+]
+
+[[package]]
+name = "terraswap"
+version = "2.4.1"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw20",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
 ]
 
 [[package]]

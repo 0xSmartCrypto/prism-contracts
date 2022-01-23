@@ -1,7 +1,7 @@
-use cosmwasm_std::{Addr};
+use cosmwasm_std::Addr;
 use cw_storage_plus::{Item, Map};
 
-use prism_protocol::lp_vault_factory::{AstroConfig, TerraswapConfig, Config, LPContracts};
+use prism_protocol::lp_vault_factory::{AstroConfig, Config, LPContracts, TerraswapConfig};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 // lp addr -> lp contracts
