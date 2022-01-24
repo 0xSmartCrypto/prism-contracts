@@ -1,17 +1,16 @@
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi};
 use cosmwasm_std::{
-    attr, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, MemoryStorage, OwnedDeps, SubMsg,
-    Uint128, WasmMsg,
+    attr, from_binary, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    MemoryStorage, MessageInfo, OwnedDeps, Response, StdResult, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 
-use crate::contract::{
-    admin_withdraw, deposit, instantiate, post_initialize, query_deposit_info, release_tokens,
-    withdraw, withdraw_tokens, SECONDS_PER_HOUR,
-};
+use crate::contract::{deposit, execute, instantiate, query, release_tokens, SECONDS_PER_HOUR};
 use crate::error::ContractError;
 use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier, MOCK_CONTRACT_ADDR};
-use prism_protocol::fair_launch::{DepositResponse, InstantiateMsg, LaunchConfig};
+use prism_protocol::fair_launch::{
+    ConfigResponse, DepositResponse, ExecuteMsg, InstantiateMsg, LaunchConfig, QueryMsg,
+};
 
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let msg = InstantiateMsg {
@@ -35,7 +34,7 @@ pub fn post_init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) 
         phase2_start: env.block.time.seconds() + 100,
         phase2_end: env.block.time.seconds() + 100 + SECONDS_PER_HOUR,
     };
-    post_initialize(
+    do_post_initialize(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -44,10 +43,79 @@ pub fn post_init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) 
     .unwrap();
 }
 
+pub fn do_deposit(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+    execute(deps, env, info, ExecuteMsg::Deposit {})
+}
+
+pub fn do_post_initialize(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    launch_config: LaunchConfig,
+) -> Result<Response, ContractError> {
+    execute(
+        deps,
+        env,
+        info,
+        ExecuteMsg::PostInitialize { launch_config },
+    )
+}
+
+pub fn do_withdraw(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    amount: Option<Uint128>,
+) -> Result<Response, ContractError> {
+    execute(deps, env, info, ExecuteMsg::Withdraw { amount })
+}
+
+pub fn do_admin_withdraw(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    execute(deps, env, info, ExecuteMsg::AdminWithdraw {})
+}
+
+pub fn do_withdraw_tokens(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    execute(deps, env, info, ExecuteMsg::WithdrawTokens {})
+}
+
+pub fn do_release_tokens(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    execute(deps, env, info, ExecuteMsg::ReleaseTokens {})
+}
+
+pub fn do_query_deposit_info(deps: Deps, env: Env, address: String) -> StdResult<DepositResponse> {
+    from_binary(&query(deps, env, QueryMsg::DepositInfo { address }).unwrap())
+}
+
 #[test]
 fn proper_post_initialize() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
+
+    let config_response: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+    assert_eq!(
+        config_response,
+        ConfigResponse {
+            owner: "owner0001".to_string(),
+            receiver: "receiver0000".to_string(),
+            token: "prism0001".to_string(),
+            launch_config: None,
+            base_denom: "uusd".to_string(),
+            tokens_released: false,
+        }
+    );
 
     let mut info = mock_info("", &[]);
     let env = mock_env();
@@ -59,7 +127,7 @@ fn proper_post_initialize() {
     };
 
     // unauthorized
-    let err = post_initialize(
+    let err = do_post_initialize(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -67,10 +135,22 @@ fn proper_post_initialize() {
     );
     assert_eq!(err.unwrap_err(), ContractError::Unauthorized {});
 
-    // invalid launch config
+    // invalid launch config (phase1 start in the past)
     info.sender = Addr::unchecked("owner0001");
     launch_config.phase1_start = env.block.time.seconds() - 100;
-    let err = post_initialize(
+    let err = do_post_initialize(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        launch_config.clone(),
+    );
+    assert_eq!(err.unwrap_err(), ContractError::InvalidLaunchConfig {});
+
+    // invalid launch config (phase 2 length less than 1 hour)
+    info.sender = Addr::unchecked("owner0001");
+    launch_config.phase1_start = env.block.time.seconds();
+    launch_config.phase2_end = launch_config.phase2_start + 1;
+    let err = do_post_initialize(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -80,7 +160,8 @@ fn proper_post_initialize() {
 
     // success
     launch_config.phase1_start = env.block.time.seconds();
-    let res = post_initialize(
+    launch_config.phase2_end = env.block.time.seconds() + 100 + SECONDS_PER_HOUR;
+    let res = do_post_initialize(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -109,6 +190,30 @@ fn proper_post_initialize() {
         }
         _ => panic!("Unexpected message: {:?}", msg),
     };
+
+    let config_response: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+    assert_eq!(
+        config_response,
+        ConfigResponse {
+            owner: "owner0001".to_string(),
+            receiver: "receiver0000".to_string(),
+            token: "prism0001".to_string(),
+            launch_config: Some(launch_config.clone()),
+            base_denom: "uusd".to_string(),
+            tokens_released: false,
+        }
+    );
+
+    let err = execute(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        ExecuteMsg::PostInitialize {
+            launch_config: launch_config.clone(),
+        },
+    );
+    assert_eq!(err.unwrap_err(), ContractError::DuplicatePostInit {});
 }
 
 #[test]
@@ -121,7 +226,7 @@ fn proper_deposit() {
     let mut env = mock_env();
 
     // error, no coins sent with deposit
-    let err = deposit(deps.as_mut(), env.clone(), info.clone());
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(
         err.unwrap_err(),
         ContractError::InvalidDeposit {
@@ -131,7 +236,7 @@ fn proper_deposit() {
 
     // error, zero amount
     info.funds = vec![Coin::new(0, "uusd")];
-    let err = deposit(deps.as_mut(), env.clone(), info.clone());
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(
         err.unwrap_err(),
         ContractError::InvalidDeposit {
@@ -141,7 +246,7 @@ fn proper_deposit() {
 
     // error, wrong currency
     info.funds = vec![Coin::new(0, "ukrw")];
-    let err = deposit(deps.as_mut(), env.clone(), info.clone());
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(
         err.unwrap_err(),
         ContractError::InvalidDeposit {
@@ -151,11 +256,11 @@ fn proper_deposit() {
 
     // successful deposit
     info.funds = vec![Coin::new(1_000, "uusd")];
-    let res = deposit(deps.as_mut(), env.clone(), info.clone());
+    let res = do_deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
     // query deposit responses for addr0001
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -168,7 +273,7 @@ fn proper_deposit() {
     );
 
     // query deposit responses for addr0002
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0002".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "addr0002".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -182,7 +287,7 @@ fn proper_deposit() {
 
     // failed deposit, after phase 1
     env.block.time = env.block.time.plus_seconds(150u64);
-    let err = deposit(deps.as_mut(), env, info);
+    let err = do_deposit(deps.as_mut(), env, info);
     assert_eq!(
         err.unwrap_err(),
         ContractError::InvalidDeposit {
@@ -205,11 +310,11 @@ fn proper_withdraw() {
 
     // successful deposit
     info.funds = vec![Coin::new(1_000, "uusd")];
-    let res = deposit(deps.as_mut(), env.clone(), info.clone());
+    let res = do_deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
     // try to withdraw 0, expect error
-    let err = withdraw(
+    let err = do_withdraw(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -224,7 +329,7 @@ fn proper_withdraw() {
     );
 
     // successful withdraw 100, we get 95 due to 5% taxes configured inside mock_querier
-    let res = withdraw(
+    let res = do_withdraw(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -248,7 +353,7 @@ fn proper_withdraw() {
     };
 
     // query deposit responses for addr0001
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -261,7 +366,7 @@ fn proper_withdraw() {
     );
 
     // successful withdraw remaining, we have 900 left, we get 890 (tax cap = 10)
-    let res = withdraw(deps.as_mut(), env.clone(), info.clone(), None).unwrap();
+    let res = do_withdraw(deps.as_mut(), env.clone(), info.clone(), None).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
@@ -279,7 +384,7 @@ fn proper_withdraw() {
     };
 
     // query deposit responses for addr0001
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -291,7 +396,7 @@ fn proper_withdraw() {
         }
     );
 
-    let err = withdraw(
+    let err = do_withdraw(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -307,11 +412,11 @@ fn proper_withdraw() {
 
     // successful deposit again
     info.funds = vec![Coin::new(200_000_000, "uusd")];
-    let res = deposit(deps.as_mut(), env.clone(), info.clone());
+    let res = do_deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
     // execute another withdraw
-    let res = withdraw(
+    let res = do_withdraw(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -335,7 +440,7 @@ fn proper_withdraw() {
 
     // fast forward to after phase 2, withdraws not allowed
     env.block.time = env.block.time.plus_seconds(100 + SECONDS_PER_HOUR);
-    let err = withdraw(
+    let err = do_withdraw(
         deps.as_mut(),
         env.clone(),
         info.clone(),
@@ -350,7 +455,7 @@ fn proper_withdraw() {
     );
 
     // withdrawable amount should be zero
-    let deposit_info = query_deposit_info(deps.as_ref(), env, "addr0001".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env, "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -376,7 +481,7 @@ fn proper_withdraw_phase3() {
         phase2_start: env.block.time.seconds() + 100,
         phase2_end: env.block.time.seconds() + 100 + 24 * SECONDS_PER_HOUR, // 24 hour phase 2
     };
-    post_initialize(deps.as_mut(), mock_env(), info, launch_config).unwrap();
+    do_post_initialize(deps.as_mut(), mock_env(), info, launch_config).unwrap();
 
     let caps = [(&"uusd".to_string(), &Uint128::from(10u128))];
     deps.querier.with_tax(Decimal::percent(5u64), &caps);
@@ -397,7 +502,7 @@ fn proper_withdraw_phase3() {
     // fast forward to phase 2
     env.block.time = env.block.time.plus_seconds(101);
 
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "alice0000".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "alice0000".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -410,7 +515,7 @@ fn proper_withdraw_phase3() {
     );
 
     // try to withdraw more than withdrawable
-    let err = withdraw(
+    let err = do_withdraw(
         deps.as_mut(),
         env.clone(),
         alice_info.clone(),
@@ -425,7 +530,7 @@ fn proper_withdraw_phase3() {
     );
 
     // valid withdraw
-    let res = withdraw(
+    let res = do_withdraw(
         deps.as_mut(),
         env.clone(),
         alice_info.clone(),
@@ -448,7 +553,7 @@ fn proper_withdraw_phase3() {
     };
 
     // try to withdraw again, expect error
-    let err = withdraw(
+    let err = do_withdraw(
         deps.as_mut(),
         env.clone(),
         alice_info.clone(),
@@ -464,7 +569,7 @@ fn proper_withdraw_phase3() {
 
     // fast forward 6 hours
     env.block.time = env.block.time.plus_seconds(SECONDS_PER_HOUR * 6);
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "bob0000".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "bob0000".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -476,7 +581,7 @@ fn proper_withdraw_phase3() {
         }
     );
     // valid withdraw all remaining
-    let res = withdraw(deps.as_mut(), env.clone(), bob_info.clone(), None).unwrap();
+    let res = do_withdraw(deps.as_mut(), env.clone(), bob_info.clone(), None).unwrap();
     let msg = &res.messages[0].msg;
     match msg {
         CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
@@ -492,7 +597,7 @@ fn proper_withdraw_phase3() {
         _ => panic!("Unexpected message: {:?}", msg),
     };
 
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "bob0000".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "bob0000".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -506,21 +611,21 @@ fn proper_withdraw_phase3() {
 
     // last slot of phase 2
     env.block.time = env.block.time.plus_seconds(SECONDS_PER_HOUR * 17 + 3598);
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "cindy0000".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "cindy0000".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
             deposit: Uint128::from(100000000u128),
             total_deposit: Uint128::from(224000000u128),
             withdrawable_amount: Uint128::from(4166666u128), // 100000000 * 1 / 24
-            tokens_to_claim: Uint128::from(446428u128), // 100000000 / 224000000 * 1000000
+            tokens_to_claim: Uint128::from(446428u128),      // 100000000 / 224000000 * 1000000
             can_claim: false,
         }
     );
 
     // after phase 2
     env.block.time = env.block.time.plus_seconds(1);
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "cindy0000".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "cindy0000".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -544,10 +649,10 @@ fn proper_withdraw_tokens1() {
 
     // successful deposit
     info.funds = vec![Coin::new(1_000, "uusd")];
-    let res = deposit(deps.as_mut(), env.clone(), info.clone());
+    let res = do_deposit(deps.as_mut(), env.clone(), info.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
-    let err = withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
+    let err = do_withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
     assert_eq!(
         err,
         ContractError::InvalidWithdrawTokens {
@@ -555,11 +660,21 @@ fn proper_withdraw_tokens1() {
         }
     );
 
+    // invalid release - prior to phase 2 end
+    let owner_info = mock_info("owner0001", &[]);
+    let err = do_release_tokens(deps.as_mut(), env.clone(), owner_info.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidReleaseTokens {
+            reason: "cannot release tokens yet".to_string()
+        }
+    );
+
     // fast forward past phase 2
     env.block.time = env.block.time.plus_seconds(100 + SECONDS_PER_HOUR);
 
     // tokens have not yet been released, so should still return error
-    let err = withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
+    let err = do_withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
     assert_eq!(
         err,
         ContractError::InvalidWithdrawTokens {
@@ -568,15 +683,14 @@ fn proper_withdraw_tokens1() {
     );
 
     // admin executes release tokens --  unauthorized attempt
-    let err = release_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
+    let err = do_release_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
     assert_eq!(err, ContractError::Unauthorized {});
 
     // valid attempt
-    let owner_info = mock_info("owner0001", &[]);
-    release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
+    release_tokens(deps.as_mut(), env.clone(), owner_info.clone()).unwrap();
 
     // now users can withdraw tokens
-    let res = withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap();
+    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
@@ -598,6 +712,29 @@ fn proper_withdraw_tokens1() {
         }
         _ => panic!("Unexpected message: {:?}", msg),
     };
+
+    let config_response: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+    assert!(config_response.tokens_released);
+
+    // invalid withdraw - user hasn't deposited anything
+    let info_no_deposit_user = mock_info("addr0002", &[]);
+    let err = do_withdraw_tokens(deps.as_mut(), env.clone(), info_no_deposit_user).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidWithdrawTokens {
+            reason: "deposit information not found".to_string()
+        }
+    );
+
+    // invalid release - already released
+    let err = do_release_tokens(deps.as_mut(), env.clone(), owner_info.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidReleaseTokens {
+            reason: "tokens are already released".to_string()
+        }
+    );
 }
 
 #[test]
@@ -612,11 +749,11 @@ fn proper_withdraw_tokens2() {
 
     // successful deposit
     info1.funds = vec![Coin::new(1_000, "uusd")];
-    let res = deposit(deps.as_mut(), env.clone(), info1.clone());
+    let res = do_deposit(deps.as_mut(), env.clone(), info1.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
     info2.funds = vec![Coin::new(5_000, "uusd")];
-    let res = deposit(deps.as_mut(), env.clone(), info2.clone());
+    let res = do_deposit(deps.as_mut(), env.clone(), info2.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
     // fast forward past phase 2
@@ -627,7 +764,7 @@ fn proper_withdraw_tokens2() {
     release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
 
     // addr0001 gets 1M * 1/6
-    let res = withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap();
+    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
@@ -651,7 +788,7 @@ fn proper_withdraw_tokens2() {
     };
 
     // addr0001 try to withdraw again, expect error
-    let err = withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap_err();
+    let err = do_withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap_err();
     assert_eq!(
         err,
         ContractError::InvalidWithdrawTokens {
@@ -660,7 +797,7 @@ fn proper_withdraw_tokens2() {
     );
 
     // addr0002 gets 1M * 5/6
-    let res = withdraw_tokens(deps.as_mut(), env.clone(), info2.clone()).unwrap();
+    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info2.clone()).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
@@ -685,6 +822,65 @@ fn proper_withdraw_tokens2() {
 }
 
 #[test]
+fn test_no_tokens_for_withdraw() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+    post_init(&mut deps);
+
+    let mut info = mock_info("addr0001", &[]);
+    let mut info2 = mock_info("addr0002", &[]);
+    let mut env = mock_env();
+
+    // successful deposit
+    info.funds = vec![Coin::new(10_000_000, "uusd")];
+    let res = do_deposit(deps.as_mut(), env.clone(), info.clone());
+    assert_eq!(res.unwrap().messages.len(), 0);
+
+    info2.funds = vec![Coin::new(1, "uusd")];
+    let res = do_deposit(deps.as_mut(), env.clone(), info2.clone());
+    assert_eq!(res.unwrap().messages.len(), 0);
+
+    // fast forward past phase 2
+    env.block.time = env.block.time.plus_seconds(100 + SECONDS_PER_HOUR);
+
+    // release tokens
+    let owner_info = mock_info("owner0001", &[]);
+    release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
+
+    // now users can withdraw tokens
+    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap();
+    assert_eq!(res.messages.len(), 1);
+    let msg = &res.messages[0].msg;
+    match msg {
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr,
+            msg,
+            funds,
+        }) => {
+            assert_eq!(contract_addr, &"prism0001".to_string());
+            assert_eq!(
+                msg,
+                &to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: "addr0001".to_string(),
+                    amount: Uint128::from(999_999u64),
+                })
+                .unwrap(),
+            );
+            assert_eq!(funds, &[])
+        }
+        _ => panic!("Unexpected message: {:?}", msg),
+    };
+
+    let err = do_withdraw_tokens(deps.as_mut(), env.clone(), info2.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::InvalidWithdrawTokens {
+            reason: "no tokens available for withdraw".to_string()
+        }
+    );
+}
+
+#[test]
 fn proper_admin_withdraw() {
     let mut deps = mock_dependencies(&[]);
     deps.querier.with_tax(
@@ -700,11 +896,11 @@ fn proper_admin_withdraw() {
 
     // successful deposits -- total 6,000 uusd
     info1.funds = vec![Coin::new(1_000, "uusd")];
-    let res = deposit(deps.as_mut(), env.clone(), info1.clone());
+    let res = do_deposit(deps.as_mut(), env.clone(), info1.clone());
     assert_eq!(res.unwrap().messages.len(), 0);
 
     info2.funds = vec![Coin::new(5_000, "uusd")];
-    let res = deposit(deps.as_mut(), env.clone(), info2);
+    let res = do_deposit(deps.as_mut(), env.clone(), info2);
     assert_eq!(res.unwrap().messages.len(), 0);
 
     // update contract balance after deposits
@@ -713,7 +909,7 @@ fn proper_admin_withdraw() {
 
     // admin tries to withdraw before phase 3, expect error
     let owner_info = mock_info("owner0001", &[]);
-    let err = admin_withdraw(deps.as_mut(), env.clone(), owner_info.clone()).unwrap_err();
+    let err = do_admin_withdraw(deps.as_mut(), env.clone(), owner_info.clone()).unwrap_err();
     assert_eq!(
         err,
         ContractError::InvalidAdminWithdraw {
@@ -725,11 +921,11 @@ fn proper_admin_withdraw() {
     env.block.time = env.block.time.plus_seconds(100 + SECONDS_PER_HOUR);
 
     // now admin can withdraw uusd -- unauthorized attempt
-    let err = admin_withdraw(deps.as_mut(), env.clone(), info1).unwrap_err();
+    let err = do_admin_withdraw(deps.as_mut(), env.clone(), info1).unwrap_err();
     assert_eq!(err, ContractError::Unauthorized {});
 
     // valid attempt
-    let res = admin_withdraw(deps.as_mut(), env.clone(), owner_info.clone()).unwrap();
+    let res = do_admin_withdraw(deps.as_mut(), env.clone(), owner_info.clone()).unwrap();
     assert_eq!(
         res.attributes,
         vec![
@@ -750,7 +946,7 @@ fn proper_admin_withdraw() {
     );
 
     // check that users can not claim yet, even after withdraw admin
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -765,7 +961,7 @@ fn proper_admin_withdraw() {
     // admin releases tokens, now users can claim
     release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
 
-    let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
