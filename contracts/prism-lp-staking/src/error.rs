@@ -23,4 +23,7 @@ pub enum ContractError {
 
     #[error("Invalid distribution schedule")]
     InvalidDistributionSchedule {},
+
+    #[error("Duplicate staking token")]
+    DuplicateStakingToken {},
 }

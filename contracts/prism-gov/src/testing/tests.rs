@@ -1221,10 +1221,7 @@ fn end_poll_quorum_rejected_noting_staked() {
 
     deps.querier.with_token_balances(&[(
         &VOTING_TOKEN.to_string(),
-        &[(
-            &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::new(1000000 as u128),
-        )],
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::new(1000000u128))],
     )]);
 
     let execute_res = execute(deps.as_mut(), env, creator_info, msg).unwrap();
@@ -3000,7 +2997,7 @@ fn mint_xprism() {
     ]);
 
     // now exchange rate is different
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.attributes,
         vec![attr("action", "mint_xprism"), attr("mint_amount", "999900")] // 1000000 * 1000000 / 1000100

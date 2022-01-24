@@ -19,8 +19,11 @@
       "type": "string"
     },
     "AssetInfo": {
+      "title": "Description",
+      "description": "This enum describes available types of Token. ## Examples ``` # use cosmwasm_std::Addr; # use prismswap::asset::AssetInfo::{NativeToken, Token}; Token { contract_addr: Addr::unchecked(\"terra...\") }; NativeToken { denom: String::from(\"uluna\") }; ```",
       "anyOf": [
         {
+          "description": "Token",
           "type": "object",
           "required": [
             "token"
@@ -41,6 +44,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Native token",
           "type": "object",
           "required": [
             "native_token"

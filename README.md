@@ -8,7 +8,6 @@ This repository contains the source code for the first version of Prism Protocol
 | ------------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------- |
 | [`gov`](./contracts/prism-gov)                                     | [doc]()   | Governance contract for Prism Protocol, manages xPRISM minting and rewards                  |
 | [`airdrop-registry`](./contracts/prism-airdrop-registry)           | [doc]()   | Manages message fabricators for airdrop claims                                              |
-| [`astro-generator-proxy`](./contracts/prism-astro-generator-proxy) | [doc]()   | Interface to lp-staking fro Astroport generator                                             |
 | [`collector`](./contracts/prism-collector)                         | [doc]()   | Gathers protocol fees and distributes to xPRISM holders, manages reward swap logic          |
 | [`fair-launch`](./contracts/prism-fair-launch)                     | [doc]()   | Pool to fairly distribute PRISM tokens at launch                                            |
 | [`launch-pool`](./contracts/prism-launch-pool)                    | [doc]()   | yLuna staking pool event                                                                    |

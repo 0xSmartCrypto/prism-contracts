@@ -6,8 +6,8 @@
     "astroport_factory",
     "base_denom",
     "distribution_contract",
-    "prism_base_pair",
-    "prism_token"
+    "prism_token",
+    "prismswap_factory"
   ],
   "properties": {
     "astroport_factory": {
@@ -19,10 +19,10 @@
     "distribution_contract": {
       "type": "string"
     },
-    "prism_base_pair": {
+    "prism_token": {
       "type": "string"
     },
-    "prism_token": {
+    "prismswap_factory": {
       "type": "string"
     }
   }

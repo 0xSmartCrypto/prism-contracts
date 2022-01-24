@@ -5,6 +5,7 @@ use cosmwasm_std::{
     Env, MessageInfo, QueryRequest, Response, StakingMsg, StdError, StdResult, SubMsg, Uint128,
     WasmMsg, WasmQuery,
 };
+use cw2::set_contract_version;
 
 use crate::config::{
     execute_deregister_validator, execute_register_validator, execute_update_config,
@@ -19,8 +20,6 @@ use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 
 use crate::bond::{execute_bond, execute_bond_split};
 use crate::refract::{merge, split};
-use astroport::asset::{Asset, AssetInfo};
-use astroport::querier::query_token_balance;
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, TokenInfoResponse};
 use prism_protocol::vault::{
     AllHistoryResponse, Config, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
@@ -28,6 +27,11 @@ use prism_protocol::vault::{
     WhitelistedValidatorsResponse, WithdrawableUnbondedResponse,
 };
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
+use prismswap::asset::{Asset, AssetInfo};
+use prismswap::querier::query_token_balance;
+
+const CONTRACT_NAME: &str = "prism-vault";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -36,6 +40,8 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     let sender = info.sender.clone();
 
     let payment = info
@@ -222,9 +228,9 @@ pub fn execute_update_global(
         .yluna_staking
         .expect("the reward contract must have been registered");
 
-    if airdrop_hooks.is_some() {
+    if let Some(hooks) = airdrop_hooks {
         let registry_addr = config.airdrop_registry_contract.unwrap();
-        for msg in airdrop_hooks.unwrap() {
+        for msg in hooks {
             messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: registry_addr.clone(),
                 msg,
@@ -239,7 +245,7 @@ pub fn execute_update_global(
 
     // Swap to $UST, then into $PRISM
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: yluna_staking_addr.clone(),
+        contract_addr: yluna_staking_addr,
         msg: to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap(),
         funds: vec![],
     })));
@@ -275,14 +281,12 @@ fn withdraw_all_rewards(deps: &DepsMut, delegator: Addr) -> StdResult<Vec<SubMsg
 
 /// Check whether slashing has happened
 /// This is used for checking slashing while bonding or unbonding
-pub fn slashing(deps: &mut DepsMut, env: Env) -> StdResult<()> {
-    //read params
-    let params = PARAMETERS.load(deps.storage)?;
-    let coin_denom = params.underlying_coin_denom;
-
-    // Check the amount that contract thinks is bonded
-    let state_total_bonded = STATE.load(deps.storage)?.total_bond_amount;
-
+pub fn slashing(
+    deps: &mut DepsMut,
+    env: Env,
+    state: &mut State,
+    params: &Parameters,
+) -> StdResult<()> {
     // Check the actual bonded amount
     let delegations = deps.querier.query_all_delegations(env.contract.address)?;
     if delegations.is_empty() {
@@ -290,22 +294,19 @@ pub fn slashing(deps: &mut DepsMut, env: Env) -> StdResult<()> {
     } else {
         let mut actual_total_bonded = Uint128::zero();
         for delegation in delegations {
-            if delegation.amount.denom == coin_denom {
+            if delegation.amount.denom == params.underlying_coin_denom {
                 actual_total_bonded += delegation.amount.amount
             }
         }
 
-        // Need total issued for updating the exchange rate
-        let total_issued = query_total_issued(deps.as_ref())?;
-        let current_requested_fee = CURRENT_BATCH.load(deps.storage)?.requested_with_fee;
-
         // Slashing happens if the expected amount is less than stored amount
-        if state_total_bonded.u128() > actual_total_bonded.u128() {
-            STATE.update(deps.storage, |mut state| -> StdResult<State> {
-                state.total_bond_amount = actual_total_bonded;
-                state.update_exchange_rate(total_issued, current_requested_fee);
-                Ok(state)
-            })?;
+        if state.total_bond_amount.u128() > actual_total_bonded.u128() {
+            // Need total issued for updating the exchange rate
+            let total_issued = query_total_issued(deps.as_ref())?;
+            let current_requested_fee = CURRENT_BATCH.load(deps.storage)?.requested_with_fee;
+            state.total_bond_amount = actual_total_bonded;
+            state.update_exchange_rate(total_issued, current_requested_fee);
+            STATE.save(deps.storage, state)?;
         }
 
         Ok(())
@@ -325,7 +326,7 @@ pub fn claim_airdrop(
 
     let airdrop_reg = conf.airdrop_registry_contract.unwrap();
 
-    if info.sender.to_string() != airdrop_reg {
+    if info.sender != airdrop_reg {
         return Err(StdError::generic_err(format!(
             "Sender must be {}",
             airdrop_reg
@@ -384,7 +385,7 @@ pub fn deposit_airdrop_rewards(
             funds: vec![],
         }),
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: yluna_staking_addr.clone(),
+            contract_addr: yluna_staking_addr,
             msg: to_binary(&StakingExecuteMsg::DepositRewards {
                 assets: vec![airdrop_reward],
             })?,
@@ -396,9 +397,10 @@ pub fn deposit_airdrop_rewards(
 /// Handler for tracking slashing
 pub fn execute_slashing(mut deps: DepsMut, env: Env) -> StdResult<Response> {
     // call slashing
-    slashing(&mut deps, env)?;
+    let params = PARAMETERS.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
+    slashing(&mut deps, env, &mut state, &params)?;
     // read state for log
-    let state = STATE.load(deps.storage)?;
     Ok(Response::new().add_attributes(vec![
         attr("action", "check_slashing"),
         attr("new_exchange_rate", state.exchange_rate.to_string()),
@@ -493,16 +495,14 @@ fn query_params(deps: Deps) -> StdResult<Parameters> {
 }
 
 pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
-    let cluna_address = CONFIG
-        .load(deps.storage)?
+    let cfg = CONFIG.load(deps.storage)?;
+    let cluna_address = cfg
         .cluna_contract
         .expect("cluna contract must have been registered");
-    let pluna_address = CONFIG
-        .load(deps.storage)?
+    let pluna_address = cfg
         .pluna_contract
         .expect("pluna contract must have been registered");
-    let yluna_address = CONFIG
-        .load(deps.storage)?
+    let yluna_address = cfg
         .yluna_contract
         .expect("yluna contract must have been registered");
 

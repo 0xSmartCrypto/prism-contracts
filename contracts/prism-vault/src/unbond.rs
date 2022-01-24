@@ -30,24 +30,23 @@ pub(crate) fn execute_unbond(
     let mut current_batch = CURRENT_BATCH.load(deps.storage)?;
 
     // Check slashing, update state, and calculate the new exchange rate.
-    slashing(&mut deps, env.clone())?;
-
     let mut state = STATE.load(deps.storage)?;
+    slashing(&mut deps, env.clone(), &mut state, &params)?;
 
     let mut total_supply = query_total_issued(deps.as_ref()).unwrap_or_default();
 
     // Collect all the requests within a epoch period
     // Apply peg recovery fee
-    let amount_with_fee: Uint128;
-    if state.exchange_rate < threshold {
+    let amount_with_fee = if state.exchange_rate < threshold {
         let max_peg_fee = amount * recovery_fee;
         let required_peg_fee = ((total_supply + current_batch.requested_with_fee)
             .checked_sub(state.total_bond_amount))?;
         let peg_fee = Uint128::min(max_peg_fee, required_peg_fee);
-        amount_with_fee = (amount.checked_sub(peg_fee))?;
+        (amount.checked_sub(peg_fee))?
     } else {
-        amount_with_fee = amount;
-    }
+        amount
+    };
+
     current_batch.requested_with_fee += amount_with_fee;
 
     let sender_addr = deps.api.addr_validate(&sender)?;
@@ -133,7 +132,7 @@ pub(crate) fn execute_unbond(
 
     let burn_msg = Cw20ExecuteMsg::Burn { amount };
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: cluna_contract.to_string(),
+        contract_addr: cluna_contract,
         msg: to_binary(&burn_msg)?,
         funds: vec![],
     })));

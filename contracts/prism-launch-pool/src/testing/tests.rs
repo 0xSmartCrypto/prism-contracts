@@ -2,7 +2,6 @@ use crate::{
     contract::{execute, instantiate, query},
     error::ContractError,
 };
-use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::{
     from_binary,
     testing::{mock_env, mock_info},
@@ -17,6 +16,7 @@ use prism_protocol::launch_pool::{
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg,
 };
+use prismswap::asset::{Asset, AssetInfo};
 
 #[test]
 fn proper_initialization() {
@@ -144,7 +144,7 @@ fn withdraw_rewards() {
 
     assert_eq!(
         from_binary::<DistributionStatusResponse>(
-            &query(deps.as_ref(), env.clone(), QueryMsg::DistributionStatus {},).unwrap(),
+            &query(deps.as_ref(), env, QueryMsg::DistributionStatus {},).unwrap(),
         )
         .unwrap(),
         DistributionStatusResponse {
@@ -217,7 +217,7 @@ fn withdraw_rewards_with_no_bond() {
         msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
     let info = mock_info("ylunatoken0000", &[]);
-    execute(deps.as_mut(), env.clone(), info, msg.clone()).unwrap();
+    execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // withdraw immediately, we still get all the pending rewards
     let user_info = mock_info("alice0000", &[]);
@@ -307,7 +307,7 @@ fn bond() {
 
     // correct token
     let info = mock_info("ylunatoken0000", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -382,14 +382,14 @@ fn unbond() {
     });
 
     let info = mock_info("ylunatoken0000", &[]);
-    execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // try to unbond from a different sender with nothing bonded
     let info = mock_info("addr0001", &[]);
     let msg = ExecuteMsg::Unbond {
         amount: Some(Uint128::from(101u128)),
     };
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(
         res,
         ContractError::InvalidUnbond {
@@ -403,7 +403,7 @@ fn unbond() {
     let msg = ExecuteMsg::Unbond {
         amount: Some(unbond_amt),
     };
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(
         res,
         ContractError::InvalidUnbond {
@@ -417,7 +417,7 @@ fn unbond() {
     let msg = ExecuteMsg::Unbond {
         amount: Some(unbond_amt),
     };
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     assert_eq!(
         res.messages,
@@ -459,7 +459,7 @@ fn unbond() {
     let remaining_amt = Uint128::from(75u128);
     let info = mock_info("addr0000", &[]);
     let msg = ExecuteMsg::Unbond { amount: None };
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     assert_eq!(
         res.messages,
@@ -620,7 +620,7 @@ fn claim_withdrawn_rewards() {
         from_binary::<VestingStatusResponse>(
             &query(
                 deps.as_ref(),
-                env.clone(),
+                env,
                 QueryMsg::VestingStatus {
                     staker_addr: "alice0000".to_string(),
                 },
@@ -741,7 +741,7 @@ fn admin_withdraw_rewards() {
 
     // correct address
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.messages,
         vec![

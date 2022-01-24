@@ -1,4 +1,4 @@
-pub mod airdrop;
+pub mod airdrop_registry;
 pub mod collector;
 pub mod common;
 pub mod de;

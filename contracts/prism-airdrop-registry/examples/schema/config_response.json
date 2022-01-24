@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ConfigResponse",
+  "type": "object",
+  "required": [
+    "airdrop_tokens",
+    "owner",
+    "vault_contract"
+  ],
+  "properties": {
+    "airdrop_tokens": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "owner": {
+      "type": "string"
+    },
+    "vault_contract": {
+      "type": "string"
+    }
+  }
+}

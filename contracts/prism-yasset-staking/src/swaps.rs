@@ -1,11 +1,11 @@
 use crate::state::CONFIG;
-use astroport::asset::{Asset, AssetInfo};
-use astroport::querier::{query_balance, query_token_balance};
 use cosmwasm_std::{
-    attr, to_binary, Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
+    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
 };
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::ExecuteMsg;
+use prismswap::asset::{Asset, AssetInfo};
+use prismswap::querier::{query_balance, query_token_balance};
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
 
 pub const REWARD_DENOM: &str = "uluna";
@@ -27,14 +27,14 @@ pub fn process_delegator_rewards(
     let denoms: Vec<String> = balances.iter().map(|item| item.denom.clone()).collect();
 
     let exchange_rates = query_exchange_rates(&deps, reward_denom.clone(), denoms)?;
-    let known_denoms: Vec<String> = exchange_rates
-        .exchange_rates
-        .iter()
-        .map(|item| item.quote_denom.clone())
-        .collect();
 
     for coin in balances {
-        if coin.denom == reward_denom.clone() || !known_denoms.contains(&coin.denom) {
+        if coin.denom == reward_denom.clone()
+            || !exchange_rates
+                .exchange_rates
+                .iter()
+                .any(|x| x.quote_denom == coin.denom)
+        {
             continue;
         }
 
@@ -89,12 +89,12 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
     // received pluna amount should always be same as yluna amount
     let yluna_amt = query_token_balance(
         &deps.querier,
-        Addr::unchecked(cfg.yluna_token.clone()),
+        cfg.yluna_token.clone(),
         env.contract.address.clone(),
     )?;
     let pluna_amt = query_token_balance(
         &deps.querier,
-        Addr::unchecked(cfg.pluna_token.clone()),
+        cfg.pluna_token.clone(),
         env.contract.address.clone(),
     )?;
 
@@ -107,7 +107,7 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
                         info: AssetInfo::Token {
                             contract_addr: cfg.yluna_token,
                         },
-                        amount: yluna_amt.clone(),
+                        amount: yluna_amt,
                     },
                     Asset {
                         info: AssetInfo::Token {

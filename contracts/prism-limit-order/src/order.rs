@@ -4,12 +4,12 @@ use cosmwasm_std::{
 };
 use cw20::Cw20ExecuteMsg;
 
-use astroport::asset::{Asset, AssetInfo};
-use astroport::pair::{
+use prismswap::asset::{Asset, AssetInfo};
+use prismswap::pair::{
     Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg, ReverseSimulationResponse,
     SimulationResponse,
 };
-use astroport::querier::{reverse_simulate, simulate};
+use prismswap::querier::{reverse_simulate, simulate};
 
 use crate::state::{
     generate_pair_key, remove_order, store_new_order, Config, OrderInfo, CONFIG, ORDERS, PAIRS,
@@ -41,8 +41,7 @@ pub fn submit_order(
                 };
                 let inter_pair_key =
                     generate_pair_key(&[offer_asset.info.clone(), prism_asset_info.clone()]);
-                let ask_pair_key =
-                    generate_pair_key(&[prism_asset_info.clone(), ask_asset.info.clone()]);
+                let ask_pair_key = generate_pair_key(&[prism_asset_info, ask_asset.info.clone()]);
 
                 let inter_pair: StdResult<Addr> = PAIRS.load(deps.storage, &inter_pair_key);
                 let ask_pair: StdResult<Addr> = PAIRS.load(deps.storage, &ask_pair_key);
@@ -131,7 +130,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
 
     // if inter pair exists, we first swap the offer asset for $PRISM
     let offer_asset = if let Some(inter_pair_addr) = &order.inter_pair_addr {
-        messages.push(create_astro_swap_msg(&offer_asset, &inter_pair_addr)?);
+        messages.push(create_swap_msg(&offer_asset, inter_pair_addr)?);
 
         let simul_res: SimulationResponse =
             simulate(&deps.querier, inter_pair_addr.clone(), &offer_asset)?;
@@ -176,7 +175,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                     reverse_simulate(&deps.querier, &config.prism_ust_pair, &min_fee_asset)?;
 
                 (
-                    offer_asset.clone(),
+                    offer_asset,
                     Asset {
                         info: prism_asset_info.clone(),
                         amount: simul_res
@@ -187,7 +186,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                 )
             } else {
                 (
-                    offer_asset.clone(),
+                    offer_asset,
                     Asset {
                         info: prism_asset_info.clone(),
                         amount: simul_res
@@ -261,7 +260,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
     }
 
     // create swap message
-    messages.push(create_astro_swap_msg(&offer_asset, &order.pair_addr)?);
+    messages.push(create_swap_msg(&offer_asset, &order.pair_addr)?);
 
     // send asset to bidder
     messages.push(
@@ -290,7 +289,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
         messages.push(
             executor_fee_asset
                 .clone()
-                .into_msg(&deps.querier, info.sender.clone())?,
+                .into_msg(&deps.querier, info.sender)?,
         );
     }
 
@@ -319,7 +318,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
     ]))
 }
 
-fn create_astro_swap_msg(offer_asset: &Asset, pair_addr: &Addr) -> StdResult<CosmosMsg> {
+fn create_swap_msg(offer_asset: &Asset, pair_addr: &Addr) -> StdResult<CosmosMsg> {
     let msg: CosmosMsg = match &offer_asset.info {
         AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: contract_addr.to_string(),

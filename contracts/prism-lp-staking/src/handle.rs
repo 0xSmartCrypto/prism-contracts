@@ -126,7 +126,7 @@ pub fn unbond(
             contract_addr: staking_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: info.sender.to_string(),
-                amount: amount_to_unbond.into(),
+                amount: amount_to_unbond,
             })?,
             funds: vec![],
         })])
@@ -211,7 +211,7 @@ pub fn claim_rewards(
             contract_addr: config.prism_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: info.sender.to_string(),
-                amount: claim_amount.into(),
+                amount: claim_amount,
             })?,
             funds: vec![],
         }));
@@ -230,8 +230,8 @@ fn increase_bond_amount(pool: &mut PoolInfo, staker_info: &mut RewardInfo, amoun
 }
 
 fn decrease_bond_amount(pool: &mut PoolInfo, staker_info: &mut RewardInfo, amount: Uint128) {
-    pool.total_bond_amount = pool.total_bond_amount - amount;
-    staker_info.bond_amount = staker_info.bond_amount - amount;
+    pool.total_bond_amount -= amount;
+    staker_info.bond_amount -= amount;
 }
 
 // compute distributed rewards for the pool and update global reward index

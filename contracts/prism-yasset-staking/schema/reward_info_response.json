@@ -37,6 +37,8 @@
       "type": "string"
     },
     "Asset": {
+      "title": "Description",
+      "description": "This enum describes asset.",
       "type": "object",
       "required": [
         "amount",
@@ -44,16 +46,29 @@
       ],
       "properties": {
         "amount": {
-          "$ref": "#/definitions/Uint128"
+          "description": "the amount of an asset",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
         },
         "info": {
-          "$ref": "#/definitions/AssetInfo"
+          "description": "the available type of asset from [`AssetInfo`]",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AssetInfo"
+            }
+          ]
         }
       }
     },
     "AssetInfo": {
+      "title": "Description",
+      "description": "This enum describes available types of Token. ## Examples ``` # use cosmwasm_std::Addr; # use prismswap::asset::AssetInfo::{NativeToken, Token}; Token { contract_addr: Addr::unchecked(\"terra...\") }; NativeToken { denom: String::from(\"uluna\") }; ```",
       "anyOf": [
         {
+          "description": "Token",
           "type": "object",
           "required": [
             "token"
@@ -74,6 +89,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Native token",
           "type": "object",
           "required": [
             "native_token"

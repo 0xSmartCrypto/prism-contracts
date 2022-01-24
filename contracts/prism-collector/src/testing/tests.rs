@@ -1,6 +1,4 @@
 use crate::contract::{execute, instantiate, query_config};
-use astroport::asset::{Asset, AssetInfo};
-use astroport::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     attr, to_binary, Addr, Coin, CosmosMsg, Decimal, StdError, SubMsg, Uint128, WasmMsg,
@@ -8,6 +6,8 @@ use cosmwasm_std::{
 use cw20::Cw20ExecuteMsg;
 use prism_common::testing::mock_querier::mock_dependencies;
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg};
+use prismswap::asset::{Asset, AssetInfo};
+use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 
 #[test]
 fn proper_initialization() {
@@ -15,9 +15,9 @@ fn proper_initialization() {
 
     let msg = InstantiateMsg {
         astroport_factory: "astrofactory0000".to_string(),
+        prismswap_factory: "prismfactory0000".to_string(),
         distribution_contract: "gov0000".to_string(),
         prism_token: "prism0000".to_string(),
-        prism_base_pair: "prismuusdpair0000".to_string(),
         base_denom: "uusd".to_string(),
     };
 
@@ -30,7 +30,7 @@ fn proper_initialization() {
     let config: ConfigResponse = query_config(deps.as_ref()).unwrap();
     assert_eq!("astrofactory0000", config.astroport_factory.as_str());
     assert_eq!("gov0000", config.distribution_contract.as_str());
-    assert_eq!("prismuusdpair0000", config.prism_base_pair.as_str());
+    assert_eq!("prismfactory0000", config.prismswap_factory.as_str());
     assert_eq!("prism0000", config.prism_token.as_str());
     assert_eq!("uusd", config.base_denom.as_str());
 }
@@ -52,9 +52,9 @@ fn test_convert_and_send() {
 
     let msg = InstantiateMsg {
         astroport_factory: "astrofactory0000".to_string(),
+        prismswap_factory: "prismfactory0000".to_string(),
         distribution_contract: "gov0000".to_string(),
         prism_token: "prism0000".to_string(),
-        prism_base_pair: "prismuusdpair0000".to_string(),
         base_denom: "uusd".to_string(),
     };
 
@@ -170,9 +170,9 @@ fn test_distribute() {
 
     let msg = InstantiateMsg {
         astroport_factory: "astrofactory0000".to_string(),
+        prismswap_factory: "prismfactory0000".to_string(),
         distribution_contract: "gov0000".to_string(),
         prism_token: "prism0000".to_string(),
-        prism_base_pair: "prismuusdpair0000".to_string(),
         base_denom: "uusd".to_string(),
     };
 
@@ -233,6 +233,10 @@ fn test_base_swap_hook() {
         denom: "uusd".to_string(),
         amount: Uint128::from(11134u128),
     }]);
+    deps.querier.with_pairs(&[(
+        &"uusdprism0000".to_string(),
+        &"ustPrismPair0000".to_string(),
+    )]);
     deps.querier.with_tax(
         Decimal::percent(1),
         &[(&"uusd".to_string(), &Uint128::new(1000000u128))],
@@ -240,9 +244,9 @@ fn test_base_swap_hook() {
 
     let msg = InstantiateMsg {
         astroport_factory: "astrofactory0000".to_string(),
+        prismswap_factory: "prismfactory0000".to_string(),
         distribution_contract: "gov0000".to_string(),
         prism_token: "prism0000".to_string(),
-        prism_base_pair: "prismuusdpair0000".to_string(),
         base_denom: "uusd".to_string(),
     };
 
@@ -263,7 +267,7 @@ fn test_base_swap_hook() {
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "prismuusdpair0000".to_string(),
+            contract_addr: "ustPrismPair0000".to_string(),
             msg: to_binary(&PairExecuteMsg::Swap {
                 offer_asset: Asset {
                     amount: Uint128::from(11023u128), // 11134 - 1% tax

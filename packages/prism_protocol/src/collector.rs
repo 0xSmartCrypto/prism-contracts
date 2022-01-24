@@ -1,4 +1,4 @@
-use astroport::asset::Asset;
+use prismswap::asset::Asset;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 pub struct InstantiateMsg {
     pub distribution_contract: String, // collected rewards receiver
     pub astroport_factory: String,
+    pub prismswap_factory: String,
     pub prism_token: String,
-    pub prism_base_pair: String, // astro pair $PRISM<>base_denom
     pub base_denom: String,
 }
 
@@ -40,7 +40,7 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub distribution_contract: String, // collected rewards receiver
     pub astroport_factory: String,
+    pub prismswap_factory: String,
     pub prism_token: String,
-    pub prism_base_pair: String,
     pub base_denom: String,
 }

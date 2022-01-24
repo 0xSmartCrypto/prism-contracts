@@ -2,8 +2,8 @@ use cw_storage_plus::{Bound, Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::{Addr, Decimal, Order, StdResult, Storage, Uint128};
+use prismswap::asset::{Asset, AssetInfo};
 
 use prism_protocol::limit_order::{ConfigResponse, OrderBy, OrderResponse};
 

@@ -4,12 +4,11 @@ use crate::state::{
     PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST,
 };
 use crate::vest::{claim_withdrawn_rewards, withdraw_rewards};
-use astroport::asset::{Asset, AssetInfo};
-use astroport::querier::{query_balance, query_token_balance};
 use cosmwasm_std::{
     entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
+use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, VestingStatusResponse,
@@ -18,8 +17,13 @@ use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
     RewardAssetWhitelistResponse,
 };
+use prismswap::asset::{Asset, AssetInfo};
+use prismswap::querier::{query_balance, query_token_balance};
 use std::cmp::min;
 use std::convert::TryInto;
+
+const CONTRACT_NAME: &str = "prism-launch-pool";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -28,6 +32,8 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
@@ -76,7 +82,7 @@ pub fn receive_cw20(
             let cfg = CONFIG.load(deps.storage)?;
 
             // only yluna token contract can execute this message
-            if cfg.yluna_token != info.sender.to_string() {
+            if cfg.yluna_token != info.sender {
                 return Err(ContractError::Unauthorized {});
             }
 
@@ -162,7 +168,7 @@ pub fn admin_send_withdrawn_rewards(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    original_balances: &Vec<Asset>,
+    original_balances: &[Asset],
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     if info.sender.as_str() != env.contract.address.as_str() {
@@ -178,7 +184,7 @@ pub fn admin_send_withdrawn_rewards(
         };
 
         if !send_asset.amount.is_zero() {
-            messages.push(send_asset.into_msg(&deps.querier, Addr::unchecked(cfg.owner.clone()))?);
+            messages.push(send_asset.into_msg(&deps.querier, cfg.owner.clone())?);
         }
     }
 
@@ -188,11 +194,11 @@ pub fn admin_send_withdrawn_rewards(
 pub fn bond(
     deps: DepsMut,
     env: Env,
-    sender: &String,
+    sender: &str,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
     update_reward_index(deps.storage, &env)?;
-    pull_pending_rewards(deps.storage, &sender)?;
+    pull_pending_rewards(deps.storage, sender)?;
     let cfg = CONFIG.load(deps.storage)?;
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, sender.as_bytes())
@@ -276,11 +282,11 @@ pub fn unbond(
     ]))
 }
 
-pub fn _pull_pending_rewards(storage: &dyn Storage, address: &String) -> StdResult<RewardInfo> {
+pub fn _pull_pending_rewards(storage: &dyn Storage, address: &str) -> StdResult<RewardInfo> {
     let distribution_status = DISTRIBUTION_STATUS.load(storage)?;
     let bond_amount = BOND_AMOUNTS
         .load(storage, address.as_bytes())
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
     let mut reward_info = REWARD_INFO
         .load(storage, address.as_bytes())
         .unwrap_or(RewardInfo {
@@ -294,8 +300,8 @@ pub fn _pull_pending_rewards(storage: &dyn Storage, address: &String) -> StdResu
     Ok(reward_info)
 }
 
-pub fn pull_pending_rewards(storage: &mut dyn Storage, address: &String) -> StdResult<()> {
-    let reward_info = _pull_pending_rewards(storage, &address)?;
+pub fn pull_pending_rewards(storage: &mut dyn Storage, address: &str) -> StdResult<()> {
+    let reward_info = _pull_pending_rewards(storage, address)?;
     REWARD_INFO.save(storage, address.as_bytes(), &reward_info)
 }
 
@@ -326,7 +332,7 @@ pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<Distr
 }
 
 pub fn update_reward_index(storage: &mut dyn Storage, env: &Env) -> StdResult<()> {
-    let distribution_status = _update_reward_index(storage, &env)?;
+    let distribution_status = _update_reward_index(storage, env)?;
     DISTRIBUTION_STATUS.save(storage, &distribution_status)
 }
 
@@ -345,7 +351,7 @@ pub fn query_vesting_status(
 
     let mut can_withdraw = PENDING_WITHDRAW
         .load(deps.storage, staker_addr.as_bytes())
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
     let mut scheduled_vests: Vec<(u64, Uint128)> = vec![];
 
     for item in SCHEDULED_VEST.prefix(staker_addr.as_bytes()).range(

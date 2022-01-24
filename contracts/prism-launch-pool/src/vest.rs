@@ -1,22 +1,18 @@
 use crate::contract::{pull_pending_rewards, update_reward_index};
 use crate::error::ContractError;
 use crate::state::{CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
-use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage, Uint128};
+use prismswap::asset::{Asset, AssetInfo};
 use std::convert::TryInto;
 
 // seconds in a day, make time discrete per day
 pub const TIME_UNIT: u64 = 60 * 60 * 24;
 pub const REDEMPTION_TIME: u64 = TIME_UNIT * 21u64;
 
-pub fn update_vest(
-    storage: &mut dyn Storage,
-    current_time: u64,
-    address: &String,
-) -> StdResult<()> {
+pub fn update_vest(storage: &mut dyn Storage, current_time: u64, address: &str) -> StdResult<()> {
     let mut can_withdraw = PENDING_WITHDRAW
         .load(storage, address.as_bytes())
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
     let mut to_delete = vec![];
 
     for item in
@@ -51,11 +47,7 @@ pub fn withdraw_rewards(
     let to_withdraw = reward_info.pending_reward;
     reward_info.pending_reward = Uint128::zero();
     REWARD_INFO.save(deps.storage, info.sender.as_bytes(), &reward_info)?;
-    update_vest(
-        deps.storage,
-        env.block.time.seconds(),
-        &info.sender.to_string(),
-    )?;
+    update_vest(deps.storage, env.block.time.seconds(), info.sender.as_str())?;
 
     if !to_withdraw.is_zero() {
         let mut end_time = env.block.time.seconds() + REDEMPTION_TIME;
@@ -66,7 +58,7 @@ pub fn withdraw_rewards(
                 deps.storage,
                 (info.sender.as_bytes(), &end_time.to_be_bytes()),
             )
-            .unwrap_or(Uint128::zero());
+            .unwrap_or_else(|_| Uint128::zero());
         SCHEDULED_VEST.save(
             deps.storage,
             (info.sender.as_bytes(), &end_time.to_be_bytes()),
@@ -82,11 +74,7 @@ pub fn claim_withdrawn_rewards(
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
-    update_vest(
-        deps.storage,
-        env.block.time.seconds(),
-        &info.sender.to_string(),
-    )?;
+    update_vest(deps.storage, env.block.time.seconds(), info.sender.as_str())?;
     let amount = PENDING_WITHDRAW.load(deps.storage, info.sender.to_string().as_bytes())?;
     if amount.is_zero() {
         return Err(ContractError::InvalidClaimWithdrawnRewards {
@@ -101,7 +89,7 @@ pub fn claim_withdrawn_rewards(
     )?;
     let to_withdraw = Asset {
         info: AssetInfo::Token {
-            contract_addr: cfg.prism_token.clone(),
+            contract_addr: cfg.prism_token,
         },
         amount,
     };

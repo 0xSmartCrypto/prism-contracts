@@ -5,13 +5,13 @@ use crate::state::{
     Poll,
 };
 
-use astroport::querier::query_supply;
 use cosmwasm_std::{
     attr, to_binary, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, ReplyOn, Response, StdError,
     StdResult, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use prism_protocol::gov::{PollExecuteMsg, PollStatus, VoteOption, VoterInfo};
+use prismswap::querier::query_supply;
 
 const MIN_TITLE_LENGTH: usize = 4;
 const MAX_TITLE_LENGTH: usize = 64;

@@ -3,6 +3,7 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     from_binary, to_binary, Addr, Binary, CanonicalAddr, Deps, DepsMut, Env, MessageInfo, Response,
 };
+use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
 
 use crate::error::ContractError;
@@ -12,6 +13,9 @@ use crate::state::{Config, PoolInfo, CONFIG, LAST_DISTRIBUTED, POOLS};
 
 use prism_protocol::lp_staking::{Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
+const CONTRACT_NAME: &str = "prism-lp-staking";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -19,6 +23,8 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     // validate distribution schedule
     for schedule in msg.distribution_schedule.clone() {
         if schedule.1 <= schedule.0 {
@@ -26,15 +32,21 @@ pub fn instantiate(
         }
     }
 
+    let mut staking_tokens = msg.staking_tokens.clone();
+    staking_tokens.sort();
+    staking_tokens.dedup_by(|item1, item2| item1.0 == item2.0);
+    if staking_tokens.len() != msg.staking_tokens.len() {
+        return Err(ContractError::DuplicateStakingToken {});
+    }
+
     let config = Config {
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
         distribution_schedule: msg.distribution_schedule,
-        staking_tokens: msg
-            .staking_tokens
+        staking_tokens: staking_tokens
             .iter()
             .map(|item| (deps.api.addr_validate(&item.0).unwrap(), item.1))
             .collect(),
-        total_weight: msg.staking_tokens.iter().map(|item| item.1).sum(),
+        total_weight: staking_tokens.iter().map(|item| item.1).sum(),
     };
 
     for (staking_token, weight) in &config.staking_tokens {

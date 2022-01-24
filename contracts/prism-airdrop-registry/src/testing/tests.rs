@@ -4,7 +4,7 @@ use cosmwasm_std::{
     attr, from_binary, to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdError, SubMsg,
     Uint128, WasmMsg,
 };
-use prism_protocol::airdrop::{
+use prism_protocol::airdrop_registry::{
     AirdropInfo, AirdropInfoElem, AirdropInfoResponse, ClaimType, ConfigResponse, ExecuteMsg,
     InstantiateMsg, QueryMsg,
 };

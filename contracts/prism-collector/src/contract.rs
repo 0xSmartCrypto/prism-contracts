@@ -9,10 +9,14 @@ use cosmwasm_std::{
 use crate::state::{Config, CONFIG};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use astroport::asset::{Asset, AssetInfo, PairInfo};
-use astroport::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
-use astroport::querier::{query_balance, query_pair_info, query_token_balance};
+use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
+use prismswap::asset::{Asset, AssetInfo, PairInfo};
+use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
+use prismswap::querier::{query_balance, query_pair_info, query_token_balance};
+
+const CONTRACT_NAME: &str = "prism-collector";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -21,11 +25,13 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     let config = Config {
         distribution_contract: deps.api.addr_validate(&msg.distribution_contract)?,
         astroport_factory: deps.api.addr_validate(&msg.astroport_factory)?,
+        prismswap_factory: deps.api.addr_validate(&msg.prismswap_factory)?,
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
-        prism_base_pair: deps.api.addr_validate(&msg.prism_base_pair)?,
         base_denom: msg.base_denom,
     };
 
@@ -54,11 +60,15 @@ pub fn convert_and_send(
 ) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
-    let receiver: String = receiver.unwrap_or(info.sender.to_string());
+    let receiver: String = receiver.unwrap_or_else(|| info.sender.to_string());
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut need_hook: bool = false;
     for asset in assets {
+        if asset.is_native_token() {
+            return Err(StdError::generic_err("only accept token assets"));
+        }
+
         // add transfer from message
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: asset.info.to_string(),
@@ -73,7 +83,7 @@ pub fn convert_and_send(
         // try to query pair with $PRISM
         let prism_pair_info_res: StdResult<PairInfo> = query_pair_info(
             &deps.querier,
-            config.astroport_factory.clone(),
+            config.prismswap_factory.clone(),
             &[
                 AssetInfo::Token {
                     contract_addr: config.prism_token.clone(),
@@ -86,7 +96,19 @@ pub fn convert_and_send(
         let (pair_addr, to): (String, Option<String>) = match prism_pair_info_res {
             Ok(pair_info) => (pair_info.contract_addr.to_string(), Some(receiver.clone())),
             Err(_) => {
+                // try to get the base pair from prismswap first
+                // if the pair does not exist on prismswap or astroport, return error
                 let base_pair_info: PairInfo = query_pair_info(
+                    &deps.querier,
+                    config.prismswap_factory.clone(),
+                    &[
+                        AssetInfo::NativeToken {
+                            denom: config.base_denom.to_string(),
+                        },
+                        asset.info.clone(),
+                    ],
+                )
+                .unwrap_or(query_pair_info(
                     &deps.querier,
                     config.astroport_factory.clone(),
                     &[
@@ -95,7 +117,8 @@ pub fn convert_and_send(
                         },
                         asset.info.clone(),
                     ],
-                )?;
+                )?);
+
                 // because we are swaping to base denom,
                 // we will need to call the hook to perform base->$PRISM swap
                 need_hook = true;
@@ -141,7 +164,10 @@ pub fn distribute(deps: DepsMut, env: Env, asset_tokens: Vec<String>) -> StdResu
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut need_hook: bool = false;
     for asset in asset_tokens {
-        let asset_addr: Addr = deps.api.addr_validate(&asset)?;
+        let asset_addr: Addr = deps
+            .api
+            .addr_validate(&asset)
+            .map_err(|_| StdError::generic_err("only accept token assets"))?;
         let asset_info = AssetInfo::Token {
             contract_addr: asset_addr.clone(),
         };
@@ -152,7 +178,7 @@ pub fn distribute(deps: DepsMut, env: Env, asset_tokens: Vec<String>) -> StdResu
         // try to query pair with $PRISM
         let prism_pair_info_res: StdResult<PairInfo> = query_pair_info(
             &deps.querier,
-            config.astroport_factory.clone(),
+            config.prismswap_factory.clone(),
             &[
                 AssetInfo::Token {
                     contract_addr: config.prism_token.clone(),
@@ -168,7 +194,19 @@ pub fn distribute(deps: DepsMut, env: Env, asset_tokens: Vec<String>) -> StdResu
                 Some(config.distribution_contract.to_string()),
             ),
             Err(_) => {
+                // try to get the base pair from prismswap first
+                // if the pair does not exist on prismswap or astroport, return error
                 let base_pair_info: PairInfo = query_pair_info(
+                    &deps.querier,
+                    config.prismswap_factory.clone(),
+                    &[
+                        AssetInfo::NativeToken {
+                            denom: config.base_denom.to_string(),
+                        },
+                        asset_info.clone(),
+                    ],
+                )
+                .unwrap_or(query_pair_info(
                     &deps.querier,
                     config.astroport_factory.clone(),
                     &[
@@ -177,7 +215,8 @@ pub fn distribute(deps: DepsMut, env: Env, asset_tokens: Vec<String>) -> StdResu
                         },
                         asset_info.clone(),
                     ],
-                )?;
+                )?);
+
                 // because we are swaping to base denom,
                 // we will need to call the hook to perform base->$PRISM swap
                 need_hook = true;
@@ -227,7 +266,20 @@ pub fn base_swap_hook(
         return Err(StdError::generic_err("unauthorized"));
     }
 
-    let receiver: String = receiver.unwrap_or(config.distribution_contract.to_string());
+    let receiver: String = receiver.unwrap_or_else(|| config.distribution_contract.to_string());
+
+    let prism_pair_info_res: PairInfo = query_pair_info(
+        &deps.querier,
+        config.prismswap_factory.clone(),
+        &[
+            AssetInfo::NativeToken {
+                denom: config.base_denom.to_string(),
+            },
+            AssetInfo::Token {
+                contract_addr: config.prism_token.clone(),
+            },
+        ],
+    )?;
 
     let amount = query_balance(
         &deps.querier,
@@ -246,7 +298,7 @@ pub fn base_swap_hook(
 
     Ok(Response::new()
         .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.prism_base_pair.to_string(),
+            contract_addr: prism_pair_info_res.contract_addr.to_string(),
             msg: to_binary(&PairExecuteMsg::Swap {
                 offer_asset: Asset {
                     amount,

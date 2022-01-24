@@ -8,12 +8,13 @@ use cw20::TokenInfoResponse;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use astroport::asset::{Asset, AssetInfo, PairInfo};
+use astroport::asset::{AssetInfo as AstroAssetInfo, PairInfo as AstroPairInfo};
 use astroport::factory::PairType;
-use astroport::pair::{ReverseSimulationResponse, SimulationResponse};
 use cw20::BalanceResponse as Cw20BalanceResponse;
 use prism_protocol::vault::StateResponse as VaultStateResponse;
 use prism_protocol::yasset_staking::RewardAssetWhitelistResponse;
+use prismswap::asset::{Asset, AssetInfo, PairInfo};
+use prismswap::pair::{ReverseSimulationResponse, SimulationResponse};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use terra_cosmwasm::{
@@ -66,7 +67,7 @@ pub struct WasmMockQuerier {
     tax_querier: TaxQuerier,
     factory_querier: FactoryQuerier,
     vault_state_querier: VaultStateQuerier,
-    astroport_sim_querier: AstroportSimQuerier,
+    simulation_querier: SimulationQuerier,
 }
 
 impl Querier for WasmMockQuerier {
@@ -156,19 +157,38 @@ impl WasmMockQuerier {
                         let key = asset_infos[0].to_string() + asset_infos[1].to_string().as_str();
                         match self.factory_querier.pairs.get(&key) {
                             Some(v) => {
-                                SystemResult::Ok(ContractResult::from(to_binary(&PairInfo {
-                                    pair_type: PairType::Xyk {},
-                                    contract_addr: Addr::unchecked(v),
-                                    liquidity_token: Addr::unchecked("liquidity".to_string()),
-                                    asset_infos: [
-                                        AssetInfo::NativeToken {
-                                            denom: "uusd".to_string(),
+                                if contract_addr == "astrofactory0000" {
+                                    SystemResult::Ok(ContractResult::from(to_binary(
+                                        &AstroPairInfo {
+                                            pair_type: PairType::Xyk {},
+                                            contract_addr: Addr::unchecked(v),
+                                            liquidity_token: Addr::unchecked(
+                                                "liquidity".to_string(),
+                                            ),
+                                            asset_infos: [
+                                                AstroAssetInfo::NativeToken {
+                                                    denom: "uusd".to_string(),
+                                                },
+                                                AstroAssetInfo::NativeToken {
+                                                    denom: "uusd".to_string(),
+                                                },
+                                            ],
                                         },
-                                        AssetInfo::NativeToken {
-                                            denom: "uusd".to_string(),
-                                        },
-                                    ],
-                                })))
+                                    )))
+                                } else {
+                                    SystemResult::Ok(ContractResult::from(to_binary(&PairInfo {
+                                        contract_addr: Addr::unchecked(v),
+                                        liquidity_token: Addr::unchecked("liquidity".to_string()),
+                                        asset_infos: [
+                                            AssetInfo::NativeToken {
+                                                denom: "uusd".to_string(),
+                                            },
+                                            AssetInfo::NativeToken {
+                                                denom: "uusd".to_string(),
+                                            },
+                                        ],
+                                    })))
+                                }
                             }
                             None => SystemResult::Err(SystemError::InvalidRequest {
                                 error: "No pair info exists".to_string(),
@@ -249,7 +269,7 @@ impl WasmMockQuerier {
                     )),
                     QueryMsg::Simulation { offer_asset } => {
                         let res = self
-                            .astroport_sim_querier
+                            .simulation_querier
                             .sim_responses
                             .get(&(contract_addr.to_string(), offer_asset.info.to_string()))
                             .unwrap();
@@ -257,7 +277,7 @@ impl WasmMockQuerier {
                     }
                     QueryMsg::ReverseSimulation { ask_asset } => {
                         let res = self
-                            .astroport_sim_querier
+                            .simulation_querier
                             .reverse_sim_responses
                             .get(&(contract_addr.to_string(), ask_asset.info.to_string()))
                             .unwrap();
@@ -341,14 +361,14 @@ impl VaultStateQuerier {
 }
 
 #[derive(Clone, Default)]
-pub struct AstroportSimQuerier {
+pub struct SimulationQuerier {
     // (pair_addr, asset) -> SimulationResponse
     sim_responses: HashMap<(String, String), SimulationResponse>,
     // (pair_addr, asset) -> ReverseSimulationResponse
     reverse_sim_responses: HashMap<(String, String), ReverseSimulationResponse>,
 }
 
-impl AstroportSimQuerier {
+impl SimulationQuerier {
     fn update_sim_response(
         &mut self,
         pair_addr: &str,
@@ -378,7 +398,7 @@ impl WasmMockQuerier {
             tax_querier: TaxQuerier::default(),
             factory_querier: FactoryQuerier::default(),
             vault_state_querier: VaultStateQuerier::default(),
-            astroport_sim_querier: AstroportSimQuerier::default(),
+            simulation_querier: SimulationQuerier::default(),
         }
     }
 
@@ -404,23 +424,23 @@ impl WasmMockQuerier {
         self.vault_state_querier = VaultStateQuerier::new(total_bond_amount);
     }
 
-    pub fn with_astroport_sim_response(
+    pub fn with_prismswap_sim_response(
         &mut self,
         pair_addr: &str,
         offer_asset: &AssetInfo,
         sim_response: SimulationResponse,
     ) {
-        self.astroport_sim_querier
+        self.simulation_querier
             .update_sim_response(pair_addr, offer_asset, sim_response)
     }
 
-    pub fn with_astroport_reverse_sim_response(
+    pub fn with_prismswap_reverse_sim_response(
         &mut self,
         pair_addr: &str,
         ask_asset: &AssetInfo,
         reverse_sim_response: ReverseSimulationResponse,
     ) {
-        self.astroport_sim_querier.update_reverse_sim_response(
+        self.simulation_querier.update_reverse_sim_response(
             pair_addr,
             ask_asset,
             reverse_sim_response,

@@ -1,10 +1,10 @@
-use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     attr, from_binary, to_binary, Addr, Coin, CosmosMsg, Decimal, MemoryStorage, OwnedDeps,
     StdError, SubMsg, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use prismswap::asset::{Asset, AssetInfo};
 use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
@@ -51,7 +51,7 @@ fn test_bond() {
 
     // valid token and mode
     let info = mock_info("yluna0000", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.attributes,
         vec![
@@ -96,7 +96,7 @@ fn test_unbond() {
         msg: to_binary(&Cw20HookMsg::Bond { mode: None }).unwrap(),
     });
     let yluna_info = mock_info("yluna0000", &[]);
-    execute(deps.as_mut(), mock_env(), yluna_info.clone(), msg).unwrap();
+    execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
 
     // unbond more then bond amount
     let msg = ExecuteMsg::Unbond {
@@ -561,7 +561,7 @@ fn test_internal_deposit_rewards() {
             },
         ],
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(res.attributes, vec![attr("action", "deposit_rewards")]);
     assert_eq!(
         res.messages,
@@ -662,7 +662,7 @@ fn test_external_deposit_rewards() {
             },
         }],
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(res.attributes, vec![attr("action", "deposit_rewards")]);
     assert_eq!(
         res.messages,
@@ -715,7 +715,7 @@ fn test_claim_rewards() {
         }],
     };
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let res: RewardInfoResponse = from_binary(
         &query(
@@ -809,7 +809,7 @@ fn test_claim_rewards_xprism_mode() {
         }],
     };
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let res: RewardInfoResponse = from_binary(
         &query(

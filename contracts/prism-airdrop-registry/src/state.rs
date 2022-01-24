@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{from_slice, to_vec, CanonicalAddr, Order, StdResult, Storage};
 use cw_storage_plus::{Bound, Item, Map};
-use prism_protocol::airdrop::{AirdropInfo, AirdropInfoElem};
+use prism_protocol::airdrop_registry::{AirdropInfo, AirdropInfoElem};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {

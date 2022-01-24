@@ -14,6 +14,20 @@ fn proper_initialization() {
     let mut deps = mock_dependencies(&[]);
     let default_genesis_seconds: u64 = mock_env().block.time.seconds();
 
+    let info = mock_info("addr0000", &[]);
+
+    let msg = InstantiateMsg {
+        prism_token: "prism0000".to_string(),
+        distribution_schedule: vec![(100, 200, Uint128::from(1000000u128))],
+        staking_tokens: vec![
+            ("lp00001".to_string(), 10u64),
+            ("lp00002".to_string(), 20u64),
+            ("lp00001".to_string(), 7u64),
+        ],
+    };
+    let err = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    assert_eq!(err, ContractError::DuplicateStakingToken {});
+
     let msg = InstantiateMsg {
         prism_token: "prism0000".to_string(),
         distribution_schedule: vec![(100, 200, Uint128::from(1000000u128))],
@@ -22,9 +36,6 @@ fn proper_initialization() {
             ("lp00002".to_string(), 20u64),
         ],
     };
-
-    let info = mock_info("addr0000", &[]);
-
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // it worked, let's query the state
@@ -592,7 +603,7 @@ fn test_query_stakers() {
         from_binary::<StakersInfoResponse>(
             &query(
                 deps.as_ref(),
-                env.clone(),
+                env,
                 QueryMsg::TokenStakersInfo {
                     staking_token: "lp00001".to_string(),
                     start_after: Some("addr0000".to_string()),

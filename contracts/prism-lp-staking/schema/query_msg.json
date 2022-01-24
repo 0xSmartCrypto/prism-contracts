@@ -48,6 +48,12 @@
           "properties": {
             "staker": {
               "type": "string"
+            },
+            "staking_token": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         }

@@ -31,11 +31,11 @@ overflow-checks = true
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
-astroport = { path = "../../packages/astroport", default-features = false, version = "2.4.0"}
+prismswap = { path = "../../packages/prismswap", default-features = false, version = "0.1.0"}
+astroport = { version = "1.0.1" }
 prism-protocol = { path = "../../packages/prism_protocol", default-features = false, version = "1.0.0"}
 cw20 = "0.8.0"
 cosmwasm-std = { version = "0.16.0", features = ["iterator", "staking"] }
-cosmwasm-storage = { version = "0.16.0", default-features = false, features = ["iterator"] }
 terra-cosmwasm = { version = "2.2.0" }
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }

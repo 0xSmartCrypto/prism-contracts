@@ -1,5 +1,4 @@
 use crate::state::{calc_range_end, calc_range_start, config_read, DEFAULT_LIMIT, MAX_LIMIT};
-use astroport::querier::{query_supply, query_token_balance};
 use cosmwasm_std::{
     attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError,
     StdResult, Storage, Uint128, WasmMsg,
@@ -7,9 +6,11 @@ use cosmwasm_std::{
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::{Bound, Item, Map};
 use prism_protocol::{common::OrderBy, gov::PrismWithdrawOrdersResponse};
+use prismswap::querier::{query_supply, query_token_balance};
 use std::convert::TryInto;
 
 // map (address, return_date) -> (xprism_amt, prism_amt)
+#[allow(clippy::type_complexity)]
 pub const WITHDRAW_ORDERS: Map<(&[u8], &[u8]), (Uint128, Uint128)> = Map::new("withdraw_orders");
 pub const TOTAL_PENDING_WITHDRAW: Item<(Uint128, Uint128)> = Item::new("total_pending_withdraw");
 
@@ -27,7 +28,7 @@ pub fn mint_xprism(
 
     let (pending_xprism, pending_prism) = TOTAL_PENDING_WITHDRAW.load(deps.storage)?;
 
-    let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address.clone())?
+    let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address)?
         - amount
         - pending_prism;
     let xprism_amt = query_supply(&deps.querier, xprism_token.clone())? - pending_xprism;
@@ -65,9 +66,9 @@ pub fn redeem_xprism(
 
     let (pending_xprism, pending_prism) = TOTAL_PENDING_WITHDRAW.load(deps.storage)?;
 
-    let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address.clone())?
-        - pending_prism;
-    let xprism_amt = query_supply(&deps.querier, xprism_token.clone())? - pending_xprism;
+    let prism_amt =
+        query_token_balance(&deps.querier, prism_token, env.contract.address)? - pending_prism;
+    let xprism_amt = query_supply(&deps.querier, xprism_token)? - pending_xprism;
 
     let prism_to_return = amount.multiply_ratio(prism_amt, xprism_amt);
 
@@ -105,12 +106,12 @@ pub fn claim_redeemed_prism(deps: DepsMut, env: Env, info: MessageInfo) -> StdRe
     Ok(Response::new()
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: xprism_token.clone().into_string(),
+                contract_addr: xprism_token.into_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Burn { amount: w_xprism })?,
                 funds: vec![],
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: prism_token.clone().into_string(),
+                contract_addr: prism_token.into_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: info.sender.to_string(),
                     amount: w_prism,

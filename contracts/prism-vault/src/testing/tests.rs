@@ -1,13 +1,13 @@
 use cosmwasm_std::{
-    coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut,
+    attr, coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut,
     DistributionMsg, Env, FullDelegation, MessageInfo, OwnedDeps, Querier, Response, StakingMsg,
     StdError, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use astroport::asset::{Asset, AssetInfo};
 use cosmwasm_std::testing::{mock_env, mock_info};
+use prismswap::asset::{Asset, AssetInfo};
 
 use crate::contract::{execute, instantiate, query};
 use crate::unbond::execute_unbond;
@@ -29,7 +29,7 @@ use crate::state::{
     store_unbond_wait_list, store_white_validators, Parameters, CONFIG,
 };
 use prism_common::testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
-use prism_protocol::airdrop::ExecuteMsg::FabricateClaim;
+use prism_protocol::airdrop_registry::ExecuteMsg::FabricateClaim;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
 use std::borrow::BorrowMut;
@@ -439,10 +439,7 @@ fn proper_bond() {
 
     let info = mock_info(&bob, &[]);
     let res = execute(deps.as_mut(), mock_env(), info, failed_bond);
-    assert_eq!(
-        res.unwrap_err(),
-        StdError::generic_err("No uluna assets are provided to bond")
-    );
+    assert_eq!(res.unwrap_err(), StdError::generic_err("No funds sent"));
 
     //send other tokens than luna funds
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
@@ -455,7 +452,7 @@ fn proper_bond() {
     let res = execute(deps.as_mut(), mock_env(), info, failed_bond.clone());
     assert_eq!(
         res.unwrap_err(),
-        StdError::generic_err("No uluna assets are provided to bond")
+        StdError::generic_err("Must send reserve token 'uluna'")
     );
 
     //bond with more than one coin is not possible
@@ -470,7 +467,7 @@ fn proper_bond() {
     let res = execute(deps.as_mut(), mock_env(), info, failed_bond).unwrap_err();
     assert_eq!(
         res,
-        StdError::generic_err("More than one coin is sent; only one asset is supported")
+        StdError::generic_err("Sent more than one denomination")
     );
 }
 
@@ -515,6 +512,14 @@ fn proper_deregister() {
     let owner_info = mock_info(owner.as_str(), &[]);
     let res = execute(deps.as_mut(), mock_env(), owner_info, msg).unwrap();
     assert_eq!(0, res.messages.len());
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "de_register_validator"),
+            attr("validator", validator.address.clone()),
+            attr("new-validator", validator2.address.clone()),
+        ]
+    );
 
     // register_validator 1 again
     do_register_validator(deps.as_mut(), validator.clone());
@@ -1103,13 +1108,7 @@ pub fn proper_unbond() {
         amount: Uint128::new(2),
         msg: to_binary(&successful_bond).unwrap(),
     });
-    let res = execute(
-        deps.as_mut(),
-        token_env.clone(),
-        token_info.clone(),
-        receive.clone(),
-    )
-    .unwrap();
+    let res = execute(deps.as_mut(), token_env.clone(), token_info, receive).unwrap();
     assert_eq!(2, res.messages.len());
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(2u128))])]);
@@ -1165,7 +1164,7 @@ pub fn proper_unbond() {
         limit: None,
     };
     let query_unbond: UnbondRequestsResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), waitlist.clone()).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), mock_env(), waitlist).unwrap()).unwrap();
     assert_eq!(query_unbond.requests[0].0, 1);
     assert_eq!(query_unbond.requests[0].1, Uint128::new(8));
 
@@ -2400,7 +2399,7 @@ pub fn test_update_params() {
         cluna_contract,
         yluna_contract,
         pluna_contract,
-        validator.address.clone(),
+        validator.address,
     );
 
     let invalid_info = mock_info("invalid", &[]);
@@ -2691,11 +2690,11 @@ pub fn proper_update_config() {
         unbonding_period: 2,
         peg_recovery_fee: Decimal::zero(),
         er_threshold: Decimal::one(),
-        validator: validator.address.clone(),
+        validator: validator.address,
     };
 
     let owner_info = mock_info(owner.as_str(), &[coin(1000000, "uluna")]);
-    instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
+    instantiate(deps.as_mut(), mock_env(), owner_info, msg).unwrap();
 
     // only the owner can call this message
     let update_config = UpdateConfig {
@@ -2845,7 +2844,7 @@ fn proper_claim_airdrop() {
         cluna_contract,
         yluna_contract,
         pluna_contract,
-        validator.address.clone(),
+        validator.address,
     );
 
     let claim_msg = ExecuteMsg::ClaimAirdrop {
@@ -2907,7 +2906,7 @@ fn proper_deposit_airdrop_reward() {
         cluna_contract,
         yluna_contract,
         pluna_contract,
-        validator.address.clone(),
+        validator.address,
     );
 
     let swap_msg = ExecuteMsg::DepositAirdropReward {
@@ -3175,9 +3174,9 @@ fn proper_unbond_storage() -> StdResult<()> {
         batch_id: 5,
         ..history2
     };
-    store_unbond_history(deps.as_mut().storage, 3, history3.clone())?;
-    store_unbond_history(deps.as_mut().storage, 4, history4.clone())?;
-    store_unbond_history(deps.as_mut().storage, 5, history5.clone())?;
+    store_unbond_history(deps.as_mut().storage, 3, history3)?;
+    store_unbond_history(deps.as_mut().storage, 4, history4)?;
+    store_unbond_history(deps.as_mut().storage, 5, history5)?;
 
     // read all history with pagination of 2 records at a time
     let mut start: Option<u64> = None;
@@ -3201,7 +3200,7 @@ fn proper_unbond_storage() -> StdResult<()> {
 
     // release the first batch
     history1.released = true;
-    store_unbond_history(deps.as_mut().storage, history1.batch_id, history1.clone())?;
+    store_unbond_history(deps.as_mut().storage, history1.batch_id, history1)?;
 
     // query addr1 finished amount
     let res = get_finished_amount(deps.as_ref().storage, &addr1, None)?;
@@ -3256,16 +3255,16 @@ fn proper_validator_storage() -> StdResult<()> {
 
     // is_valid_validator testing
     let res = is_valid_validator(deps.as_ref().storage, &Addr::unchecked(DEFAULT_VALIDATOR))?;
-    assert_eq!(res, true);
+    assert!(res);
     let res = is_valid_validator(deps.as_ref().storage, &Addr::unchecked(DEFAULT_VALIDATOR2))?;
-    assert_eq!(res, true);
+    assert!(res);
     let res = is_valid_validator(deps.as_ref().storage, &Addr::unchecked(DEFAULT_VALIDATOR3))?;
-    assert_eq!(res, false);
+    assert!(!res);
 
     // remove validator 2, verify it's gone
     remove_white_validators(deps.as_mut().storage, &Addr::unchecked(DEFAULT_VALIDATOR2))?;
     let res = is_valid_validator(deps.as_ref().storage, &Addr::unchecked(DEFAULT_VALIDATOR2))?;
-    assert_eq!(res, false);
+    assert!(!res);
     let res = read_validators(deps.as_ref().storage)?;
     assert_eq!(res.len(), 1);
     assert_eq!(res[0], DEFAULT_VALIDATOR);

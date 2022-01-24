@@ -22,7 +22,7 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
 
     let info = mock_info("owner0001", &[]);
     let env = mock_env();
-    instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    instantiate(deps.as_mut(), env, info, msg).unwrap();
 }
 
 pub fn post_init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
@@ -34,13 +34,7 @@ pub fn post_init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) 
         phase2_start: env.block.time.seconds() + 100,
         phase2_end: env.block.time.seconds() + 100 + SECONDS_PER_HOUR,
     };
-    do_post_initialize(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        launch_config.clone(),
-    )
-    .unwrap();
+    do_post_initialize(deps.as_mut(), env, info, launch_config).unwrap();
 }
 
 pub fn do_deposit(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
@@ -207,11 +201,9 @@ fn proper_post_initialize() {
 
     let err = execute(
         deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        ExecuteMsg::PostInitialize {
-            launch_config: launch_config.clone(),
-        },
+        env,
+        info,
+        ExecuteMsg::PostInitialize { launch_config },
     );
     assert_eq!(err.unwrap_err(), ContractError::DuplicatePostInit {});
 }
@@ -443,7 +435,7 @@ fn proper_withdraw() {
     let err = do_withdraw(
         deps.as_mut(),
         env.clone(),
-        info.clone(),
+        info,
         Some(Uint128::from(100u128)),
     )
     .unwrap_err();
@@ -497,7 +489,7 @@ fn proper_withdraw_phase3() {
     bob_info.funds = vec![Coin::new(100_000_000, "uusd")];
     deposit(deps.as_mut(), env.clone(), bob_info.clone()).unwrap();
     cindy_info.funds = vec![Coin::new(100_000_000, "uusd")];
-    deposit(deps.as_mut(), env.clone(), cindy_info.clone()).unwrap();
+    deposit(deps.as_mut(), env.clone(), cindy_info).unwrap();
 
     // fast forward to phase 2
     env.block.time = env.block.time.plus_seconds(101);
@@ -556,7 +548,7 @@ fn proper_withdraw_phase3() {
     let err = do_withdraw(
         deps.as_mut(),
         env.clone(),
-        alice_info.clone(),
+        alice_info,
         Some(Uint128::from(1_000u128)),
     )
     .unwrap_err();
@@ -625,7 +617,7 @@ fn proper_withdraw_phase3() {
 
     // after phase 2
     env.block.time = env.block.time.plus_seconds(1);
-    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "cindy0000".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env, "cindy0000".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
@@ -690,7 +682,7 @@ fn proper_withdraw_tokens1() {
     release_tokens(deps.as_mut(), env.clone(), owner_info.clone()).unwrap();
 
     // now users can withdraw tokens
-    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap();
+    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
@@ -728,7 +720,7 @@ fn proper_withdraw_tokens1() {
     );
 
     // invalid release - already released
-    let err = do_release_tokens(deps.as_mut(), env.clone(), owner_info.clone()).unwrap_err();
+    let err = do_release_tokens(deps.as_mut(), env, owner_info).unwrap_err();
     assert_eq!(
         err,
         ContractError::InvalidReleaseTokens {
@@ -788,7 +780,7 @@ fn proper_withdraw_tokens2() {
     };
 
     // addr0001 try to withdraw again, expect error
-    let err = do_withdraw_tokens(deps.as_mut(), env.clone(), info1.clone()).unwrap_err();
+    let err = do_withdraw_tokens(deps.as_mut(), env.clone(), info1).unwrap_err();
     assert_eq!(
         err,
         ContractError::InvalidWithdrawTokens {
@@ -797,7 +789,7 @@ fn proper_withdraw_tokens2() {
     );
 
     // addr0002 gets 1M * 5/6
-    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info2.clone()).unwrap();
+    let res = do_withdraw_tokens(deps.as_mut(), env, info2).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
@@ -848,7 +840,7 @@ fn test_no_tokens_for_withdraw() {
     release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
 
     // now users can withdraw tokens
-    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info.clone()).unwrap();
+    let res = do_withdraw_tokens(deps.as_mut(), env.clone(), info).unwrap();
     assert_eq!(res.messages.len(), 1);
     let msg = &res.messages[0].msg;
     match msg {
@@ -871,7 +863,7 @@ fn test_no_tokens_for_withdraw() {
         _ => panic!("Unexpected message: {:?}", msg),
     };
 
-    let err = do_withdraw_tokens(deps.as_mut(), env.clone(), info2.clone()).unwrap_err();
+    let err = do_withdraw_tokens(deps.as_mut(), env, info2).unwrap_err();
     assert_eq!(
         err,
         ContractError::InvalidWithdrawTokens {
@@ -961,7 +953,7 @@ fn proper_admin_withdraw() {
     // admin releases tokens, now users can claim
     release_tokens(deps.as_mut(), env.clone(), owner_info).unwrap();
 
-    let deposit_info = do_query_deposit_info(deps.as_ref(), env.clone(), "addr0001".to_string());
+    let deposit_info = do_query_deposit_info(deps.as_ref(), env, "addr0001".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {

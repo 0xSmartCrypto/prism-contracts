@@ -8,10 +8,10 @@ use crate::state::{
     RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS,
 };
 
-use astroport::asset::{Asset, AssetInfo};
 use cw20::Cw20ExecuteMsg;
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::yasset_staking::{RewardInfoResponse, StakingMode};
+use prismswap::asset::{Asset, AssetInfo};
 use terra_cosmwasm::TerraMsgWrapper;
 
 // deposit whitelisted reward assets
@@ -39,7 +39,7 @@ pub fn deposit_rewards(
         if !whitelisted_assets.contains(&asset.info) {
             return Err(StdError::generic_err(format!(
                 "asset {} is not whitelisted",
-                asset.info.to_string()
+                asset.info
             )));
         }
 
@@ -62,7 +62,7 @@ pub fn deposit_rewards(
             }
 
             let mut pool_info = POOL_INFO
-                .load(deps.storage, &asset.info.to_string().as_bytes())
+                .load(deps.storage, asset.info.to_string().as_bytes())
                 .unwrap_or_default();
 
             let stakers_portion_amount = asset.amount * stakers_portion;
@@ -83,7 +83,7 @@ pub fn deposit_rewards(
                 let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond_amount);
                 pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
 
-                POOL_INFO.save(deps.storage, &asset.info.to_string().as_bytes(), &pool_info)?;
+                POOL_INFO.save(deps.storage, asset.info.to_string().as_bytes(), &pool_info)?;
             }
         }
     }
@@ -133,9 +133,7 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
             continue;
         }
 
-        if staking_mode == StakingMode::Default
-            || asset_info.to_string() == cfg.prism_token.to_string()
-        {
+        if staking_mode == StakingMode::Default || asset_info.to_string() == cfg.prism_token {
             // re-implement into_msg here because life is cruel
             // should never be native
             let msg = match &asset_info {
@@ -190,7 +188,7 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
 
 pub fn compute_asset_rewards(
     storage: &dyn Storage,
-    staker: &String,
+    staker: &str,
     bond_amount: Uint128,
     asset_info: &AssetInfo,
 ) -> StdResult<RewardInfo> {
@@ -219,12 +217,12 @@ pub fn compute_asset_rewards(
 
 pub fn compute_all_rewards(
     storage: &mut dyn Storage,
-    staker: &String,
+    staker: &str,
     bond_amount: Uint128,
-    whitelisted_assets: &Vec<AssetInfo>,
+    whitelisted_assets: &[AssetInfo],
 ) -> StdResult<()> {
     for asset in whitelisted_assets {
-        let reward_info = compute_asset_rewards(storage, &staker, bond_amount, &asset)?;
+        let reward_info = compute_asset_rewards(storage, staker, bond_amount, asset)?;
 
         // save updated reward
         REWARDS.save(
@@ -304,7 +302,7 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInf
         .iter()
         .map(|wlasset| {
             let reward_info =
-                compute_asset_rewards(deps.storage, &staker_addr, bond_info.bond_amount, &wlasset)?;
+                compute_asset_rewards(deps.storage, &staker_addr, bond_info.bond_amount, wlasset)?;
 
             Ok(Asset {
                 info: wlasset.clone(),

@@ -195,7 +195,7 @@ pub fn execute_deregister_validator(
     let token = CONFIG.load(deps.storage)?;
 
     let validator_addr = Addr::unchecked(&validator);
-    if token.creator != info.sender.to_string() {
+    if token.creator != info.sender {
         return Err(StdError::generic_err("unauthorized"));
     }
     let validators_before_remove = read_validators(deps.storage)?;

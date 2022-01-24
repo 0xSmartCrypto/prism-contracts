@@ -4,17 +4,21 @@ use cosmwasm_std::{
     attr, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult, Uint128, WasmMsg,
 };
+use cw2::set_contract_version;
 use serde::{Deserialize, Serialize};
 
 use crate::state::{
     read_airdrop_info, read_all_airdrop_infos, read_config, remove_airdrop_info,
     store_airdrop_info, store_config, update_airdrop_info, Config, CONFIG,
 };
-use prism_protocol::airdrop::{
+use prism_protocol::airdrop_registry::{
     AirdropInfo, AirdropInfoElem, AirdropInfoResponse, ClaimType, ConfigResponse, ExecuteMsg,
     InstantiateMsg, QueryMsg,
 };
 use prism_protocol::vault::ExecuteMsg as VaultHandleMsg;
+
+const CONTRACT_NAME: &str = "prism-airdrop-registry";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -23,6 +27,8 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
     let sndr_raw = deps.api.addr_canonicalize(&info.sender.to_string())?;
 
     let config = Config {

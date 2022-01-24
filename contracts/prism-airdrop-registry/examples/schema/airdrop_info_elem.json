@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AirdropInfoElem",
+  "type": "object",
+  "required": [
+    "airdrop_token",
+    "info"
+  ],
+  "properties": {
+    "airdrop_token": {
+      "type": "string"
+    },
+    "info": {
+      "$ref": "#/definitions/AirdropInfo"
+    }
+  },
+  "definitions": {
+    "AirdropInfo": {
+      "type": "object",
+      "required": [
+        "airdrop_contract",
+        "claim_type"
+      ],
+      "properties": {
+        "airdrop_contract": {
+          "type": "string"
+        },
+        "claim_type": {
+          "$ref": "#/definitions/ClaimType"
+        }
+      }
+    },
+    "ClaimType": {
+      "type": "string",
+      "enum": [
+        "generic"
+      ]
+    }
+  }
+}

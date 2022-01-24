@@ -49,7 +49,7 @@ pub fn withdraw_voting_tokens(
         compute_locked_balance(deps.storage, &mut token_manager, &sender_address_raw)?;
 
     let withdrawable_balance = token_manager.deposit.checked_sub(user_locked_balance)?;
-    let withdraw_amount = amount.unwrap_or_else(|| withdrawable_balance);
+    let withdraw_amount = amount.unwrap_or(withdrawable_balance);
 
     if withdraw_amount > withdrawable_balance {
         return Err(StdError::generic_err(
