@@ -395,7 +395,7 @@ fn proper_withdraw_phase3() {
     deposit(deps.as_mut(), env.clone(), cindy_info.clone()).unwrap();
 
     // fast forward to phase 2
-    env.block.time = env.block.time.plus_seconds(100);
+    env.block.time = env.block.time.plus_seconds(101);
 
     let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "alice0000".to_string());
     assert_eq!(
@@ -505,14 +505,14 @@ fn proper_withdraw_phase3() {
     );
 
     // last slot of phase 2
-    env.block.time = env.block.time.plus_seconds(SECONDS_PER_HOUR * 17 + 3599);
+    env.block.time = env.block.time.plus_seconds(SECONDS_PER_HOUR * 17 + 3598);
     let deposit_info = query_deposit_info(deps.as_ref(), env.clone(), "cindy0000".to_string());
     assert_eq!(
         deposit_info.unwrap(),
         DepositResponse {
             deposit: Uint128::from(100000000u128),
             total_deposit: Uint128::from(224000000u128),
-            withdrawable_amount: Uint128::zero(), // 100000000 * 0 / 24
+            withdrawable_amount: Uint128::from(4166666u128), // 100000000 * 1 / 24
             tokens_to_claim: Uint128::from(446428u128), // 100000000 / 224000000 * 1000000
             can_claim: false,
         }

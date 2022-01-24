@@ -160,7 +160,7 @@ pub fn withdraw(
         });
     }
 
-    let withdrawable_amount = if current_time >= launch_config.phase2_start {
+    let withdrawable_amount = if current_time > launch_config.phase2_start {
         // check if user already withdrew on phase 2
         if deposit_info.withdrew_phase2 {
             return Err(ContractError::InvalidWithdraw {
@@ -172,7 +172,7 @@ pub fn withdraw(
         let total_slots =
             (launch_config.phase2_end - launch_config.phase2_start) / SECONDS_PER_HOUR;
         let withdrawable_portion =
-            Decimal::from_ratio(current_slot, total_slots).min(Decimal::one());
+            Decimal::from_ratio(current_slot + 1u64, total_slots).min(Decimal::one());
 
         // on phase 2 can only withraw one time, so flag the position
         deposit_info.withdrew_phase2 = true;
@@ -373,7 +373,7 @@ pub fn query_deposit_info(deps: Deps, env: Env, address: String) -> StdResult<De
     let current_time = env.block.time.seconds();
 
     let withdrawable_amount =
-        if current_time >= launch_config.phase2_start && !deposit_info.amount.is_zero() {
+        if current_time > launch_config.phase2_start && !deposit_info.amount.is_zero() {
             if deposit_info.withdrew_phase2 || current_time >= launch_config.phase2_end {
                 Uint128::zero()
             } else {
@@ -382,7 +382,7 @@ pub fn query_deposit_info(deps: Deps, env: Env, address: String) -> StdResult<De
                     (launch_config.phase2_end - launch_config.phase2_start) / SECONDS_PER_HOUR;
 
                 let withdrawable_portion =
-                    Decimal::from_ratio(current_slot, total_slots).min(Decimal::one());
+                    Decimal::from_ratio(current_slot + 1u64, total_slots).min(Decimal::one());
 
                 deposit_info.amount * withdrawable_portion
             }
