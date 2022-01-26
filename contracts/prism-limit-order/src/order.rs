@@ -252,6 +252,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
 
             (offer_asset, return_asset, prism_fee)
         } else {
+            // logic error, should never get here
             return Err(StdError::generic_err("invalid order"));
         };
 

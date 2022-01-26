@@ -1,4 +1,5 @@
-use crate::contract::{execute, instantiate, query, reply};
+use crate::contract::{execute, instantiate, query, reply, MIN_POLL_GAS_LIMIT};
+use crate::polls::MAX_POLL_VOTES_PER_USER;
 use crate::state::{
     bank_read, bank_store, config_read, poll_store, poll_voter_read, poll_voter_store, Config,
     Poll, VotingTokenManager,
@@ -83,6 +84,18 @@ fn init_msg() -> InstantiateMsg {
 fn proper_initialization() {
     let mut deps = mock_dependencies(&[]);
 
+    let mut msg = init_msg();
+    msg.poll_gas_limit = MIN_POLL_GAS_LIMIT - 1;
+    let info = mock_info(TEST_CREATOR, &coins(2, VOTING_TOKEN));
+    let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err(format!(
+            "gas limit can not be smaller than {}",
+            MIN_POLL_GAS_LIMIT
+        ))
+    );
+
     let msg = init_msg();
     let info = mock_info(TEST_CREATOR, &coins(2, VOTING_TOKEN));
     let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -91,7 +104,7 @@ fn proper_initialization() {
     let msg = ExecuteMsg::PostInitialize {
         xprism_token: VOTING_TOKEN.to_string(),
     };
-    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
 
     let config: Config = config_read(&deps.storage).load().unwrap();
     assert_eq!(
@@ -110,6 +123,18 @@ fn proper_initialization() {
             poll_gas_limit: DEFAULT_POLL_GAS_LIMIT,
         }
     );
+
+    // duplicate post-init
+    let msg = ExecuteMsg::PostInitialize {
+        xprism_token: VOTING_TOKEN.to_string(),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
+    assert_eq!(err, StdError::generic_err("xprism token was already set"));
+
+    // unauthorized post-init
+    let info = mock_info("addr0001", &coins(2, VOTING_TOKEN));
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized"));
 }
 
 #[test]
@@ -1398,7 +1423,7 @@ fn happy_days_cast_vote() {
         &VOTING_TOKEN.to_string(),
         &[(
             &MOCK_CONTRACT_ADDR.to_string(),
-            &Uint128::new(11u128 + DEFAULT_PROPOSAL_DEPOSIT),
+            &Uint128::new(12u128 + DEFAULT_PROPOSAL_DEPOSIT),
         )],
     )]);
 
@@ -1448,6 +1473,26 @@ fn happy_days_cast_vote() {
         }
     );
 
+    // Query voter
+    let res = query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::Voter {
+            poll_id: 1u64,
+            address: TEST_VOTER.to_string(),
+        },
+    )
+    .unwrap();
+    let response: VotersResponseItem = from_binary(&res).unwrap();
+    assert_eq!(
+        response,
+        VotersResponseItem {
+            voter: TEST_VOTER.to_string(),
+            vote: VoteOption::Yes,
+            balance: Uint128::from(amount),
+        }
+    );
+
     // Query voters
     let res = query(
         deps.as_ref(),
@@ -1483,6 +1528,100 @@ fn happy_days_cast_vote() {
     .unwrap();
     let response: VotersResponse = from_binary(&res).unwrap();
     assert_eq!(response.voters.len(), 0);
+
+    // Add another voter
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: TEST_VOTER_2.to_string(),
+        amount: Uint128::from(1u128),
+        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
+    });
+    let info = mock_info(VOTING_TOKEN, &[]);
+    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_stake_tokens_result(1, execute_res);
+
+    let env = mock_env_height(0, 10000);
+    let info = mock_info(TEST_VOTER_2, &coins(1, VOTING_TOKEN));
+    let amount = 1u128;
+    let msg = ExecuteMsg::CastVote {
+        poll_id: 1,
+        vote: VoteOption::Yes,
+        amount: Uint128::from(amount),
+    };
+
+    let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
+    assert_cast_vote_success(TEST_VOTER_2, amount, 1, VoteOption::Yes, execute_res);
+
+    //Query voters ascending
+    let res = query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::Voters {
+            poll_id: 1u64,
+            start_after: None,
+            limit: None,
+            order_by: Some(OrderBy::Asc),
+        },
+    )
+    .unwrap();
+    let response: VotersResponse = from_binary(&res).unwrap();
+    assert_eq!(
+        response.voters,
+        vec![
+            VotersResponseItem {
+                voter: TEST_VOTER_2.to_string(),
+                vote: VoteOption::Yes,
+                balance: Uint128::from(1u128),
+            },
+            VotersResponseItem {
+                voter: TEST_VOTER.to_string(),
+                vote: VoteOption::Yes,
+                balance: Uint128::from(10u128),
+            }
+        ]
+    );
+
+    //Query voters ascending limit 1
+    let res = query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::Voters {
+            poll_id: 1u64,
+            start_after: None,
+            limit: Some(1u32),
+            order_by: Some(OrderBy::Asc),
+        },
+    )
+    .unwrap();
+    let response: VotersResponse = from_binary(&res).unwrap();
+    assert_eq!(
+        response.voters,
+        vec![VotersResponseItem {
+            voter: TEST_VOTER_2.to_string(),
+            vote: VoteOption::Yes,
+            balance: Uint128::from(1u128),
+        },]
+    );
+
+    let res = query(
+        deps.as_ref(),
+        mock_env(),
+        QueryMsg::Voters {
+            poll_id: 1u64,
+            start_after: Some(TEST_VOTER_2.to_string()),
+            limit: None,
+            order_by: Some(OrderBy::Asc),
+        },
+    )
+    .unwrap();
+    let response: VotersResponse = from_binary(&res).unwrap();
+    assert_eq!(
+        response.voters,
+        vec![VotersResponseItem {
+            voter: TEST_VOTER.to_string(),
+            vote: VoteOption::Yes,
+            balance: Uint128::from(10u128),
+        }]
+    );
 }
 
 #[test]
@@ -2180,7 +2319,7 @@ fn test_abstain_votes_theshold() {
 
     let env = mock_env_height(0, poll_end_time);
     let info = mock_info(TEST_VOTER, &[]);
-    let execute_res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let execute_res = execute(deps.as_mut(), env, info, msg.clone()).unwrap();
     // abstain votes should not affect threshold, so poll is passed
     assert_eq!(
         execute_res.attributes,
@@ -2191,6 +2330,23 @@ fn test_abstain_votes_theshold() {
             attr("passed", "true"),
         ]
     );
+
+    // invalid end poll - not in progress
+    let env = mock_env_height(0, poll_end_time);
+    let info = mock_info(TEST_VOTER, &[]);
+    let err = execute(deps.as_mut(), env, info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("Poll is not in progress"));
+
+    // invalid cast vote - not in progress
+    let msg = ExecuteMsg::CastVote {
+        poll_id: 1,
+        vote: VoteOption::Yes,
+        amount: Uint128::from(CINDY_STAKE),
+    };
+    let env = mock_env_height(0, poll_end_time);
+    let info = mock_info(CINDY, &[]);
+    let err = execute(deps.as_mut(), env, info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("Poll is not in progress"));
 }
 
 #[test]
@@ -3383,4 +3539,68 @@ fn claim_redeemed_xprism() {
             })),
         ]
     );
+}
+
+#[test]
+fn test_max_poll_votes() {
+    const POLL_START_TIME: u64 = 1000;
+    let stake_amount = 10000000000;
+
+    let mut deps = mock_dependencies(&coins(1000, VOTING_TOKEN));
+    mock_instantiate(deps.as_mut());
+    mock_post_initialize(deps.as_mut());
+    let creator_env = mock_env_height(0, POLL_START_TIME);
+    let creator_info = mock_info(VOTING_TOKEN, &coins(2, VOTING_TOKEN));
+
+    for _ in 1..=MAX_POLL_VOTES_PER_USER + 1 {
+        let msg = create_poll_msg("test".to_string(), "test".to_string(), None, None);
+        execute(
+            deps.as_mut(),
+            creator_env.clone(),
+            creator_info.clone(),
+            msg,
+        )
+        .unwrap();
+    }
+
+    deps.querier.with_token_balances(&[(
+        &VOTING_TOKEN.to_string(),
+        &[(
+            &MOCK_CONTRACT_ADDR.to_string(),
+            &Uint128::new((stake_amount + DEFAULT_PROPOSAL_DEPOSIT) as u128),
+        )],
+    )]);
+
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: TEST_VOTER.to_string(),
+        amount: Uint128::from(stake_amount as u128),
+        msg: to_binary(&Cw20HookMsg::StakeVotingTokens {}).unwrap(),
+    });
+
+    let info = mock_info(VOTING_TOKEN, &[]);
+    let execute_res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_stake_tokens_result(stake_amount, execute_res);
+
+    for i in 1..=MAX_POLL_VOTES_PER_USER {
+        let msg = ExecuteMsg::CastVote {
+            poll_id: i as u64,
+            vote: VoteOption::Yes,
+            amount: Uint128::from(stake_amount),
+        };
+        let env = mock_env_height(0, POLL_START_TIME);
+        let info = mock_info(TEST_VOTER, &[]);
+        execute(deps.as_mut(), env, info, msg).unwrap();
+    }
+
+    let msg = ExecuteMsg::CastVote {
+        poll_id: (MAX_POLL_VOTES_PER_USER + 1) as u64,
+        vote: VoteOption::Yes,
+        amount: Uint128::from(stake_amount),
+    };
+    let env = mock_env_height(0, POLL_START_TIME);
+    let info = mock_info(TEST_VOTER, &[]);
+    let err = execute(deps.as_mut(), env, info, msg).unwrap_err();
+    assert_eq!(err,
+        StdError::generic_err(format!("Can not vote on more than {} at the same time. Voting rewards of finished polls should be claimed.", 
+        MAX_POLL_VOTES_PER_USER)));
 }

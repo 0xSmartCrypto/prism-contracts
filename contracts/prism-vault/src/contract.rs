@@ -1,9 +1,9 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, DistributionMsg,
-    Env, MessageInfo, QueryRequest, Response, StakingMsg, StdError, StdResult, SubMsg, Uint128,
-    WasmMsg, WasmQuery,
+    attr, from_binary, to_binary, Addr, Binary, Coin, CosmosMsg, Decimal, Deps, DepsMut,
+    DistributionMsg, Env, MessageInfo, QueryRequest, Response, StakingMsg, StdError, StdResult,
+    SubMsg, Uint128, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
 
@@ -20,6 +20,7 @@ use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 
 use crate::bond::{execute_bond, execute_bond_split};
 use crate::refract::{merge, split};
+use cw0::must_pay;
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, TokenInfoResponse};
 use prism_protocol::vault::{
     AllHistoryResponse, Config, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
@@ -44,13 +45,8 @@ pub fn instantiate(
 
     let sender = info.sender.clone();
 
-    let payment = info
-        .funds
-        .iter()
-        .find(|x| x.denom == msg.underlying_coin_denom && x.amount > Uint128::zero())
-        .ok_or_else(|| {
-            StdError::generic_err(format!("No {} assets are provided to bond", "uluna"))
-        })?;
+    let payment_amt = must_pay(&info, &msg.underlying_coin_denom)
+        .map_err(|error| StdError::generic_err(format!("{}", error)))?;
 
     // store config
     // TODO -- auto create yluna, pluna, cluna token contracts from token code id
@@ -70,7 +66,7 @@ pub fn instantiate(
         last_index_modification: env.block.time.seconds(),
         last_unbonded_time: env.block.time.seconds(),
         last_processed_batch: 0u64,
-        total_bond_amount: payment.amount,
+        total_bond_amount: payment_amt,
         ..Default::default()
     };
 
@@ -79,7 +75,7 @@ pub fn instantiate(
     // instantiate parameters
     let params = Parameters {
         epoch_period: msg.epoch_period,
-        underlying_coin_denom: msg.underlying_coin_denom,
+        underlying_coin_denom: msg.underlying_coin_denom.clone(),
         unbonding_period: msg.unbonding_period,
         peg_recovery_fee: validate_rate(msg.peg_recovery_fee)?,
         er_threshold: validate_rate(msg.er_threshold)?,
@@ -108,14 +104,17 @@ pub fn instantiate(
     // send the delegate message
     messages.push(SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
         validator: msg.validator.to_string(),
-        amount: payment.clone(),
+        amount: Coin {
+            denom: msg.underlying_coin_denom,
+            amount: payment_amt,
+        },
     })));
 
     Ok(Response::new()
         .add_submessages(messages)
         .add_attributes(vec![
             attr("register-validator", msg.validator),
-            attr("bond", payment.amount),
+            attr("bond", payment_amt),
         ]))
 }
 

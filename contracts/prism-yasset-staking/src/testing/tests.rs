@@ -12,7 +12,7 @@ use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::{
-    Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
+    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
     RewardAssetWhitelistResponse, RewardInfoResponse, StakingMode,
 };
 
@@ -31,6 +31,52 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
 
     let info = mock_info("addr0000", &[]);
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+}
+
+#[test]
+fn test_init() {
+    let mut deps = mock_dependencies(&[]);
+
+    // invalid rate
+    let msg = InstantiateMsg {
+        vault: "vault0000".to_string(),
+        gov: "gov0000".to_string(),
+        collector: "collector0000".to_string(),
+        protocol_fee: Decimal::from_ratio(1u128, 10u128),
+        cluna_token: "cluna0000".to_string(),
+        yluna_token: "yluna0000".to_string(),
+        pluna_token: "pluna0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        withdraw_fee: Decimal::percent(101),
+    };
+
+    let info = mock_info("addr0000", &[]);
+    let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("Rate can not be bigger than one (given value: 1.01)")
+    );
+
+    // successful init
+    init(&mut deps);
+
+    // query config
+    let res: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+    assert_eq!(
+        res,
+        ConfigResponse {
+            vault: "vault0000".to_string(),
+            gov: "gov0000".to_string(),
+            collector: "collector0000".to_string(),
+            protocol_fee: Decimal::from_ratio(1u128, 10u128),
+            cluna_token: "cluna0000".to_string(),
+            yluna_token: "yluna0000".to_string(),
+            pluna_token: "pluna0000".to_string(),
+            prism_token: "prism0000".to_string(),
+            withdraw_fee: Decimal::percent(1),
+        }
+    );
 }
 
 #[test]
@@ -848,7 +894,7 @@ fn test_claim_rewards_xprism_mode() {
     let msg = ExecuteMsg::ClaimRewards {};
 
     let info = mock_info("alice0000", &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.attributes,
         vec![
@@ -884,5 +930,45 @@ fn test_claim_rewards_xprism_mode() {
                 funds: vec![],
             }))
         ]
-    )
+    );
+
+    // test unbonding in xprism mode, fee goes to collector
+    let unbond_amt = Uint128::from(1000000u128);
+    let withdraw_fee = unbond_amt * Decimal::percent(1);
+    let msg = ExecuteMsg::Unbond {
+        amount: Some(unbond_amt),
+    };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "unbond"),
+            attr("staker_addr", "alice0000".to_string()),
+            attr("amount", unbond_amt.to_string()),
+            attr("withdraw_fee", withdraw_fee.to_string()),
+        ]
+    );
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "yluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: "collector0000".to_string(),
+                    amount: withdraw_fee,
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "yluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: "alice0000".to_string(),
+                    amount: unbond_amt - withdraw_fee
+                })
+                .unwrap(),
+                funds: vec![],
+            }))
+        ]
+    );
 }

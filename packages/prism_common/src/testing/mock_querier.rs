@@ -263,6 +263,9 @@ impl WasmMockQuerier {
                                 AssetInfo::Token {
                                     contract_addr: Addr::unchecked("pluna0000"),
                                 },
+                                AssetInfo::NativeToken {
+                                    denom: "uluna".to_string(),
+                                },
                             ],
                         })
                         .unwrap(),

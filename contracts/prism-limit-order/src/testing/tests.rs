@@ -237,8 +237,25 @@ pub fn verify_execute_response(
 }
 
 #[test]
-fn proper_initialization() {
+fn test_init() {
     let mut deps = mock_dependencies(&[]);
+
+    // invalid fee
+    let msg = InstantiateMsg {
+        base_denom: "uusd".to_string(),
+        prism_token: PRISM_ADDR.to_string(),
+        fee_collector_addr: FEE_COLLECTOR_ADDR.to_string(),
+        prism_ust_pair: PRISM_UST_PAIR_ADDR.to_string(),
+        order_fee: Decimal::from_str("0.05").unwrap(),
+        min_fee_value: Uint128::from(100u128),
+        executor_fee_portion: Decimal::from_str("1.1").unwrap(),
+        excess_collector_addr: EXCESS_COLLECTOR_ADDR.to_string(),
+    };
+    let info = mock_info(OWNER_ADDR, &[]);
+    let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("fee can not be bigger than 1.0"));
+
+    // successful init
     init(&mut deps).unwrap();
 
     // it worked, let's query the state
@@ -258,6 +275,51 @@ fn proper_initialization() {
             excess_collector_addr: EXCESS_COLLECTOR_ADDR.to_string(),
         }
     );
+}
+
+#[test]
+fn test_update_config() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps).unwrap();
+
+    // unauthorized
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        fee_collector_addr: Some(FEE_COLLECTOR_ADDR.to_string()),
+        order_fee: Some(Decimal::from_str("0.05").unwrap()),
+        min_fee_value: Some(Uint128::from(100u128)),
+        executor_fee_portion: Some(Decimal::from_str("0.25").unwrap()),
+    };
+    let info = mock_info("addr0001", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized"));
+
+    // success
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        fee_collector_addr: Some(FEE_COLLECTOR_ADDR.to_string()),
+        order_fee: Some(Decimal::from_str("0.05").unwrap()),
+        min_fee_value: Some(Uint128::from(100u128)),
+        executor_fee_portion: Some(Decimal::from_str("0.25").unwrap()),
+    };
+
+    let info = mock_info(OWNER_ADDR, &[]);
+    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // change the owner
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: Some("owner_0002".to_string()),
+        fee_collector_addr: Some(FEE_COLLECTOR_ADDR.to_string()),
+        order_fee: Some(Decimal::from_str("0.05").unwrap()),
+        min_fee_value: Some(Uint128::from(100u128)),
+        executor_fee_portion: Some(Decimal::from_str("0.25").unwrap()),
+    };
+    execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
+
+    // original owner unauthorized
+    let info = mock_info(OWNER_ADDR, &[]);
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized"));
 }
 
 #[test]
@@ -487,6 +549,25 @@ fn test_submit_order() {
     assert_eq!(
         res,
         StdError::generic_err("the 2 assets provided are not supported")
+    );
+
+    // failed submit, offer qty zero
+    let assets: [Asset; 2] = [
+        Asset {
+            info: asset_infos[0].clone(),
+            amount: Uint128::from(1_000u128),
+        },
+        Asset {
+            info: asset_infos[1].clone(),
+            amount: Uint128::from(0u128),
+        },
+    ];
+
+    let funds = vec![Coin::new(1000, "uusd")];
+    let res = submit_order(&mut deps, &assets, USER1_ADDR, &funds).unwrap_err();
+    assert_eq!(
+        res,
+        StdError::generic_err("offer_asset and ask_asset amounts must be greater than zero")
     );
 }
 

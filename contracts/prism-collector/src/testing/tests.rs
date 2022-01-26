@@ -1,11 +1,12 @@
-use crate::contract::{execute, instantiate, query_config};
+use crate::contract::{execute, instantiate, query};
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    attr, to_binary, Addr, Coin, CosmosMsg, Decimal, StdError, SubMsg, Uint128, WasmMsg,
+    attr, from_binary, to_binary, Addr, Coin, CosmosMsg, Decimal, StdError, SubMsg, Uint128,
+    WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use prism_common::testing::mock_querier::mock_dependencies;
-use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg};
+use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 use prismswap::asset::{Asset, AssetInfo};
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 
@@ -27,7 +28,9 @@ fn proper_initialization() {
     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // it worked, let's query the state
-    let config: ConfigResponse = query_config(deps.as_ref()).unwrap();
+    let config: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+
     assert_eq!("astrofactory0000", config.astroport_factory.as_str());
     assert_eq!("gov0000", config.distribution_contract.as_str());
     assert_eq!("prismfactory0000", config.prismswap_factory.as_str());
@@ -60,6 +63,27 @@ fn test_convert_and_send() {
 
     let info = mock_info("addr0000", &[]);
     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let msg = ExecuteMsg::ConvertAndSend {
+        assets: vec![
+            Asset {
+                info: AssetInfo::NativeToken {
+                    denom: "uluna".to_string(),
+                },
+                amount: Uint128::from(100u128),
+            },
+            Asset {
+                info: AssetInfo::Token {
+                    contract_addr: Addr::unchecked("anc0000"),
+                },
+                amount: Uint128::from(200u128),
+            },
+        ],
+        receiver: Some("user0000".to_string()),
+    };
+    let info = mock_info("addr0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("only accept token assets"));
 
     let msg = ExecuteMsg::ConvertAndSend {
         assets: vec![
@@ -178,6 +202,15 @@ fn test_distribute() {
 
     let info = mock_info("addr0000", &[]);
     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let msg = ExecuteMsg::Distribute {
+        asset_tokens: vec!["x1".to_string(), "anc0000".to_string()],
+    };
+
+    let info = mock_info("addr0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("only accept token assets"));
+
     let msg = ExecuteMsg::Distribute {
         asset_tokens: vec!["yluna0000".to_string(), "anc0000".to_string()],
     };

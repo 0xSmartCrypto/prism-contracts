@@ -1,6 +1,16 @@
 # Prism LP Staking
 
-This contract provides functionality for staking one of the supported lp tokens in return for PRISM reward tokens. The contract is initialized with a list of supported staking tokens and a distribution schedule which specifies the amount of PRISM that is to be pro-rata distributed to stakers over specific time intervals.
+This contract provides functionality for staking one of the supported lp tokens in return for PRISM reward tokens. The contract is initialized with a list of supported staking tokens and a distribution schedule which specifies the amount of PRISM that is to be pro-rata distributed to stakers over specific time intervals.  The staking tokens contain weights that specify how the proportion of the total PRISM tokens should be allocated for a given time interval.  
+
+As an example, assume the distribution schedule is as follows:  
+  Interval1 - 1 week, 1M tokens distributed  
+  Interval2 - 1 week, 2M tokens distributed  
+
+And we've configured two staking tokens (LP1 and LP2) with the following weights:  
+  LP1 - weight = 1  
+  LP2 - weight = 2  
+
+For Interval1, 1/3 of the 1M PRISM tokens will be ditributed to LP1 stakers, and 2/3 of the 1M PRISM tokens will be distributed to LP2 stakers.  Similar logic for Interval2, but the number of PRISM tokens is 2M instead of 1M. 
 
 ## ExecuteMsg:
   - **Bond** (Cw20 receive hook): This method bonds lp tokens in return for LP rewards in the form of PRISM tokens.

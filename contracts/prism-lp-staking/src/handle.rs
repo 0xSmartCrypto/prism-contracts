@@ -183,7 +183,7 @@ pub fn claim_rewards(
         staker_reward_info.pending_reward = Uint128::zero();
 
         // Store or remove updated rewards info
-        // depends on the left pending reward and bond amount
+        // depends on the bond amount
         if staker_reward_info.bond_amount.is_zero() {
             REWARD_INFO.remove(
                 deps.storage,

@@ -22,6 +22,20 @@ use prismswap::asset::{Asset, AssetInfo};
 fn proper_initialization() {
     let mut deps = mock_dependencies(&[]);
 
+    // invalid distribution schedule
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        distribution_schedule: (100u64, 99u64, Uint128::from(1000000u128)),
+        yluna_staking: "ylunastaking0000".to_string(),
+        yluna_token: "ylunatoken0000".to_string(),
+    };
+
+    let info = mock_info("addr0000", &[]);
+    let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidDistributionSchedule {});
+
+    // successful init
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
@@ -601,6 +615,28 @@ fn claim_withdrawn_rewards() {
     );
 
     env.block.time = Timestamp::from_seconds(1814401u64);
+
+    // verify query works after vesting period ends
+    assert_eq!(
+        from_binary::<VestingStatusResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::VestingStatus {
+                    staker_addr: "alice0000".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        VestingStatusResponse {
+            scheduled_vests: vec![
+                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2 
+            ],
+            withdrawable: Uint128::from(500000u128),
+        }
+    );
+
     let res = execute(deps.as_mut(), env.clone(), user_info, msg).unwrap();
     assert_eq!(
         res.messages,
@@ -695,6 +731,12 @@ fn admin_withdraw_rewards() {
                                 contract_addr: Addr::unchecked("pluna0000"),
                             },
                             amount: Uint128::from(200u128),
+                        },
+                        Asset {
+                            info: AssetInfo::NativeToken {
+                                denom: "uluna".to_string(),
+                            },
+                            amount: Uint128::from(0u128),
                         }
                     ],
                 })

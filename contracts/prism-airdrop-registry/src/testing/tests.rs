@@ -71,6 +71,18 @@ fn proper_generic_claim() {
     do_add_airdrop_info(deps.as_mut(), mock_env(), info.clone(), "MIR");
 
     let msg = ExecuteMsg::FabricateClaim {
+        airdrop_token: "ANC".to_string(),
+        stage: 0,
+        amount: Uint128::new(1000),
+        proof: vec![],
+    };
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("no info registered for this airdrop token")
+    );
+
+    let msg = ExecuteMsg::FabricateClaim {
         airdrop_token: "MIR".to_string(),
         stage: 0,
         amount: Uint128::new(1000),
@@ -192,6 +204,15 @@ fn proper_remove_airdrop_info() {
     let invalid_info = mock_info("invalid", &[]);
     let res = execute(deps.as_mut(), mock_env(), invalid_info, msg.clone());
     assert_eq!(res.unwrap_err(), StdError::generic_err("unauthorized"));
+
+    let invalid_msg = ExecuteMsg::RemoveAirdropInfo {
+        airdrop_token: "ANC".to_string(),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), invalid_msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("There is no token info with this ANC")
+    );
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(res.messages.len(), 0);
@@ -350,7 +371,7 @@ pub fn proper_update_config() {
 
     do_init(deps.as_mut(), mock_env(), info.clone());
 
-    do_add_airdrop_info(deps.as_mut(), mock_env(), info.clone(), "MIR");
+    do_add_airdrop_info(deps.as_mut(), mock_env(), info, "MIR");
 
     let query_update_config = QueryMsg::Config {};
     let res: ConfigResponse =
@@ -366,6 +387,12 @@ pub fn proper_update_config() {
         owner: Some("new_owner".to_string()),
         vault_contract: Some("new_vault_contract".to_string()),
     };
+
+    let info = mock_info("invalid", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, update_conf.clone()).unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized"));
+
+    let info = mock_info("owner", &[]);
     let res = execute(deps.as_mut(), mock_env(), info, update_conf).unwrap();
     assert_eq!(res.messages.len(), 0);
 

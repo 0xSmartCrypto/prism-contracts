@@ -30,6 +30,17 @@ fn proper_initialization() {
 
     let msg = InstantiateMsg {
         prism_token: "prism0000".to_string(),
+        distribution_schedule: vec![(200, 100, Uint128::from(1000000u128))],
+        staking_tokens: vec![
+            ("lp00001".to_string(), 10u64),
+            ("lp00002".to_string(), 20u64),
+        ],
+    };
+    let err = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidDistributionSchedule {});
+
+    let msg = InstantiateMsg {
+        prism_token: "prism0000".to_string(),
         distribution_schedule: vec![(100, 200, Uint128::from(1000000u128))],
         staking_tokens: vec![
             ("lp00001".to_string(), 10u64),
@@ -143,6 +154,30 @@ fn test_bond_tokens() {
                 QueryMsg::StakerInfo {
                     staker: "addr0000".to_string(),
                     staking_token: None,
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::zero(),
+                bond_amount: Uint128::from(100u128),
+            }]
+        }
+    );
+
+    // same as above, but pass in staking token instead of None
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: Some("lp00001".to_string()),
                 },
             )
             .unwrap(),
@@ -335,6 +370,227 @@ fn test_unbond() {
     );
 }
 
+/// a few more unbond tests checking for error conditions and verifying
+/// proper reward claiming and storage cleanup after unbonding
+#[test]
+fn test_unbond_2() {
+    let mut deps = mock_dependencies(&[]);
+    let default_genesis_seconds: u64 = mock_env().block.time.seconds();
+
+    let msg = InstantiateMsg {
+        prism_token: "prism0000".to_string(),
+        distribution_schedule: vec![
+            (
+                default_genesis_seconds,
+                default_genesis_seconds + 100,
+                Uint128::from(1000000u128),
+            ),
+            (
+                default_genesis_seconds + 100,
+                default_genesis_seconds + 200,
+                Uint128::from(10000000u128),
+            ),
+        ],
+        staking_tokens: vec![
+            ("lp00001".to_string(), 10u64),
+            ("lp00002".to_string(), 20u64),
+        ],
+    };
+
+    let info = mock_info("addr0000", &[]);
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // bond 100 tokens
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "addr0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("lp00001", &[]);
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // invalid unbond - invalid staking token
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00003".to_string(),
+        amount: Some(Uint128::from(60u128)),
+    };
+
+    let info = mock_info("addr0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidStakingToken {});
+
+    // invalid unbond - nothing staked
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00002".to_string(),
+        amount: Some(Uint128::from(60u128)),
+    };
+
+    let info = mock_info("addr0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::NothingStaked {});
+
+    // check staker info
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::from(0u128),
+                bond_amount: Uint128::from(100u128),
+            }]
+        }
+    );
+
+    // unbond immediately, verify rewards cleaned up
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(100u128)),
+    };
+
+    let info = mock_info("addr0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "lp00001".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(100u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
+
+    // check staker info again, should be empty
+    // check staker info
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![]
+        }
+    );
+
+    // bond 100 tokens again
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "addr0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("lp00001", &[]);
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // increment time by 100 secs and unbond
+    let info = mock_info("addr0000", &[]);
+    let mut env = mock_env();
+    env.block.time = env.block.time.plus_seconds(100);
+    // normal unbond
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(100u128)),
+    };
+    execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "lp00001".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(100u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
+
+    // test staker info after unbonding everything
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::from(333333u128), // 1000000 * 10 / (10 + 20)
+                bond_amount: Uint128::from(0u128),
+            }]
+        }
+    );
+
+    // test claim rewards after unbonding everything
+    let msg = ExecuteMsg::ClaimRewards {
+        staking_token: None,
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "prism0000".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(333333u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
+    );
+
+    // verify rewards empty
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![]
+        }
+    );
+}
+
 #[test]
 fn test_compute_reward() {
     let mut deps = mock_dependencies(&[]);
@@ -486,6 +742,14 @@ fn test_claim_rewards() {
     env.block.time = env.block.time.plus_seconds(100);
     let info = mock_info("addr0000", &[]);
 
+    // invalid claim - invalid staking token
+    let msg = ExecuteMsg::ClaimRewards {
+        staking_token: Some("lp00003".to_string()),
+    };
+    let err = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidStakingToken {});
+
+    // valid claim
     let msg = ExecuteMsg::ClaimRewards {
         staking_token: Some("lp00001".to_string()),
     };
@@ -502,6 +766,80 @@ fn test_claim_rewards() {
             .unwrap(),
             funds: vec![],
         }))]
+    );
+}
+
+#[test]
+fn test_claim_all_rewards() {
+    let mut deps = mock_dependencies(&[]);
+    let default_genesis_seconds: u64 = mock_env().block.time.seconds();
+
+    let msg = InstantiateMsg {
+        prism_token: "prism0000".to_string(),
+        distribution_schedule: vec![
+            (
+                default_genesis_seconds,
+                default_genesis_seconds + 100,
+                Uint128::from(1000000u128),
+            ),
+            (
+                default_genesis_seconds + 100,
+                default_genesis_seconds + 200,
+                Uint128::from(10000000u128),
+            ),
+        ],
+        staking_tokens: vec![
+            ("lp00001".to_string(), 10u64),
+            ("lp00002".to_string(), 20u64),
+        ],
+    };
+
+    let info = mock_info("addr0000", &[]);
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // bond 100 LP1 tokens
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "addr0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("lp00001", &[]);
+    let mut env = mock_env();
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // bond 100 LP2 tokens
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "addr0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("lp00002", &[]);
+    let _res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // 100 seconds passed
+    // 1,000,000 rewards distributed
+    env.block.time = env.block.time.plus_seconds(100);
+    let info = mock_info("addr0000", &[]);
+
+    // claim with None
+    let msg = ExecuteMsg::ClaimRewards {
+        staking_token: None,
+    };
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "prism0000".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                // 1,000,000 * 10 / (10 + 20) + 1,000,000 * 20 / (10 + 20)
+                // = 333333 + 666666 (not the full 1M due to rounding down)
+                amount: Uint128::from(999999u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
     );
 }
 

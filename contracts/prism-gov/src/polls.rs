@@ -20,7 +20,7 @@ const MAX_DESC_LENGTH: usize = 256;
 const MIN_LINK_LENGTH: usize = 12;
 const MAX_LINK_LENGTH: usize = 128;
 
-const MAX_POLL_VOTES_PER_USER: usize = 20;
+pub const MAX_POLL_VOTES_PER_USER: usize = 20;
 
 /*
  * Creates a new poll

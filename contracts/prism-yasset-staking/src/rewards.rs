@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    attr, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
-    StdError, StdResult, Storage, Uint128, WasmMsg,
+    attr, to_binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, Storage, Uint128, WasmMsg,
 };
 
 use crate::querier::query_vault_bond_amount;
@@ -135,23 +135,19 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
 
         if staking_mode == StakingMode::Default || asset_info.to_string() == cfg.prism_token {
             // re-implement into_msg here because life is cruel
-            // should never be native
-            let msg = match &asset_info {
-                AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
+            if let AssetInfo::Token { contract_addr } = asset_info {
+                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: contract_addr.to_string(),
                     msg: to_binary(&Cw20ExecuteMsg::Transfer {
                         recipient: info.sender.to_string(),
                         amount: claim_asset.amount,
                     })?,
                     funds: vec![],
-                }),
-                AssetInfo::NativeToken { .. } => CosmosMsg::Bank(BankMsg::Send {
-                    to_address: info.sender.to_string(),
-                    amount: vec![claim_asset.deduct_tax(&deps.querier)?],
-                }),
-            };
-
-            messages.push(msg);
+                }))
+            } else {
+                // this is a logic error in the code, native reward assets not allowed
+                panic!("Native reward assets not supported");
+            }
         } else {
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: asset_info.to_string(),
