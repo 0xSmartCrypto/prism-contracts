@@ -25,8 +25,5 @@ This contract provides limit order functionality for AMM trading pairs. Users su
 ## [prism-airdrop-registry](/contracts/prism-airdrop-registry):
 This contract stores airdrop information and provides the ability to initiate airdrop claims. Admin users will submit a claim for an airdrop with the associated proof.  This contract then creates an airdrop claim message and submits a ClaimAirdrop message on the [vault](/contracts/prism-vault) contract, which will execute the claim and deposit the airdrop rewards to the [yasset-staking](/contracts/prism-yasset-staking) contract.
 
-## [prism-fair-launch](/contracts/prism-fair-launch):
-This contract provides functionality for executing a "fair launch" for distribution of the initial PRISM tokens. This consists of a two phase auction for the tokens. During Phase 1, users can deposit and withdraw any amount of uusd. During Phase 2, users can only withdraw tokens. After Phase 2, users can withdraw their pro-rata allocated portion of the distributed PRISM tokens.
-
 ## [prism-launch-pool](/contracts/prism-fair-launch):
 This contract provides functionality for the community farming launch event. We initialize this contract with a distribution schedule which specifies the amount of PRISM that is to be distributed linearly over the entire farming interval. Users bond their y-asset tokens with this contract in return for PRISM tokens, and users can unbond their tokens at any time without penalty. PRISM rewards are subject to a 21-day vesting period from the time that their withdrawal is requested. Staking rewards from the bonded y-asset tokens are periodically claimed and sent to the contract owner (PRISM labs).

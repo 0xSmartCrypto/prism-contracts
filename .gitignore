@@ -106,3 +106,5 @@ target/
 
 #pytest
 .pytest_cache
+
+artifacts
