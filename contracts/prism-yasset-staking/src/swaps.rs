@@ -85,13 +85,8 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
 pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // query yluna amount to know how much we received from vault
+    // query pluna amount to know how much we received from vault
     // received pluna amount should always be same as yluna amount
-    let yluna_amt = query_token_balance(
-        &deps.querier,
-        cfg.yluna_token.clone(),
-        env.contract.address.clone(),
-    )?;
     let pluna_amt = query_token_balance(
         &deps.querier,
         cfg.pluna_token.clone(),
@@ -107,7 +102,7 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
                         info: AssetInfo::Token {
                             contract_addr: cfg.yluna_token,
                         },
-                        amount: yluna_amt,
+                        amount: pluna_amt,
                     },
                     Asset {
                         info: AssetInfo::Token {
