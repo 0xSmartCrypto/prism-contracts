@@ -928,24 +928,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prism-fair-launch"
-version = "1.0.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-storage-plus",
- "cw2",
- "cw20",
- "hex",
- "prism-common",
- "prism-protocol",
- "prismswap",
- "schemars",
- "serde",
- "thiserror",
-]
-
-[[package]]
 name = "prism-gov"
 version = "1.0.0"
 dependencies = [
