@@ -2150,19 +2150,22 @@ fn update_config() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    assert_eq!(config, ConfigResponse {
-        owner: "addr0001".to_string(),
-        prism_token: PRISM_TOKEN.to_string(),
-        xprism_token: VOTING_TOKEN.to_string(),
-        quorum: Decimal::percent(DEFAULT_QUORUM),
-        threshold: Decimal::percent(DEFAULT_THRESHOLD),
-        voting_period: DEFAULT_VOTING_PERIOD,
-        effective_delay: DEFAULT_EFFECTIVE_DELAY,
-        proposal_deposit: Uint128::from(DEFAULT_PROPOSAL_DEPOSIT),
-        snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
-        redemption_time: DEFAULT_REDEMPTION_TIME,
-        poll_gas_limit: DEFAULT_POLL_GAS_LIMIT
-    });
+    assert_eq!(
+        config,
+        ConfigResponse {
+            owner: "addr0001".to_string(),
+            prism_token: PRISM_TOKEN.to_string(),
+            xprism_token: VOTING_TOKEN.to_string(),
+            quorum: Decimal::percent(DEFAULT_QUORUM),
+            threshold: Decimal::percent(DEFAULT_THRESHOLD),
+            voting_period: DEFAULT_VOTING_PERIOD,
+            effective_delay: DEFAULT_EFFECTIVE_DELAY,
+            proposal_deposit: Uint128::from(DEFAULT_PROPOSAL_DEPOSIT),
+            snapshot_period: DEFAULT_SNAPSHOT_PERIOD,
+            redemption_time: DEFAULT_REDEMPTION_TIME,
+            poll_gas_limit: DEFAULT_POLL_GAS_LIMIT
+        }
+    );
 
     // update left items
     let info = mock_info("addr0001", &[]);
@@ -2184,19 +2187,22 @@ fn update_config() {
     // it worked, let's query the state
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
-    assert_eq!(config, ConfigResponse {
-        owner: "addr0001".to_string(),
-        prism_token: PRISM_TOKEN.to_string(),
-        xprism_token: VOTING_TOKEN.to_string(),
-        quorum: Decimal::percent(20),
-        threshold: Decimal::percent(75),
-        voting_period: 20000u64,
-        effective_delay: 20000u64,
-        proposal_deposit: Uint128::from(123u128),
-        snapshot_period: 60u64,
-        redemption_time: 1u64,
-        poll_gas_limit: 2000000u64
-    });
+    assert_eq!(
+        config,
+        ConfigResponse {
+            owner: "addr0001".to_string(),
+            prism_token: PRISM_TOKEN.to_string(),
+            xprism_token: VOTING_TOKEN.to_string(),
+            quorum: Decimal::percent(20),
+            threshold: Decimal::percent(75),
+            voting_period: 20000u64,
+            effective_delay: 20000u64,
+            proposal_deposit: Uint128::from(123u128),
+            snapshot_period: 60u64,
+            redemption_time: 1u64,
+            poll_gas_limit: 2000000u64
+        }
+    );
 
     // Unauthorzied err
     let info = mock_info(TEST_CREATOR, &[]);
