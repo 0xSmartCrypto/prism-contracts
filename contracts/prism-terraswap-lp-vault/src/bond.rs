@@ -41,10 +41,12 @@ pub fn bond(
     let mut lp_info = LP_INFO.load(deps.storage)?;
     lp_info.last_liquidity = liquidity;
     lp_info.amt_lp = lp_info.amt_lp.checked_sub(lp_to_burn)?;
+
     let mut clp_to_mint = amount;
     if lp_info.amt_lp > Uint128::zero() {
         clp_to_mint *= lp_info.amt_clp / lp_info.amt_lp;
     }
+
     lp_info.amt_lp += amount;
     lp_info.amt_clp += clp_to_mint;
     LP_INFO.save(deps.storage, &lp_info)?;
@@ -89,10 +91,12 @@ pub fn unbond(deps: DepsMut, sender_addr: Addr, amount: Uint128) -> ContractResu
     let mut lp_info = LP_INFO.load(deps.storage)?;
     lp_info.last_liquidity = liquidity;
     lp_info.amt_lp = lp_info.amt_lp.checked_sub(lp_to_burn)?;
+
     let mut clp_to_burn = amount;
     if lp_info.amt_lp > Uint128::zero() {
         clp_to_burn *= lp_info.amt_clp / lp_info.amt_lp;
     }
+
     lp_info.amt_lp = lp_info.amt_lp.checked_sub(amount)?;
     lp_info.amt_clp = lp_info.amt_clp.checked_sub(clp_to_burn)?;
     LP_INFO.save(deps.storage, &lp_info)?;
@@ -129,7 +133,7 @@ pub fn unbond(deps: DepsMut, sender_addr: Addr, amount: Uint128) -> ContractResu
 pub fn update_rewards(deps: Deps) -> ContractResult<(Decimal, Uint128)> {
     let lp_info = LP_INFO.load(deps.storage)?;
 
-    // calculate and amount of LP to withdraw and burn
+    // calculate amount of LP to withdraw and burn
     let pool_info = query_pool_info(deps, &deps.querier)?;
 
     // why is math so hard to do between Decimal and Uint128

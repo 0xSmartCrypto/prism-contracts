@@ -124,7 +124,7 @@ pub fn create_new_lp_vault(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-#[allow(dead_code)] // throws warnings on compile because we don't call reply explicitly
+#[allow(dead_code)]
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> ContractResult<Response> {
     let id = msg.id;
     let res = parse_reply_instantiate_data(msg).map_err(|_| ContractError::ParseError {})?;
@@ -308,7 +308,6 @@ pub fn create_terraswap_vault_msg(
             msg: to_binary(&TerraswapVaultInstantiateMsg {
                 owner: env.contract.address.into_string(),
                 factory: terra_cfg.factory.into_string(),
-                generator: Addr::unchecked("").into_string(),
                 fee: Decimal::percent(15),
                 lp_contract: lp_info.lp.clone().into_string(),
                 clp_contract: lp_info.clp_contract.clone().into_string(),
@@ -369,6 +368,7 @@ pub fn create_astroport_reward_dist_msg(deps: Deps, lp_info: LPContracts) -> Con
 pub fn create_terraswap_reward_dist_msg(deps: Deps, lp_info: LPContracts) -> ContractResult<SubMsg> {
     // grab relevant asset infos
     // convert terraswap asset infos into astroport type asset infos for now because thats what reward dist requires
+    // gross
     let mut whitelisted_asset_infos: Vec<AstroAssetInfo> = vec![];
     let amm_info = query_terraswap_pair_info(deps, &deps.querier, lp_info.lp.clone())?;
     for info in amm_info.asset_infos {
@@ -434,7 +434,6 @@ pub fn update_terraswap_vault_reward_dist(lp_info: LPContracts) -> ContractResul
         contract_addr: lp_info.vault.clone().into_string(),
         msg: to_binary(&TerraswapVaultExecuteMsg::UpdateConfig {
             owner: None,
-            generator: None,
             factory: None,
             reward_dist: Some(lp_info.reward_dist_contract),
             fee: None,
