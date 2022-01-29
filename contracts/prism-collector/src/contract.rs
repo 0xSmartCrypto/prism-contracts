@@ -10,10 +10,9 @@ use crate::state::{Config, CONFIG};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use cw2::set_contract_version;
-use cw20::Cw20ExecuteMsg;
-use prismswap::asset::{Asset, AssetInfo, PairInfo};
+use cw_asset::{Asset, AssetInfo};
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
-use prismswap::querier::{query_balance, query_pair_info, query_token_balance};
+use prismswap::querier::query_pair_info;
 
 const CONTRACT_NAME: &str = "prism-collector";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -46,9 +45,24 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::ConvertAndSend { assets, receiver } => {
             convert_and_send(deps, env, info, assets, receiver)
         }
-        ExecuteMsg::Distribute { asset_tokens } => distribute(deps, env, asset_tokens),
+        ExecuteMsg::Distribute { asset_infos } => distribute(deps, env, asset_infos),
         ExecuteMsg::BaseSwapHook { receiver } => base_swap_hook(deps, env, info, receiver),
     }
+}
+
+pub fn verify_payment(info: &MessageInfo, denom: &str, amount: Uint128) -> StdResult<()> {
+    let coin_payment = info
+        .funds
+        .iter()
+        .find(|x| x.denom == denom && x.amount > Uint128::zero())
+        .ok_or_else(|| StdError::generic_err(format!("Missing funds payment: {}", denom)))?;
+    if coin_payment.amount != amount {
+        return Err(StdError::generic_err(format!(
+            "Invalid {} payment - funds/asset amount mismatch",
+            denom
+        )));
+    }
+    Ok(())
 }
 
 pub fn convert_and_send(
@@ -60,97 +74,63 @@ pub fn convert_and_send(
 ) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
-    let receiver: String = receiver.unwrap_or_else(|| info.sender.to_string());
+    let receiver = match receiver {
+        None => info.sender.clone(),
+        Some(addr_str) => deps.api.addr_validate(&addr_str)?,
+    };
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut need_hook: bool = false;
     for asset in assets {
-        if asset.is_native_token() {
-            return Err(StdError::generic_err("only accept token assets"));
+        match &asset.info {
+            AssetInfo::Cw20(..) => {
+                messages.push(
+                    asset.transfer_from_msg(info.sender.clone(), env.contract.address.clone())?,
+                );
+            }
+            AssetInfo::Native(denom) => {
+                verify_payment(&info, denom, asset.amount)?;
+            }
         }
 
-        // add transfer from message
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: asset.info.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                owner: info.sender.to_string(),
-                amount: asset.amount,
-                recipient: env.contract.address.to_string(),
-            })?,
-            funds: vec![],
-        }));
-
         // try to query pair with $PRISM
-        let prism_pair_info_res: StdResult<PairInfo> = query_pair_info(
-            &deps.querier,
-            config.prismswap_factory.clone(),
-            &[
-                AssetInfo::Token {
-                    contract_addr: config.prism_token.clone(),
-                },
-                asset.info.clone(),
-            ],
-        );
+        let prism_pair_addr = query_prismswap_prism_pair(&deps, &config, &asset.info);
 
         // if direct $PRISM pair does not exist, use base pair and send ust back to contract to swap it
-        let (pair_addr, to): (String, Option<String>) = match prism_pair_info_res {
-            Ok(pair_info) => (pair_info.contract_addr.to_string(), Some(receiver.clone())),
-            Err(_) => {
+        let (pair_addr, to_addr): (Addr, Addr) = match prism_pair_addr {
+            Some(prism_pair_addr) => (prism_pair_addr, receiver.clone()),
+            None => {
                 // try to get the base pair from prismswap first
                 // if the pair does not exist on prismswap or astroport, return error
-                let base_pair_info: PairInfo = query_pair_info(
-                    &deps.querier,
-                    config.prismswap_factory.clone(),
-                    &[
-                        AssetInfo::NativeToken {
-                            denom: config.base_denom.to_string(),
-                        },
-                        asset.info.clone(),
-                    ],
-                )
-                .unwrap_or(query_pair_info(
-                    &deps.querier,
-                    config.astroport_factory.clone(),
-                    &[
-                        AssetInfo::NativeToken {
-                            denom: config.base_denom.to_string(),
-                        },
-                        asset.info.clone(),
-                    ],
-                )?);
+                let base_pair_addr = query_prismswap_base_pair(&deps, &config, &asset.info)
+                    .or_else(|| query_astroport_base_pair(&deps, &config, &asset.info))
+                    .ok_or_else(|| {
+                        StdError::generic_err(format!(
+                            "missing pair for {} to {}",
+                            asset.info, config.base_denom
+                        ))
+                    })?;
 
                 // because we are swaping to base denom,
                 // we will need to call the hook to perform base->$PRISM swap
                 need_hook = true;
 
-                (base_pair_info.contract_addr.to_string(), None)
+                (base_pair_addr, env.contract.address.clone())
             }
         };
 
-        // create swap msg
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: asset.info.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: pair_addr.to_string(),
-                amount: asset.amount,
-                msg: to_binary(&PairCw20HookMsg::Swap {
-                    max_spread: None,
-                    belief_price: None,
-                    to,
-                })?,
-            })?,
-            funds: vec![],
-        }));
+        let swap_msg = get_swap_msg(&pair_addr, &asset, &to_addr)?;
+        messages.push(swap_msg);
     }
 
     if need_hook {
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.to_string(),
             msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                receiver: Some(receiver),
+                receiver: Some(receiver.to_string()),
             })?,
             funds: vec![],
-        }))
+        }));
     }
 
     Ok(Response::new()
@@ -158,87 +138,49 @@ pub fn convert_and_send(
         .add_attributes(vec![attr("action", "convert_and_send")]))
 }
 
-pub fn distribute(deps: DepsMut, env: Env, asset_tokens: Vec<String>) -> StdResult<Response> {
+pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<AssetInfo>) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut need_hook: bool = false;
-    for asset in asset_tokens {
-        let asset_addr: Addr = deps
-            .api
-            .addr_validate(&asset)
-            .map_err(|_| StdError::generic_err("only accept token assets"))?;
-        let asset_info = AssetInfo::Token {
-            contract_addr: asset_addr.clone(),
+    for asset_info in &asset_infos {
+        let asset_balance =
+            asset_info.query_balance(&deps.querier, env.contract.address.clone())?;
+
+        if asset_balance.is_zero() {
+            continue;
+        }
+
+        let asset = Asset {
+            info: asset_info.clone(),
+            amount: asset_balance,
         };
 
-        let asset_balance: Uint128 =
-            query_token_balance(&deps.querier, asset_addr, env.contract.address.clone())?;
-
-        // try to query pair with $PRISM
-        let prism_pair_info_res: StdResult<PairInfo> = query_pair_info(
-            &deps.querier,
-            config.prismswap_factory.clone(),
-            &[
-                AssetInfo::Token {
-                    contract_addr: config.prism_token.clone(),
-                },
-                asset_info.clone(),
-            ],
-        );
-
+        let prism_pair_addr = query_prismswap_prism_pair(&deps, &config, &asset.info);
         // if direct $PRISM pair does not exist, use base pair and send ust back to contract to swap it
-        let (pair_addr, to): (String, Option<String>) = match prism_pair_info_res {
-            Ok(pair_info) => (
-                pair_info.contract_addr.to_string(),
-                Some(config.distribution_contract.to_string()),
-            ),
-            Err(_) => {
+        let (pair_addr, to_addr): (Addr, Addr) = match prism_pair_addr {
+            Some(prism_pair_addr) => (prism_pair_addr, config.distribution_contract.clone()),
+            None => {
                 // try to get the base pair from prismswap first
                 // if the pair does not exist on prismswap or astroport, return error
-                let base_pair_info: PairInfo = query_pair_info(
-                    &deps.querier,
-                    config.prismswap_factory.clone(),
-                    &[
-                        AssetInfo::NativeToken {
-                            denom: config.base_denom.to_string(),
-                        },
-                        asset_info.clone(),
-                    ],
-                )
-                .unwrap_or(query_pair_info(
-                    &deps.querier,
-                    config.astroport_factory.clone(),
-                    &[
-                        AssetInfo::NativeToken {
-                            denom: config.base_denom.to_string(),
-                        },
-                        asset_info.clone(),
-                    ],
-                )?);
+                let base_pair_addr = query_prismswap_base_pair(&deps, &config, &asset.info)
+                    .or_else(|| query_astroport_base_pair(&deps, &config, &asset.info))
+                    .ok_or_else(|| {
+                        StdError::generic_err(format!(
+                            "missing pair for {} to {}",
+                            asset.info, config.base_denom
+                        ))
+                    })?;
 
-                // because we are swaping to base denom,
+                // because we are swapping to base denom,
                 // we will need to call the hook to perform base->$PRISM swap
                 need_hook = true;
-
-                (base_pair_info.contract_addr.to_string(), None)
+                (base_pair_addr, env.contract.address.clone())
             }
         };
 
-        // create swap msg
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: asset_info.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: pair_addr.to_string(),
-                amount: asset_balance,
-                msg: to_binary(&PairCw20HookMsg::Swap {
-                    max_spread: None,
-                    belief_price: None,
-                    to,
-                })?,
-            })?,
-            funds: vec![],
-        }));
+        let swap_msg = get_swap_msg(&pair_addr, &asset, &to_addr)?;
+        messages.push(swap_msg)
     }
 
     if need_hook {
@@ -266,53 +208,32 @@ pub fn base_swap_hook(
         return Err(StdError::generic_err("unauthorized"));
     }
 
-    let receiver: String = receiver.unwrap_or_else(|| config.distribution_contract.to_string());
+    let receiver = receiver.unwrap_or_else(|| config.distribution_contract.to_string());
+    let base_asset_info = AssetInfo::Native(config.base_denom.clone());
+    let balance = base_asset_info.query_balance(&deps.querier, env.contract.address)?;
 
-    let prism_pair_info_res: PairInfo = query_pair_info(
-        &deps.querier,
-        config.prismswap_factory.clone(),
-        &[
-            AssetInfo::NativeToken {
-                denom: config.base_denom.to_string(),
-            },
-            AssetInfo::Token {
-                contract_addr: config.prism_token.clone(),
-            },
-        ],
-    )?;
+    // todo - should we return an error here?
+    if balance.is_zero() {
+        return Ok(Response::new());
+    }
 
-    let amount = query_balance(
-        &deps.querier,
-        env.contract.address,
-        config.base_denom.to_string(),
-    )?;
-    let swap_asset = Asset {
-        info: AssetInfo::NativeToken {
-            denom: config.base_denom.clone(),
-        },
-        amount,
+    let base_asset = Asset {
+        info: base_asset_info.clone(),
+        amount: balance,
     };
 
-    // deduct tax first
-    let amount = (swap_asset.deduct_tax(&deps.querier)?).amount;
+    let prism_pair_addr =
+        query_prismswap_prism_pair(&deps, &config, &base_asset_info).ok_or_else(|| {
+            StdError::generic_err(format!(
+                "missing pair for {} to {}",
+                base_asset.info, config.prism_token
+            ))
+        })?;
 
+    let receiver_addr = Addr::unchecked(&receiver); // already been checked
+    let swap_msg = get_swap_msg(&prism_pair_addr, &base_asset, &receiver_addr)?;
     Ok(Response::new()
-        .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: prism_pair_info_res.contract_addr.to_string(),
-            msg: to_binary(&PairExecuteMsg::Swap {
-                offer_asset: Asset {
-                    amount,
-                    ..swap_asset
-                },
-                max_spread: None,
-                belief_price: None,
-                to: Some(receiver),
-            })?,
-            funds: vec![Coin {
-                denom: config.base_denom,
-                amount,
-            }],
-        }))
+        .add_message(swap_msg)
         .add_attribute("action", "base_swap_hook"))
 }
 
@@ -327,4 +248,85 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     config.as_res()
+}
+
+pub fn query_prismswap_prism_pair(
+    deps: &DepsMut,
+    config: &Config,
+    asset_info: &AssetInfo,
+) -> Option<Addr> {
+    query_pair_info(
+        &deps.querier,
+        config.prismswap_factory.clone(),
+        &[
+            asset_info.into(),
+            AssetInfo::Cw20(config.prism_token.clone()).into(),
+        ],
+    )
+    .ok()
+    .map(|x| x.contract_addr)
+}
+
+pub fn query_prismswap_base_pair(
+    deps: &DepsMut,
+    config: &Config,
+    asset_info: &AssetInfo,
+) -> Option<Addr> {
+    query_pair_info(
+        &deps.querier,
+        config.prismswap_factory.clone(),
+        &[
+            AssetInfo::Native(config.base_denom.clone()).into(),
+            asset_info.into(),
+        ],
+    )
+    .ok()
+    .map(|x| x.contract_addr)
+}
+
+pub fn query_astroport_base_pair(
+    deps: &DepsMut,
+    config: &Config,
+    asset_info: &AssetInfo,
+) -> Option<Addr> {
+    astroport::querier::query_pair_info(
+        &deps.querier,
+        config.astroport_factory.clone(),
+        &[
+            AssetInfo::Native(config.base_denom.clone()).into(),
+            asset_info.into(),
+        ],
+    )
+    .ok()
+    .map(|x| x.contract_addr)
+}
+
+pub fn get_swap_msg(
+    pair_addr: &Addr,
+    offer_asset: &Asset,
+    recipient: &Addr,
+) -> StdResult<CosmosMsg> {
+    match &offer_asset.info {
+        AssetInfo::Cw20(..) => {
+            let msg = to_binary(&PairCw20HookMsg::Swap {
+                max_spread: None,
+                belief_price: None,
+                to: Some(recipient.to_string()),
+            })?;
+            offer_asset.send_msg(pair_addr, msg)
+        }
+        AssetInfo::Native(denom) => Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: pair_addr.to_string(),
+            msg: to_binary(&PairExecuteMsg::Swap {
+                offer_asset: offer_asset.into(),
+                max_spread: None,
+                belief_price: None,
+                to: Some(recipient.to_string()),
+            })?,
+            funds: vec![Coin {
+                denom: denom.to_string(),
+                amount: offer_asset.amount,
+            }],
+        })),
+    }
 }
