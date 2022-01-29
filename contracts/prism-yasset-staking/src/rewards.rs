@@ -105,7 +105,7 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
 
     let mut messages = vec![];
     let mut attributes = vec![];
-    let mut assets_to_swap: Vec<Asset> = vec![];
+    let mut assets_to_swap: Vec<cw_asset::Asset> = vec![];
     for asset_info in whitelisted_assets {
         let mut reward_info = compute_asset_rewards(
             deps.storage,
@@ -159,7 +159,7 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
                 funds: vec![],
             }));
 
-            assets_to_swap.push(claim_asset.clone());
+            assets_to_swap.push(claim_asset.clone().into());
         }
 
         attributes.push(attr("claimed_asset", format!("{}", &claim_asset)));

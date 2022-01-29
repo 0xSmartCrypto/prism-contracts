@@ -918,10 +918,8 @@ fn test_claim_rewards_xprism_mode() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "collector0000".to_string(),
                 msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
-                    assets: vec![Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("yluna0000")
-                        },
+                    assets: vec![cw_asset::Asset {
+                        info: cw_asset::AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                         amount: Uint128::from(90u128),
                     }],
                     receiver: Some("alice0000".to_string()),
