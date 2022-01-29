@@ -26,6 +26,36 @@ impl fmt::Display for Asset {
     }
 }
 
+impl From<cw_asset::Asset> for Asset {
+    fn from(asset: cw_asset::Asset) -> Self {
+        Self {
+            info: asset.info.into(),
+            amount: asset.amount,
+        }
+    }
+}
+
+impl From<&cw_asset::Asset> for Asset {
+    fn from(asset: &cw_asset::Asset) -> Self {
+        asset.clone().into()
+    }
+}
+
+impl From<Asset> for cw_asset::Asset {
+    fn from(asset: Asset) -> cw_asset::Asset {
+        cw_asset::Asset {
+            info: asset.info.into(),
+            amount: asset.amount,
+        }
+    }
+}
+
+impl From<&Asset> for cw_asset::Asset {
+    fn from(asset: &Asset) -> cw_asset::Asset {
+        asset.clone().into()
+    }
+}
+
 /// the decimal fraction
 static DECIMAL_FRACTION: Uint128 = Uint128::new(1_000_000_000_000_000_000u128);
 
@@ -166,6 +196,36 @@ impl fmt::Display for AssetInfo {
             AssetInfo::NativeToken { denom } => write!(f, "{}", denom),
             AssetInfo::Token { contract_addr } => write!(f, "{}", contract_addr),
         }
+    }
+}
+
+impl From<cw_asset::AssetInfo> for AssetInfo {
+    fn from(asset_info: cw_asset::AssetInfo) -> Self {
+        match asset_info {
+            cw_asset::AssetInfo::Cw20(contract_addr) => AssetInfo::Token { contract_addr },
+            cw_asset::AssetInfo::Native(denom) => AssetInfo::NativeToken { denom },
+        }
+    }
+}
+
+impl From<&cw_asset::AssetInfo> for AssetInfo {
+    fn from(asset_info: &cw_asset::AssetInfo) -> Self {
+        asset_info.clone().into()
+    }
+}
+
+impl From<AssetInfo> for cw_asset::AssetInfo {
+    fn from(asset_info: AssetInfo) -> cw_asset::AssetInfo {
+        match asset_info {
+            AssetInfo::Token { contract_addr } => cw_asset::AssetInfo::Cw20(contract_addr),
+            AssetInfo::NativeToken { denom } => cw_asset::AssetInfo::Native(denom),
+        }
+    }
+}
+
+impl From<&AssetInfo> for cw_asset::AssetInfo {
+    fn from(asset_info: &AssetInfo) -> cw_asset::AssetInfo {
+        asset_info.clone().into()
     }
 }
 
