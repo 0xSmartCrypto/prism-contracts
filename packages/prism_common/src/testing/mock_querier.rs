@@ -66,6 +66,7 @@ pub struct WasmMockQuerier {
     token_querier: TokenQuerier,
     tax_querier: TaxQuerier,
     factory_querier: FactoryQuerier,
+    astro_factory_querier: FactoryQuerier,
     vault_state_querier: VaultStateQuerier,
     simulation_querier: SimulationQuerier,
 }
@@ -155,31 +156,35 @@ impl WasmMockQuerier {
                 match from_binary(msg).unwrap() {
                     QueryMsg::Pair { asset_infos } => {
                         let key = pair_key(&asset_infos);
-                        match self.factory_querier.pairs.get(&key) {
-                            Some(asset_infos) => {
-                                if contract_addr == "astrofactory0000" {
-                                    SystemResult::Ok(ContractResult::from(to_binary(
-                                        &AstroPairInfo {
-                                            pair_type: PairType::Xyk {},
-                                            contract_addr: Addr::unchecked(key),
-                                            liquidity_token: Addr::unchecked(
-                                                "liquidity".to_string(),
-                                            ),
-                                            asset_infos: to_astroport_asset_infos(asset_infos),
-                                        },
-                                    )))
-                                } else {
+                        if contract_addr == "astrofactory0000" {
+                            match self.astro_factory_querier.pairs.get(&key) {
+                                Some(asset_infos) => SystemResult::Ok(ContractResult::from(
+                                    to_binary(&AstroPairInfo {
+                                        pair_type: PairType::Xyk {},
+                                        contract_addr: Addr::unchecked(key),
+                                        liquidity_token: Addr::unchecked("liquidity".to_string()),
+                                        asset_infos: to_astroport_asset_infos(asset_infos),
+                                    }),
+                                )),
+                                None => SystemResult::Err(SystemError::InvalidRequest {
+                                    error: "No pair info exists".to_string(),
+                                    request: msg.as_slice().into(),
+                                }),
+                            }
+                        } else {
+                            match self.factory_querier.pairs.get(&key) {
+                                Some(asset_infos) => {
                                     SystemResult::Ok(ContractResult::from(to_binary(&PairInfo {
                                         contract_addr: Addr::unchecked(key),
                                         liquidity_token: Addr::unchecked("liquidity".to_string()),
                                         asset_infos: asset_infos.clone(),
                                     })))
                                 }
+                                None => SystemResult::Err(SystemError::InvalidRequest {
+                                    error: "No pair info exists".to_string(),
+                                    request: msg.as_slice().into(),
+                                }),
                             }
-                            None => SystemResult::Err(SystemError::InvalidRequest {
-                                error: "No pair info exists".to_string(),
-                                request: msg.as_slice().into(),
-                            }),
                         }
                     }
                     QueryMsg::TokenInfo {} => {
@@ -369,6 +374,7 @@ impl WasmMockQuerier {
             token_querier: TokenQuerier::default(),
             tax_querier: TaxQuerier::default(),
             factory_querier: FactoryQuerier::default(),
+            astro_factory_querier: FactoryQuerier::default(),
             vault_state_querier: VaultStateQuerier::default(),
             simulation_querier: SimulationQuerier::default(),
         }
@@ -390,6 +396,10 @@ impl WasmMockQuerier {
 
     pub fn with_pairs(&mut self, pairs: &Vec<[AssetInfo; 2]>) {
         self.factory_querier = FactoryQuerier::new(pairs);
+    }
+
+    pub fn with_astro_pairs(&mut self, pairs: &Vec<[AssetInfo; 2]>) {
+        self.astro_factory_querier = FactoryQuerier::new(pairs);
     }
 
     pub fn with_vault_state(&mut self, total_bond_amount: &Uint128) {
