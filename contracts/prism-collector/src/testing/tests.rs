@@ -57,8 +57,7 @@ fn test_convert_and_send() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
 
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
         ],
@@ -69,8 +68,7 @@ fn test_convert_and_send() {
         [
             AssetInfo::Native("uluna".to_string()).into(),
             AssetInfo::Native("uusd".to_string()).into(),
-        ],
-    ]);
+        ]]);
 
     let msg = ExecuteMsg::ConvertAndSend {
         assets: vec![
@@ -195,7 +193,7 @@ fn test_convert_and_send_native() {
     assert_eq!(err, StdError::generic_err("Missing route for native:uluna"));
 
     // add pair for uluna/uusd
-    deps.querier.with_pairs(&vec![[
+    deps.querier.with_pairs(&[[
         AssetInfo::Native("uluna".to_string()).into(),
         AssetInfo::Native("uusd".to_string()).into(),
     ]]);
@@ -270,16 +268,14 @@ fn test_convert_and_send_native() {
 
     // success - this time add a pair for uluna/prism as well so that
     // we do a direct swap and no longer need the BaseSwapHook
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Native("uluna".to_string()).into(),
             AssetInfo::Native("uusd".to_string()).into(),
         ],
         [
             AssetInfo::Native("uluna".to_string()).into(),
             AssetInfo::Native("prism0000".to_string()).into(),
-        ],
-    ]);
+        ]]);
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
@@ -301,16 +297,14 @@ fn test_convert_and_send_native() {
     );
 
     // success - convert and send two native coins with direct prism pairs
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Native("uluna".to_string()).into(),
             AssetInfo::Native("prism0000".to_string()).into(),
         ],
         [
             AssetInfo::Native("uusd".to_string()).into(),
             AssetInfo::Native("prism0000".to_string()).into(),
-        ],
-    ]);
+        ]]);
     let uusd_asset = Asset {
         info: AssetInfo::Native("uusd".to_string()),
         amount: Uint128::from(amount),
@@ -383,7 +377,7 @@ fn test_convert_and_send_cw20() {
     );
 
     // add pair for yluna0000/uusd
-    deps.querier.with_pairs(&vec![[
+    deps.querier.with_pairs(&[[
         AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
         AssetInfo::Native("uusd".to_string()).into(),
     ]]);
@@ -480,16 +474,14 @@ fn test_convert_and_send_cw20() {
 
     // success - this time add a pair for yluna/prism as well so that
     // we do a direct swap and no longer need the BaseSwapHook
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
             AssetInfo::Native("uusd".to_string()).into(),
         ],
         [
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
-        ],
-    ]);
+        ]]);
     let info = mock_info("addr0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
@@ -533,16 +525,14 @@ fn test_convert_and_send_cw20() {
         assets: vec![yluna_asset.into(), pluna_asset.into()],
         receiver: None,
     };
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
         ],
         [
             AssetInfo::Cw20(Addr::unchecked("pluna0000")).into(),
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
-        ],
-    ]);
+        ]]);
     let info = mock_info("addr0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
@@ -622,16 +612,14 @@ fn test_convert_and_send_native_and_cw20() {
     };
 
     // add direct prism pairs for uluna and yluna
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Native("uluna".to_string()).into(),
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
         ],
         [
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
-        ],
-    ]);
+        ]]);
 
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
@@ -694,7 +682,7 @@ fn test_convert_and_send_astroport() {
     };
 
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![yluna_asset.clone().into()],
+        assets: vec![yluna_asset.into()],
         receiver: Some("user0000".to_string()),
     };
 
@@ -707,7 +695,7 @@ fn test_convert_and_send_astroport() {
     );
 
     // add astroport pair for yluna0000/uusd
-    deps.querier.with_astro_pairs(&vec![[
+    deps.querier.with_astro_pairs(&[[
         AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
         AssetInfo::Native("uusd".to_string()).into(),
     ]]);
@@ -772,16 +760,14 @@ fn test_distribute() {
             &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::new(200u128))],
         ),
     ]);
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
         ],
         [
             AssetInfo::Native("uusd".to_string()).into(),
             AssetInfo::Cw20(Addr::unchecked("anc0000")).into(),
-        ],
-    ]);
+        ]]);
 
     let asset_infos: Vec<PSAssetInfo> = vec![
         AssetInfo::Native("uluna".to_string()).into(),
@@ -903,7 +889,7 @@ fn test_distribute_native() {
     assert_eq!(err, StdError::generic_err("Missing route for native:uluna"));
 
     // add pair
-    deps.querier.with_pairs(&vec![[
+    deps.querier.with_pairs(&[[
         AssetInfo::Native("uluna".to_string()).into(),
         AssetInfo::Native("uusd".to_string()).into(),
     ]]);
@@ -938,16 +924,14 @@ fn test_distribute_native() {
     // success - this time add a pair for uluna/prism as well so that
     // we do a direct swap and no longer need the BaseSwapHook, swap
     // recipient set to gov
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Native("uluna".to_string()).into(),
             AssetInfo::Native("uusd".to_string()).into(),
         ],
         [
             AssetInfo::Native("uluna".to_string()).into(),
             AssetInfo::Native("prism0000".to_string()).into(),
-        ],
-    ]);
+        ]]);
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.messages,
@@ -1001,7 +985,7 @@ fn test_distribute_cw20() {
     );
 
     // add pair
-    deps.querier.with_pairs(&vec![[
+    deps.querier.with_pairs(&[[
         AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
         AssetInfo::Native("uusd".to_string()).into(),
     ]]);
@@ -1037,16 +1021,14 @@ fn test_distribute_cw20() {
     // success - this time add a pair for yluna/prism as well so that
     // we do a direct swap and no longer need the BaseSwapHook, swap
     // recipient set to gov
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
             AssetInfo::Native("uusd".to_string()).into(),
         ],
         [
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
-        ],
-    ]);
+        ]]);
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.messages,
@@ -1084,16 +1066,14 @@ fn test_distribute_native_and_cw20() {
     };
 
     // add direct prism pairs for uluna and yluna
-    deps.querier.with_pairs(&vec![
-        [
+    deps.querier.with_pairs(&[[
             AssetInfo::Native("uluna".to_string()).into(),
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
         ],
         [
             AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
             AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
-        ],
-    ]);
+        ]]);
 
     let asset_infos: Vec<PSAssetInfo> =
         vec![uluna_asset.info.clone().into(), yluna_asset.info.into()];
@@ -1245,12 +1225,12 @@ fn test_distribute_astroport() {
     );
 
     // add astroport pair
-    deps.querier.with_astro_pairs(&vec![[
+    deps.querier.with_astro_pairs(&[[
         AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
         AssetInfo::Native("uusd".to_string()).into(),
     ]]);
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.messages,
         vec![
@@ -1311,7 +1291,7 @@ fn test_base_swap_hook() {
     assert_eq!(err, StdError::generic_err("Missing route for native:uusd"));
 
     // add pair
-    deps.querier.with_pairs(&vec![[
+    deps.querier.with_pairs(&[[
         AssetInfo::Native("uusd".to_string()).into(),
         AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
     ]]);
