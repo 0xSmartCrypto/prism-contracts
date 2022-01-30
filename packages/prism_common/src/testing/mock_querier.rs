@@ -309,14 +309,14 @@ pub struct FactoryQuerier {
 }
 
 impl FactoryQuerier {
-    pub fn new(pairs: &Vec<[AssetInfo; 2]>) -> Self {
+    pub fn new(pairs: &[[AssetInfo; 2]]) -> Self {
         FactoryQuerier {
             pairs: pairs_to_map(pairs),
         }
     }
 }
 
-pub(crate) fn pairs_to_map(pairs: &Vec<[AssetInfo; 2]>) -> HashMap<String, [AssetInfo; 2]> {
+pub(crate) fn pairs_to_map(pairs: &[[AssetInfo; 2]]) -> HashMap<String, [AssetInfo; 2]> {
     let mut pairs_map: HashMap<String, [AssetInfo; 2]> = HashMap::new();
     for asset_infos in pairs {
         pairs_map.insert(pair_key(asset_infos).to_string(), asset_infos.clone());
@@ -394,11 +394,11 @@ impl WasmMockQuerier {
         self.tax_querier = TaxQuerier::_new(rate, caps);
     }
 
-    pub fn with_pairs(&mut self, pairs: &Vec<[AssetInfo; 2]>) {
+    pub fn with_pairs(&mut self, pairs: &[[AssetInfo; 2]]) {
         self.factory_querier = FactoryQuerier::new(pairs);
     }
 
-    pub fn with_astro_pairs(&mut self, pairs: &Vec<[AssetInfo; 2]>) {
+    pub fn with_astro_pairs(&mut self, pairs: &[[AssetInfo; 2]]) {
         self.astro_factory_querier = FactoryQuerier::new(pairs);
     }
 
