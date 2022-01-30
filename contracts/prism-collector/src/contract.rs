@@ -10,7 +10,8 @@ use crate::state::{Config, CONFIG};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use cw2::set_contract_version;
-use cw_asset::{Asset, AssetInfo};
+use cw_asset::{Asset, AssetInfo, AssetInfoUnchecked, AssetUnchecked};
+use prismswap::asset::{Asset as PSAsset, AssetInfo as PSAssetInfo};
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 use prismswap::querier::query_pair_info;
 
@@ -69,7 +70,7 @@ pub fn convert_and_send(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    assets: Vec<Asset>,
+    assets: Vec<PSAsset>,
     receiver: Option<String>,
 ) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
@@ -82,6 +83,8 @@ pub fn convert_and_send(
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut need_hook: bool = false;
     for asset in assets {
+        //let asset: Asset = asset.into::<AssetUnchecked>().check(deps.api)?;
+        let asset: Asset = AssetUnchecked::from(asset).check(deps.api)?;
         match &asset.info {
             AssetInfo::Cw20(..) => {
                 messages.push(
@@ -138,12 +141,13 @@ pub fn convert_and_send(
         .add_attributes(vec![attr("action", "convert_and_send")]))
 }
 
-pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<AssetInfo>) -> StdResult<Response> {
+pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<PSAssetInfo>) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut need_hook: bool = false;
     for asset_info in &asset_infos {
+        let asset_info: AssetInfo = AssetInfoUnchecked::from(asset_info).check(deps.api)?;
         let asset_balance =
             asset_info.query_balance(&deps.querier, env.contract.address.clone())?;
 

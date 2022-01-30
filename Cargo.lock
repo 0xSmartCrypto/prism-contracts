@@ -1058,7 +1058,6 @@ version = "1.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
- "cw-asset",
  "cw20 0.8.1",
  "prismswap",
  "schemars",
@@ -1093,7 +1092,6 @@ version = "1.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
- "cw-asset",
  "cw-storage-plus",
  "cw2",
  "cw20 0.8.1",

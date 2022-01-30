@@ -8,6 +8,7 @@ use cw20::Cw20ExecuteMsg;
 use cw_asset::{Asset, AssetInfo};
 use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use prismswap::asset::AssetInfo as PSAssetInfo;
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 
 // helper to successfully init with reasonable defaults
@@ -76,11 +77,13 @@ fn test_convert_and_send() {
             Asset {
                 info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                 amount: Uint128::from(100u128),
-            },
+            }
+            .into(),
             Asset {
                 info: AssetInfo::Cw20(Addr::unchecked("anc0000")),
                 amount: Uint128::from(200u128),
-            },
+            }
+            .into(),
         ],
         receiver: Some("user0000".to_string()),
     };
@@ -164,7 +167,7 @@ fn test_convert_and_send_native() {
         amount: Uint128::from(amount),
     };
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![uluna_asset.clone()],
+        assets: vec![uluna_asset.clone().into()],
         receiver: Some("user0000".to_string()),
     };
 
@@ -234,7 +237,7 @@ fn test_convert_and_send_native() {
 
     // success - same as above but with empty receiver
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![uluna_asset.clone()],
+        assets: vec![uluna_asset.clone().into()],
         receiver: None,
     };
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
@@ -317,7 +320,7 @@ fn test_convert_and_send_native() {
     };
 
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![uluna_asset.clone(), uusd_asset.clone()],
+        assets: vec![uluna_asset.clone().into(), uusd_asset.clone().into()],
         receiver: None,
     };
 
@@ -370,7 +373,7 @@ fn test_convert_and_send_cw20() {
     };
 
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![yluna_asset.clone()],
+        assets: vec![yluna_asset.clone().into()],
         receiver: Some("user0000".to_string()),
     };
 
@@ -434,7 +437,7 @@ fn test_convert_and_send_cw20() {
 
     // success - same as above but with empty receiver
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![yluna_asset.clone()],
+        assets: vec![yluna_asset.clone().into()],
         receiver: None,
     };
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
@@ -530,7 +533,7 @@ fn test_convert_and_send_cw20() {
     };
 
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![yluna_asset, pluna_asset],
+        assets: vec![yluna_asset.into(), pluna_asset.into()],
         receiver: None,
     };
     deps.querier.with_pairs(&vec![
@@ -617,7 +620,7 @@ fn test_convert_and_send_native_and_cw20() {
         amount: Uint128::from(amount),
     };
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![uluna_asset.clone(), yluna_asset],
+        assets: vec![uluna_asset.clone().into(), yluna_asset.into()],
         receiver: None,
     };
 
@@ -708,9 +711,9 @@ fn test_distribute() {
         ],
     ]);
 
-    let asset_infos = vec![
-        AssetInfo::Native("uluna".to_string()),
-        AssetInfo::Cw20(Addr::unchecked("anc0000")),
+    let asset_infos: Vec<PSAssetInfo> = vec![
+        AssetInfo::Native("uluna".to_string()).into(),
+        AssetInfo::Cw20(Addr::unchecked("anc0000")).into(),
     ];
 
     let msg = ExecuteMsg::Distribute { asset_infos };
@@ -743,10 +746,10 @@ fn test_distribute() {
         ],
     );
 
-    let asset_infos = vec![
-        AssetInfo::Cw20(Addr::unchecked("yluna0000")),
-        AssetInfo::Cw20(Addr::unchecked("anc0000")),
-        AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+    let asset_infos: Vec<PSAssetInfo> = vec![
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
+        AssetInfo::Cw20(Addr::unchecked("anc0000")).into(),
+        AssetInfo::Cw20(Addr::unchecked("pluna0000")).into(),
     ];
     let msg = ExecuteMsg::Distribute { asset_infos };
 
@@ -810,7 +813,7 @@ fn test_distribute_native() {
         AssetInfo::Native("uusd".to_string()).into(),
     ]]);
 
-    let asset_infos = vec![uluna_asset.info.clone()];
+    let asset_infos: Vec<PSAssetInfo> = vec![uluna_asset.info.clone().into()];
     let msg = ExecuteMsg::Distribute { asset_infos };
     let info = mock_info("addr0000", &[]);
 
@@ -902,7 +905,7 @@ fn test_distribute_cw20() {
         AssetInfo::Native("uusd".to_string()).into(),
     ]]);
 
-    let asset_infos = vec![yluna_asset.info];
+    let asset_infos: Vec<PSAssetInfo> = vec![yluna_asset.info.into()];
     let msg = ExecuteMsg::Distribute { asset_infos };
     let info = mock_info("addr0000", &[]);
 
@@ -1005,7 +1008,8 @@ fn test_distribute_native_and_cw20() {
         ],
     ]);
 
-    let asset_infos = vec![uluna_asset.info.clone(), yluna_asset.info];
+    let asset_infos: Vec<PSAssetInfo> =
+        vec![uluna_asset.info.clone().into(), yluna_asset.info.into()];
     let msg = ExecuteMsg::Distribute { asset_infos };
     let info = mock_info("addr0000", &[]);
 

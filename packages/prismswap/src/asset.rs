@@ -56,6 +56,21 @@ impl From<&Asset> for cw_asset::Asset {
     }
 }
 
+impl From<Asset> for cw_asset::AssetUnchecked {
+    fn from(asset: Asset) -> cw_asset::AssetUnchecked {
+        cw_asset::AssetUnchecked {
+            info: asset.info.into(),
+            amount: asset.amount,
+        }
+    }
+}
+
+impl From<&Asset> for cw_asset::AssetUnchecked {
+    fn from(asset: &Asset) -> cw_asset::AssetUnchecked {
+        asset.clone().into()
+    }
+}
+
 /// the decimal fraction
 static DECIMAL_FRACTION: Uint128 = Uint128::new(1_000_000_000_000_000_000u128);
 
@@ -225,6 +240,23 @@ impl From<AssetInfo> for cw_asset::AssetInfo {
 
 impl From<&AssetInfo> for cw_asset::AssetInfo {
     fn from(asset_info: &AssetInfo) -> cw_asset::AssetInfo {
+        asset_info.clone().into()
+    }
+}
+
+impl From<AssetInfo> for cw_asset::AssetInfoUnchecked {
+    fn from(asset_info: AssetInfo) -> cw_asset::AssetInfoUnchecked {
+        match asset_info {
+            AssetInfo::Token { contract_addr } => {
+                cw_asset::AssetInfoUnchecked::Cw20(contract_addr.to_string())
+            }
+            AssetInfo::NativeToken { denom } => cw_asset::AssetInfoUnchecked::Native(denom),
+        }
+    }
+}
+
+impl From<&AssetInfo> for cw_asset::AssetInfoUnchecked {
+    fn from(asset_info: &AssetInfo) -> cw_asset::AssetInfoUnchecked {
         asset_info.clone().into()
     }
 }

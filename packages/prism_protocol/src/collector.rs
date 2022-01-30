@@ -1,4 +1,4 @@
-use cw_asset::{Asset, AssetInfo};
+use prismswap::asset::{Asset, AssetInfo};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
