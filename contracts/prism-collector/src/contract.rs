@@ -83,7 +83,6 @@ pub fn convert_and_send(
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut need_hook: bool = false;
     for asset in assets {
-        //let asset: Asset = asset.into::<AssetUnchecked>().check(deps.api)?;
         let asset: Asset = AssetUnchecked::from(asset).check(deps.api)?;
         match &asset.info {
             AssetInfo::Cw20(..) => {
