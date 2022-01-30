@@ -108,10 +108,7 @@ pub fn convert_and_send(
                 let base_pair_addr = query_prismswap_base_pair(&deps, &config, &asset.info)
                     .or_else(|| query_astroport_base_pair(&deps, &config, &asset.info))
                     .ok_or_else(|| {
-                        StdError::generic_err(format!(
-                            "missing pair for {} to {}",
-                            asset.info, config.base_denom
-                        ))
+                        StdError::generic_err(format!("Missing route for {}", asset.info))
                     })?;
 
                 // because we are swaping to base denom,
@@ -170,10 +167,7 @@ pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<PSAssetInfo>) -> Std
                 let base_pair_addr = query_prismswap_base_pair(&deps, &config, &asset.info)
                     .or_else(|| query_astroport_base_pair(&deps, &config, &asset.info))
                     .ok_or_else(|| {
-                        StdError::generic_err(format!(
-                            "missing pair for {} to {}",
-                            asset.info, config.base_denom
-                        ))
+                        StdError::generic_err(format!("Missing route for {}", asset.info))
                     })?;
 
                 // because we are swapping to base denom,
@@ -226,13 +220,8 @@ pub fn base_swap_hook(
         amount: balance,
     };
 
-    let prism_pair_addr =
-        query_prismswap_prism_pair(&deps, &config, &base_asset_info).ok_or_else(|| {
-            StdError::generic_err(format!(
-                "missing pair for {} to {}",
-                base_asset.info, config.prism_token
-            ))
-        })?;
+    let prism_pair_addr = query_prismswap_prism_pair(&deps, &config, &base_asset_info)
+        .ok_or_else(|| StdError::generic_err(format!("Missing route for {}", base_asset.info)))?;
 
     let receiver_addr = Addr::unchecked(&receiver); // already been checked
     let swap_msg = get_swap_msg(&prism_pair_addr, &base_asset, &receiver_addr)?;
