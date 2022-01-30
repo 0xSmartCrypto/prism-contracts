@@ -189,13 +189,10 @@ fn test_convert_and_send_native() {
         StdError::generic_err("Invalid uluna payment - funds/asset amount mismatch")
     );
 
-    // failure - missing pair
+    // failure - missing route
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(
-        err,
-        StdError::generic_err("missing pair for native:uluna to uusd")
-    );
+    assert_eq!(err, StdError::generic_err("Missing route for native:uluna"));
 
     // add pair for uluna/uusd
     deps.querier.with_pairs(&vec![[
@@ -377,12 +374,12 @@ fn test_convert_and_send_cw20() {
         receiver: Some("user0000".to_string()),
     };
 
-    // failure - missing pair
+    // failure - missing route
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(
         err,
-        StdError::generic_err("missing pair for cw20:yluna0000 to uusd")
+        StdError::generic_err("Missing route for cw20:yluna0000")
     );
 
     // add pair for yluna0000/uusd
@@ -686,6 +683,81 @@ fn test_convert_and_send_native_and_cw20() {
 }
 
 #[test]
+fn test_convert_and_send_astroport() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    let amount = 100u128;
+    let yluna_asset = Asset {
+        info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+        amount: Uint128::from(amount),
+    };
+
+    let msg = ExecuteMsg::ConvertAndSend {
+        assets: vec![yluna_asset.clone().into()],
+        receiver: Some("user0000".to_string()),
+    };
+
+    // failure - missing route
+    let info = mock_info("addr0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("Missing route for cw20:yluna0000")
+    );
+
+    // add astroport pair for yluna0000/uusd
+    deps.querier.with_astro_pairs(&vec![[
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
+        AssetInfo::Native("uusd".to_string()).into(),
+    ]]);
+
+    // success - since no pair exists from yluna to prism, perform a swap from
+    // yluna to uusd and register a BaseSwapHook message.
+    let info = mock_info("addr0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "yluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                    owner: "addr0000".to_string(),
+                    amount: Uint128::from(amount),
+                    recipient: MOCK_CONTRACT_ADDR.to_string(),
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "yluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: "uusdyluna0000".to_string(),
+                    amount: Uint128::from(amount),
+                    msg: to_binary(&PairCw20HookMsg::Swap {
+                        belief_price: None,
+                        max_spread: None,
+                        to: Some(MOCK_CONTRACT_ADDR.to_string())
+                    })
+                    .unwrap(),
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
+                msg: to_binary(&ExecuteMsg::BaseSwapHook {
+                    receiver: Some("user0000".to_string()),
+                })
+                .unwrap(),
+                funds: vec![],
+            }))
+        ]
+    );
+    assert_eq!(res.attributes, vec![attr("action", "convert_and_send")]);
+}
+
+#[test]
 fn test_distribute() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
@@ -808,10 +880,6 @@ fn test_distribute_native() {
         info: AssetInfo::Native("uluna".to_string()),
         amount: Uint128::from(amount),
     };
-    deps.querier.with_pairs(&vec![[
-        AssetInfo::Native("uluna".to_string()).into(),
-        AssetInfo::Native("uusd".to_string()).into(),
-    ]]);
 
     let asset_infos: Vec<PSAssetInfo> = vec![uluna_asset.info.clone().into()];
     let msg = ExecuteMsg::Distribute { asset_infos };
@@ -829,6 +897,16 @@ fn test_distribute_native() {
             amount: Uint128::from(amount),
         },
     )]);
+
+    // failure - missing route
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(err, StdError::generic_err("Missing route for native:uluna"));
+
+    // add pair
+    deps.querier.with_pairs(&vec![[
+        AssetInfo::Native("uluna".to_string()).into(),
+        AssetInfo::Native("uusd".to_string()).into(),
+    ]]);
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
     assert_eq!(
@@ -900,10 +978,6 @@ fn test_distribute_cw20() {
         info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
         amount: Uint128::from(amount),
     };
-    deps.querier.with_pairs(&vec![[
-        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-        AssetInfo::Native("uusd".to_string()).into(),
-    ]]);
 
     let asset_infos: Vec<PSAssetInfo> = vec![yluna_asset.info.into()];
     let msg = ExecuteMsg::Distribute { asset_infos };
@@ -918,6 +992,19 @@ fn test_distribute_cw20() {
         &"yluna0000".to_string(),
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::new(amount))],
     )]);
+
+    // failure - missing route
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("Missing route for cw20:yluna0000")
+    );
+
+    // add pair
+    deps.querier.with_pairs(&vec![[
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
+        AssetInfo::Native("uusd".to_string()).into(),
+    ]]);
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
     assert_eq!(
@@ -1130,6 +1217,69 @@ fn test_distribute_native_and_cw20() {
 }
 
 #[test]
+fn test_distribute_astroport() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    let amount = 100u128;
+    let yluna_asset = Asset {
+        info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+        amount: Uint128::from(amount),
+    };
+
+    let asset_infos: Vec<PSAssetInfo> = vec![yluna_asset.info.into()];
+    let msg = ExecuteMsg::Distribute { asset_infos };
+    let info = mock_info("addr0000", &[]);
+
+    // add some yluna to the contract
+    deps.querier.with_token_balances(&[(
+        &"yluna0000".to_string(),
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::new(amount))],
+    )]);
+
+    // failure - missing route
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("Missing route for cw20:yluna0000")
+    );
+
+    // add astroport pair
+    deps.querier.with_astro_pairs(&vec![[
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
+        AssetInfo::Native("uusd".to_string()).into(),
+    ]]);
+
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "yluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: "uusdyluna0000".to_string(),
+                    amount: Uint128::new(amount),
+                    msg: to_binary(&PairCw20HookMsg::Swap {
+                        belief_price: None,
+                        max_spread: None,
+                        to: Some(MOCK_CONTRACT_ADDR.to_string()),
+                    })
+                    .unwrap(),
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
+                msg: to_binary(&ExecuteMsg::BaseSwapHook { receiver: None }).unwrap(),
+                funds: vec![],
+            })),
+        ],
+    );
+    assert_eq!(res.attributes, vec![attr("action", "distribute")]);
+}
+
+#[test]
 fn test_base_swap_hook() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
@@ -1155,13 +1305,10 @@ fn test_base_swap_hook() {
         },
     )]);
 
-    // missing pair
+    // missing route
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(
-        err,
-        StdError::generic_err("missing pair for native:uusd to prism0000")
-    );
+    assert_eq!(err, StdError::generic_err("Missing route for native:uusd"));
 
     // add pair
     deps.querier.with_pairs(&vec![[
