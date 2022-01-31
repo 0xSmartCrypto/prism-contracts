@@ -123,10 +123,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
 
     let mut messages: Vec<CosmosMsg> = vec![];
 
-    // subtract the tax from the offer asset, this tax will be deducted when sending the offer asset on the swap message
-    let mut offer_asset = order.offer_asset.clone();
-    let offer_asset_tax = offer_asset.compute_tax(&deps.querier)?; // returns 0 if cw20 or luna
-    offer_asset.amount -= offer_asset_tax;
+    let offer_asset = order.offer_asset.clone();
 
     // if inter pair exists, we first swap the offer asset for $PRISM
     let offer_asset = if let Some(inter_pair_addr) = &order.inter_pair_addr {
@@ -142,7 +139,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
             amount: simul_res.return_amount,
         }
     } else {
-        offer_asset.clone()
+        offer_asset
     };
 
     let (offer_asset, return_asset, prism_fee_amount) =
@@ -243,12 +240,10 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                 simulate(&deps.querier, order.pair_addr.clone(), &offer_asset)?;
 
             // deduct tax from the return asset to get the actual received amount by the contract
-            let mut return_asset = Asset {
+            let return_asset = Asset {
                 info: order.ask_asset.info.clone(),
                 amount: simul_res.return_amount,
             };
-            let return_asset_tax = return_asset.compute_tax(&deps.querier)?;
-            return_asset.amount -= return_asset_tax;
 
             (offer_asset, return_asset, prism_fee)
         } else {

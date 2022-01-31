@@ -1845,10 +1845,6 @@ pub fn test_execute_yluna_prism_no_protocol_fee() {
 #[test]
 pub fn test_execute_with_inter_pair() {
     let mut deps = mock_dependencies(&[]);
-    deps.querier.with_tax(
-        Decimal::percent(1),
-        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
-    );
     let info = mock_info(OWNER_ADDR, &[]);
     let msg = InstantiateMsg {
         base_denom: "uusd".to_string(),
@@ -1965,12 +1961,12 @@ pub fn test_execute_with_inter_pair() {
                 contract_addr: pair_1.to_string(),
                 funds: vec![Coin {
                     denom: "uusd".to_string(),
-                    amount: Uint128::from(990u128), // 1000 minus 1% tax
+                    amount: Uint128::from(1000u128),
                 }],
                 msg: to_binary(&PairExecuteMsg::Swap {
                     offer_asset: Asset {
                         info: offer_asset.info,
-                        amount: Uint128::from(990u128),
+                        amount: Uint128::from(1000u128),
                     },
                     to: None,
                     belief_price: None,
