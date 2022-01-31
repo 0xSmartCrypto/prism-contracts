@@ -115,9 +115,10 @@ pub enum QueryMsg {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
+    pub prism_token: String,
     pub xprism_token: String,
     pub quorum: Decimal,
     pub threshold: Decimal,

@@ -289,6 +289,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = config_read(deps.storage).load()?;
     Ok(ConfigResponse {
         owner: deps.api.addr_humanize(&config.owner)?.to_string(),
+        prism_token: deps.api.addr_humanize(&config.prism_token)?.to_string(),
         xprism_token: deps
             .api
             .addr_humanize(&config.xprism_token.unwrap())?
