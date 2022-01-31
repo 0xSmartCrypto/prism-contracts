@@ -105,6 +105,16 @@ fn test_convert_and_send() {
                 funds: vec![],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "anc0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                    owner: "addr0000".to_string(),
+                    amount: Uint128::new(200u128),
+                    recipient: MOCK_CONTRACT_ADDR.to_string(),
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "yluna0000".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: "prism0000yluna0000".to_string(),
@@ -115,16 +125,6 @@ fn test_convert_and_send() {
                         to: Some("user0000".to_string()),
                     })
                     .unwrap(),
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "anc0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: "addr0000".to_string(),
-                    amount: Uint128::new(200u128),
-                    recipient: MOCK_CONTRACT_ADDR.to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -559,6 +559,16 @@ fn test_convert_and_send_cw20() {
                 funds: vec![],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "pluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                    owner: "addr0000".to_string(),
+                    amount: Uint128::from(amount),
+                    recipient: MOCK_CONTRACT_ADDR.to_string(),
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "yluna0000".to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: "prism0000yluna0000".to_string(),
@@ -569,16 +579,6 @@ fn test_convert_and_send_cw20() {
                         to: Some(info.sender.to_string())
                     })
                     .unwrap(),
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "pluna0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: "addr0000".to_string(),
-                    amount: Uint128::from(amount),
-                    recipient: MOCK_CONTRACT_ADDR.to_string(),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -635,9 +635,20 @@ fn test_convert_and_send_native_and_cw20() {
 
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
     assert_eq!(
         res.messages,
         vec![
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "yluna0000".to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                    owner: "addr0000".to_string(),
+                    amount: Uint128::from(amount),
+                    recipient: MOCK_CONTRACT_ADDR.to_string(),
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "prism0000uluna".to_string(),
                 msg: to_binary(&PairExecuteMsg::Swap {
@@ -651,16 +662,6 @@ fn test_convert_and_send_native_and_cw20() {
                     denom: "uluna".to_string(),
                     amount: uluna_asset.amount,
                 }],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "yluna0000".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: "addr0000".to_string(),
-                    amount: Uint128::from(amount),
-                    recipient: MOCK_CONTRACT_ADDR.to_string(),
-                })
-                .unwrap(),
-                funds: vec![],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "yluna0000".to_string(),
@@ -812,7 +813,10 @@ fn test_distribute() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::BaseSwapHook { receiver: None }).unwrap(),
+                msg: to_binary(&ExecuteMsg::BaseSwapHook {
+                    receiver: Some("gov0000".to_string())
+                })
+                .unwrap(),
                 funds: vec![],
             })),
         ],
@@ -863,7 +867,10 @@ fn test_distribute() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::BaseSwapHook { receiver: None }).unwrap(),
+                msg: to_binary(&ExecuteMsg::BaseSwapHook {
+                    receiver: Some("gov0000".to_string())
+                })
+                .unwrap(),
                 funds: vec![],
             }))
         ]
@@ -928,7 +935,10 @@ fn test_distribute_native() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::BaseSwapHook { receiver: None }).unwrap(),
+                msg: to_binary(&ExecuteMsg::BaseSwapHook {
+                    receiver: Some("gov0000".to_string())
+                })
+                .unwrap(),
                 funds: vec![],
             }))
         ],
@@ -1027,7 +1037,10 @@ fn test_distribute_cw20() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::BaseSwapHook { receiver: None }).unwrap(),
+                msg: to_binary(&ExecuteMsg::BaseSwapHook {
+                    receiver: Some("gov0000".to_string())
+                })
+                .unwrap(),
                 funds: vec![],
             })),
         ],
@@ -1271,7 +1284,10 @@ fn test_distribute_astroport() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::BaseSwapHook { receiver: None }).unwrap(),
+                msg: to_binary(&ExecuteMsg::BaseSwapHook {
+                    receiver: Some("gov0000".to_string())
+                })
+                .unwrap(),
                 funds: vec![],
             })),
         ],
@@ -1333,6 +1349,36 @@ fn test_base_swap_hook() {
                 max_spread: None,
                 belief_price: None,
                 to: Some("gov0000".to_string()), // by default sends to gov
+            })
+            .unwrap(),
+            funds: vec![Coin {
+                denom: "uusd".to_string(),
+                amount: Uint128::from(11134u128),
+            }],
+        }))]
+    );
+
+    // success with a receiver specified
+    let receiver = Some("addr0001".to_string());
+    let msg = ExecuteMsg::BaseSwapHook {
+        receiver: receiver.clone(),
+    };
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(res.attributes, vec![attr("action", "base_swap_hook")]);
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "prism0000uusd".to_string(),
+            msg: to_binary(&PairExecuteMsg::Swap {
+                offer_asset: Asset {
+                    amount: Uint128::from(11134u128),
+                    info: AssetInfo::Native("uusd".to_string()),
+                }
+                .into(),
+                max_spread: None,
+                belief_price: None,
+                to: receiver,
             })
             .unwrap(),
             funds: vec![Coin {

@@ -75,15 +75,12 @@ pub fn convert_and_send(
 ) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
-    let receiver = match receiver {
-        None => info.sender.clone(),
-        Some(addr_str) => deps.api.addr_validate(&addr_str)?,
-    };
-
     let mut messages: Vec<CosmosMsg> = vec![];
-    let mut need_hook: bool = false;
+    let mut cw_assets: Vec<Asset> = vec![];
+
+    // issue TransferFrom calls for cw20, verify payment for native
     for asset in assets {
-        let asset: Asset = AssetUnchecked::from(asset).check(deps.api)?;
+        let asset = AssetUnchecked::from(asset).check(deps.api)?;
         match &asset.info {
             AssetInfo::Cw20(..) => {
                 messages.push(
@@ -94,43 +91,20 @@ pub fn convert_and_send(
                 verify_payment(&info, denom, asset.amount)?;
             }
         }
-
-        // try to query pair with $PRISM
-        let prism_pair_addr = query_prismswap_prism_pair(&deps, &config, &asset.info);
-
-        // if direct $PRISM pair does not exist, use base pair and send ust back to contract to swap it
-        let (pair_addr, to_addr): (Addr, Addr) = match prism_pair_addr {
-            Some(prism_pair_addr) => (prism_pair_addr, receiver.clone()),
-            None => {
-                // try to get the base pair from prismswap first
-                // if the pair does not exist on prismswap or astroport, return error
-                let base_pair_addr = query_prismswap_base_pair(&deps, &config, &asset.info)
-                    .or_else(|| query_astroport_base_pair(&deps, &config, &asset.info))
-                    .ok_or_else(|| {
-                        StdError::generic_err(format!("Missing route for {}", asset.info))
-                    })?;
-
-                // because we are swaping to base denom,
-                // we will need to call the hook to perform base->$PRISM swap
-                need_hook = true;
-
-                (base_pair_addr, env.contract.address.clone())
-            }
-        };
-
-        let swap_msg = get_swap_msg(&pair_addr, &asset, &to_addr)?;
-        messages.push(swap_msg);
+        cw_assets.push(asset);
     }
 
-    if need_hook {
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: env.contract.address.to_string(),
-            msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                receiver: Some(receiver.to_string()),
-            })?,
-            funds: vec![],
-        }));
-    }
+    // validate reciever or set to sender if unset
+    let receiver = match receiver {
+        Some(addr_str) => deps.api.addr_validate(&addr_str)?,
+        None => info.sender,
+    };
+
+    // get prism conversion messages, this will contain base swap hook if needed
+    let mut convert_msgs = get_prism_conversion_msgs(&deps, &env, &config, &cw_assets, &receiver)?;
+
+    // append prism conversion messages to any TransferFrom messages
+    messages.append(&mut convert_msgs);
 
     Ok(Response::new()
         .add_messages(messages)
@@ -140,8 +114,10 @@ pub fn convert_and_send(
 pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<PSAssetInfo>) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
-    let mut messages: Vec<CosmosMsg> = vec![];
-    let mut need_hook: bool = false;
+    let mut assets: Vec<Asset> = vec![];
+
+    // convert prismswap::AssetInfo to cw_asset::AssetInfo and then
+    // create a cw_asset::Asset using the current balance for that asset
     for asset_info in &asset_infos {
         let asset_info: AssetInfo = AssetInfoUnchecked::from(asset_info).check(deps.api)?;
         let asset_balance =
@@ -150,43 +126,17 @@ pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<PSAssetInfo>) -> Std
         if asset_balance.is_zero() {
             continue;
         }
-
-        let asset = Asset {
+        assets.push(Asset {
             info: asset_info.clone(),
             amount: asset_balance,
-        };
-
-        let prism_pair_addr = query_prismswap_prism_pair(&deps, &config, &asset.info);
-        // if direct $PRISM pair does not exist, use base pair and send ust back to contract to swap it
-        let (pair_addr, to_addr): (Addr, Addr) = match prism_pair_addr {
-            Some(prism_pair_addr) => (prism_pair_addr, config.distribution_contract.clone()),
-            None => {
-                // try to get the base pair from prismswap first
-                // if the pair does not exist on prismswap or astroport, return error
-                let base_pair_addr = query_prismswap_base_pair(&deps, &config, &asset.info)
-                    .or_else(|| query_astroport_base_pair(&deps, &config, &asset.info))
-                    .ok_or_else(|| {
-                        StdError::generic_err(format!("Missing route for {}", asset.info))
-                    })?;
-
-                // because we are swapping to base denom,
-                // we will need to call the hook to perform base->$PRISM swap
-                need_hook = true;
-                (base_pair_addr, env.contract.address.clone())
-            }
-        };
-
-        let swap_msg = get_swap_msg(&pair_addr, &asset, &to_addr)?;
-        messages.push(swap_msg)
+        })
     }
 
-    if need_hook {
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: env.contract.address.to_string(),
-            msg: to_binary(&ExecuteMsg::BaseSwapHook { receiver: None })?,
-            funds: vec![],
-        }))
-    }
+    // receiver for this method is always the distribution contract
+    let receiver = &config.distribution_contract;
+
+    // get prism conversion messages, this will contain base swap hook if needed
+    let messages = get_prism_conversion_msgs(&deps, &env, &config, &assets, receiver)?;
 
     Ok(Response::new()
         .add_messages(messages)
@@ -201,29 +151,37 @@ pub fn base_swap_hook(
 ) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
+    // can only be called as a hook from this contract
     if info.sender != env.contract.address {
         return Err(StdError::generic_err("unauthorized"));
     }
 
-    let receiver = receiver.unwrap_or_else(|| config.distribution_contract.to_string());
+    // query contract balance for the base denom (uusd), exit if balance is zero
     let base_asset_info = AssetInfo::Native(config.base_denom.clone());
     let balance = base_asset_info.query_balance(&deps.querier, env.contract.address)?;
-
-    // todo - should we return an error here?
     if balance.is_zero() {
         return Ok(Response::new());
     }
 
+    // create cw_asset::Asset containing base denom (uusd) and current balance
     let base_asset = Asset {
         info: base_asset_info.clone(),
         amount: balance,
     };
 
+    // query prismswap for the uusd-prism pair, error on failure
     let prism_pair_addr = query_prismswap_prism_pair(&deps, &config, &base_asset_info)
         .ok_or_else(|| StdError::generic_err(format!("Missing route for {}", base_asset.info)))?;
 
-    let receiver_addr = Addr::unchecked(&receiver); // already been checked
-    let swap_msg = get_swap_msg(&prism_pair_addr, &base_asset, &receiver_addr)?;
+    // validate receiver addr, or set it to the distribution contract if unset
+    let receiver = match receiver {
+        Some(addr_str) => deps.api.addr_validate(&addr_str)?,
+        None => config.distribution_contract,
+    };
+
+    // perform the final swap from uusd -> prism
+    let swap_msg = get_swap_msg(&prism_pair_addr, &base_asset, &receiver)?;
+
     Ok(Response::new()
         .add_message(swap_msg)
         .add_attribute("action", "base_swap_hook"))
@@ -291,6 +249,54 @@ pub fn query_astroport_base_pair(
     )
     .ok()
     .map(|x| x.contract_addr)
+}
+
+pub fn get_prism_conversion_msgs(
+    deps: &DepsMut,
+    env: &Env,
+    config: &Config,
+    assets: &[Asset],
+    receiver: &Addr,
+) -> StdResult<Vec<CosmosMsg>> {
+    let mut messages: Vec<CosmosMsg> = vec![];
+    let mut need_hook = false;
+
+    for asset in assets {
+        // try to query pair with $PRISM
+        let prism_pair_addr = query_prismswap_prism_pair(deps, config, &asset.info);
+
+        if let Some(pair_addr) = prism_pair_addr {
+            // direct pair exists from asset -> PRISM
+            let swap_msg = get_swap_msg(&pair_addr, asset, receiver)?;
+            messages.push(swap_msg);
+        } else {
+            // check for an indirect route from asset -> uusd, error if not found
+            let base_pair_addr = query_prismswap_base_pair(deps, config, &asset.info)
+                .or_else(|| query_astroport_base_pair(deps, config, &asset.info))
+                .ok_or_else(|| {
+                    StdError::generic_err(format!("Missing route for {}", asset.info))
+                })?;
+
+            // for indirect route, swap receiver should be set to our contract,
+            // it will get sent to receiver inside the BaseSwapHook message
+            let swap_msg = get_swap_msg(&base_pair_addr, asset, &env.contract.address)?;
+            messages.push(swap_msg);
+
+            // requires hook to perform final uusd -> PRISM conversion
+            need_hook = true;
+        }
+    }
+
+    if need_hook {
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            msg: to_binary(&ExecuteMsg::BaseSwapHook {
+                receiver: Some(receiver.to_string()),
+            })?,
+            funds: vec![],
+        }))
+    }
+    Ok(messages)
 }
 
 pub fn get_swap_msg(
