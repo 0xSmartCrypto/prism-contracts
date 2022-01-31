@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    attr, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    attr, to_binary, Addr, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
     StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -29,11 +29,9 @@ pub fn instantiate(
 ) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let sndr_raw = deps.api.addr_canonicalize(&info.sender.to_string())?;
-
     let config = Config {
-        owner: sndr_raw,
-        vault_contract: msg.vault_contract,
+        owner: info.sender,
+        vault_contract: deps.api.addr_validate(&msg.vault_contract)?,
         airdrop_tokens: vec![],
     };
 
@@ -78,7 +76,8 @@ fn execute_fabricate_claim(
 ) -> StdResult<Response> {
     let config = read_config(deps.storage)?;
 
-    let airdrop_info = read_airdrop_info(deps.storage, airdrop_token.clone())
+    let airdrop_token_addr = deps.api.addr_validate(&airdrop_token)?;
+    let airdrop_info = read_airdrop_info(deps.storage, &airdrop_token_addr)
         .map_err(|_| StdError::generic_err("no info registered for this airdrop token"))?;
     let claim_msg: Binary = match airdrop_info.claim_type {
         ClaimType::Generic => to_binary(&GenericAirdropExecuteMsg::Claim {
@@ -89,7 +88,7 @@ fn execute_fabricate_claim(
     };
 
     let vault_claim_msg: CosmosMsg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.vault_contract,
+        contract_addr: config.vault_contract.to_string(),
         msg: to_binary(&VaultHandleMsg::ClaimAirdrop {
             airdrop_token_contract: airdrop_token,
             airdrop_contract: airdrop_info.airdrop_contract,
@@ -111,18 +110,16 @@ pub fn execute_update_config(
 ) -> StdResult<Response> {
     // only owner can send this message.
     let mut config = read_config(deps.storage)?;
-    let sender_raw = deps.api.addr_canonicalize(&info.sender.to_string())?;
-    if sender_raw != config.owner {
+    if info.sender != config.owner {
         return Err(StdError::generic_err("unauthorized"));
     }
 
     if let Some(o) = owner {
-        let owner_raw = deps.api.addr_canonicalize(&o)?;
-        config.owner = owner_raw
+        config.owner = deps.api.addr_validate(&o)?;
     }
 
     if let Some(vault) = vault_contract {
-        config.vault_contract = vault;
+        config.vault_contract = deps.api.addr_validate(&vault)?;
     }
 
     store_config(deps.storage, &config)?;
@@ -139,12 +136,12 @@ pub fn execute_add_airdrop(
 ) -> StdResult<Response> {
     // only owner can send this message.
     let config = read_config(deps.storage)?;
-    let sender_raw = deps.api.addr_canonicalize(&info.sender.to_string())?;
-    if sender_raw != config.owner {
+    if info.sender != config.owner {
         return Err(StdError::generic_err("unauthorized"));
     }
 
-    let exists = read_airdrop_info(deps.storage, airdrop_token.clone());
+    let airdrop_token_addr = deps.api.addr_validate(&airdrop_token)?;
+    let exists = read_airdrop_info(deps.storage, &airdrop_token_addr);
     if exists.is_ok() {
         return Err(StdError::generic_err(format!(
             "There is a token info with this {}",
@@ -152,12 +149,13 @@ pub fn execute_add_airdrop(
         )));
     }
 
+    let airdrop_token_addr = deps.api.addr_validate(&airdrop_token)?;
     CONFIG.update(deps.storage, |mut conf| -> StdResult<Config> {
-        conf.airdrop_tokens.push(airdrop_token.clone());
+        conf.airdrop_tokens.push(airdrop_token_addr.clone());
         Ok(conf)
     })?;
 
-    store_airdrop_info(deps.storage, airdrop_token.clone(), airdrop_info)?;
+    store_airdrop_info(deps.storage, &airdrop_token_addr, &airdrop_info)?;
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "add_airdrop_info"),
@@ -174,12 +172,12 @@ pub fn execute_update_airdrop(
 ) -> StdResult<Response> {
     // only owner can send this message.
     let config = read_config(deps.storage)?;
-    let sender_raw = deps.api.addr_canonicalize(&info.sender.to_string())?;
-    if sender_raw != config.owner {
+    if info.sender != config.owner {
         return Err(StdError::generic_err("unauthorized"));
     }
 
-    let exists = read_airdrop_info(deps.storage, airdrop_token.clone());
+    let airdrop_token_addr = deps.api.addr_validate(&airdrop_token)?;
+    let exists = read_airdrop_info(deps.storage, &airdrop_token_addr);
     if exists.is_err() {
         return Err(StdError::generic_err(format!(
             "There is no token info with this {}",
@@ -187,7 +185,7 @@ pub fn execute_update_airdrop(
         )));
     }
 
-    update_airdrop_info(deps.storage, airdrop_token.clone(), airdrop_info)?;
+    update_airdrop_info(deps.storage, &airdrop_token_addr, &airdrop_info)?;
     Ok(Response::new().add_attributes(vec![
         attr("action", "update_airdrop_info"),
         attr("airdrop_token", airdrop_token),
@@ -202,12 +200,12 @@ pub fn execute_remove_airdrop(
 ) -> StdResult<Response> {
     // only owner can send this message.
     let config = read_config(deps.storage)?;
-    let sender_raw = deps.api.addr_canonicalize(&info.sender.to_string())?;
-    if sender_raw != config.owner {
+    if info.sender != config.owner {
         return Err(StdError::generic_err("unauthorized"));
     }
 
-    let exists = read_airdrop_info(deps.storage, airdrop_token.clone());
+    let airdrop_token_addr = deps.api.addr_validate(&airdrop_token)?;
+    let exists = read_airdrop_info(deps.storage, &airdrop_token_addr);
     if exists.is_err() {
         return Err(StdError::generic_err(format!(
             "There is no token info with this {}",
@@ -216,11 +214,12 @@ pub fn execute_remove_airdrop(
     }
 
     CONFIG.update(deps.storage, |mut conf| -> StdResult<Config> {
-        conf.airdrop_tokens.retain(|item| item != &airdrop_token);
+        conf.airdrop_tokens
+            .retain(|item| item != &airdrop_token_addr);
         Ok(conf)
     })?;
 
-    remove_airdrop_info(deps.storage, airdrop_token.clone())?;
+    remove_airdrop_info(deps.storage, &airdrop_token_addr)?;
     Ok(Response::new().add_attributes(vec![
         attr("action", "remove_airdrop_info"),
         attr("airdrop_token", airdrop_token),
@@ -246,12 +245,15 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config = read_config(deps.storage)?;
-    let owner_addr = deps.api.addr_humanize(&config.owner)?;
 
     Ok(ConfigResponse {
-        owner: owner_addr.to_string(),
-        vault_contract: config.vault_contract,
-        airdrop_tokens: config.airdrop_tokens,
+        owner: config.owner.to_string(),
+        vault_contract: config.vault_contract.to_string(),
+        airdrop_tokens: config
+            .airdrop_tokens
+            .iter()
+            .map(|item| item.to_string())
+            .collect(),
     })
 }
 
@@ -262,7 +264,8 @@ fn query_airdrop_infos(
     limit: Option<u32>,
 ) -> StdResult<AirdropInfoResponse> {
     if let Some(air_token) = airdrop_token {
-        let info = read_airdrop_info(deps.storage, air_token.clone())?;
+        let airdrop_token_addr = deps.api.addr_validate(&air_token)?;
+        let info = read_airdrop_info(deps.storage, &airdrop_token_addr)?;
 
         Ok(AirdropInfoResponse {
             airdrop_info: vec![AirdropInfoElem {
@@ -271,7 +274,9 @@ fn query_airdrop_infos(
             }],
         })
     } else {
-        let infos = read_all_airdrop_infos(deps.storage, start_after, limit)?;
+        let start_after_addr: Option<Addr> =
+            start_after.map(|item| deps.api.addr_validate(&item).unwrap());
+        let infos = read_all_airdrop_infos(deps.storage, start_after_addr, limit)?;
         Ok(AirdropInfoResponse {
             airdrop_info: infos,
         })

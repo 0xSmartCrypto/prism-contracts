@@ -1,10 +1,10 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::{
-    attr, to_binary, Addr, CanonicalAddr, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128,
-    WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128, WasmMsg,
 };
 use cosmwasm_std::{Decimal, Order, StdResult, Storage};
 use cw20::Cw20ExecuteMsg;
+use cw_storage_plus::U64Key;
 use prismswap::querier::query_token_balance;
 
 use crate::state::{
@@ -12,6 +12,8 @@ use crate::state::{
     REWARD_INFO, STAKER_BY_TOKEN_INDEXER,
 };
 use crate::ContractError;
+
+use prism_protocol::de::deserialize_key;
 
 pub fn update_owner(
     deps: DepsMut,
@@ -66,8 +68,6 @@ pub fn register_staking_token(
     weight: u64,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
-    let new_staking_token_raw: CanonicalAddr =
-        deps.api.addr_canonicalize(staking_token.as_str())?;
     let current_time = env.block.time.seconds();
 
     if config.owner != info.sender {
@@ -75,30 +75,29 @@ pub fn register_staking_token(
     };
 
     // update all pools rewards so that the new weight is only applied to all pools from this instant
-    let pools: Vec<(CanonicalAddr, PoolInfo)> = POOLS
+    let pools: Vec<(Addr, PoolInfo)> = POOLS
         .range(deps.storage, None, None, Order::Ascending)
         .map(|item| {
-            let (k, v) = item?;
-
-            Ok((CanonicalAddr::from(k), v))
+            let (k, pool_info) = item?;
+            Ok((deserialize_key::<Addr>(k).unwrap(), pool_info))
         })
-        .collect::<StdResult<Vec<(CanonicalAddr, PoolInfo)>>>()?;
+        .collect::<StdResult<Vec<(Addr, PoolInfo)>>>()?;
 
     for item in pools {
         let (pool_staking_token, mut pool) = item;
 
-        if pool_staking_token == new_staking_token_raw {
+        if pool_staking_token == staking_token {
             return Err(ContractError::AlreadyExists {});
         }
         compute_pool_reward(&config, &mut pool, current_time);
 
-        POOLS.save(deps.storage, pool_staking_token.as_slice(), &pool)?;
+        POOLS.save(deps.storage, &pool_staking_token, &pool)?;
     }
 
     // add the new pool
     POOLS.save(
         deps.storage,
-        new_staking_token_raw.as_slice(),
+        &staking_token,
         &PoolInfo {
             last_distributed: current_time,
             weight,
@@ -123,7 +122,6 @@ pub fn update_staking_token(
     weight: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
-    let staking_token_raw: CanonicalAddr = deps.api.addr_canonicalize(staking_token.as_str())?;
 
     if config.owner != info.sender {
         return Err(ContractError::Unauthorized {});
@@ -134,29 +132,27 @@ pub fn update_staking_token(
         let current_time = env.block.time.seconds();
 
         // update all pools rewards so that the new weight is only applied to all pools from this instant
-        let pools: Vec<(CanonicalAddr, PoolInfo)> = POOLS
+        let pools: Vec<(Addr, PoolInfo)> = POOLS
             .range(deps.storage, None, None, Order::Ascending)
             .map(|item| {
-                let (k, v) = item?;
-
-                Ok((CanonicalAddr::from(k), v))
+                let (k, pool_info) = item?;
+                Ok((deserialize_key::<Addr>(k).unwrap(), pool_info))
             })
-            .collect::<StdResult<Vec<(CanonicalAddr, PoolInfo)>>>()?;
+            .collect::<StdResult<Vec<(Addr, PoolInfo)>>>()?;
 
         for item in pools {
             let (pool_staking_token, mut pool) = item;
-
             compute_pool_reward(&config, &mut pool, current_time);
 
-            if pool_staking_token == staking_token_raw {
+            if pool_staking_token == staking_token {
                 pool_found = true;
 
-                config.total_weight += new_weight;
                 config.total_weight -= pool.weight;
+                config.total_weight += new_weight;
                 pool.weight = new_weight;
             }
 
-            POOLS.save(deps.storage, pool_staking_token.as_slice(), &pool)?;
+            POOLS.save(deps.storage, &pool_staking_token, &pool)?;
         }
 
         if !pool_found {
@@ -169,11 +165,11 @@ pub fn update_staking_token(
 
     if let Some(lock_period) = lock_period {
         let mut pool = POOLS
-            .load(deps.storage, staking_token_raw.as_slice())
+            .load(deps.storage, &staking_token)
             .map_err(|_| ContractError::InvalidStakingToken {})?;
         pool.lock_period = lock_period;
 
-        POOLS.save(deps.storage, staking_token_raw.as_slice(), &pool)?;
+        POOLS.save(deps.storage, &staking_token, &pool)?;
     }
 
     Ok(Response::new().add_attribute("action", "update_staking_token"))
@@ -187,28 +183,23 @@ pub fn bond(
     amount: Uint128,
     pool_info: Option<PoolInfo>,
 ) -> Result<Response, ContractError> {
-    let sender_addr_raw: CanonicalAddr = deps.api.addr_canonicalize(sender_addr.as_str())?;
-    let staking_token_raw: CanonicalAddr = deps.api.addr_canonicalize(staking_token.as_str())?;
-
     let config: Config = CONFIG.load(deps.storage)?;
     let mut pool_info: PoolInfo = pool_info.unwrap_or(
         POOLS
-            .load(deps.storage, staking_token_raw.as_slice())
+            .load(deps.storage, &staking_token)
             .map_err(|_| ContractError::InvalidStakingToken {})?,
     );
-    let mut staker_reward_info: RewardInfo = match REWARD_INFO.may_load(
-        deps.storage,
-        (sender_addr_raw.as_slice(), staking_token_raw.as_slice()),
-    )? {
-        Some(reward_info) => reward_info,
-        None => RewardInfo::default(),
-    };
+    let mut staker_reward_info: RewardInfo =
+        match REWARD_INFO.may_load(deps.storage, (&sender_addr, &staking_token))? {
+            Some(reward_info) => reward_info,
+            None => RewardInfo::default(),
+        };
 
     // pulls the expired lock entires and accumulates it into unlocked_amount
     pull_unlocked(
         deps.storage,
-        &sender_addr_raw,
-        &staking_token_raw,
+        &sender_addr,
+        &staking_token,
         &mut staker_reward_info,
         env.block.time.seconds(),
         pool_info.lock_period,
@@ -224,28 +215,23 @@ pub fn bond(
     // Store updated state with staker's staker_info
     REWARD_INFO.save(
         deps.storage,
-        (sender_addr_raw.as_slice(), staking_token_raw.as_slice()),
+        (&sender_addr, &staking_token),
         &staker_reward_info,
     )?;
-    STAKER_BY_TOKEN_INDEXER.save(
-        deps.storage,
-        (staking_token_raw.as_slice(), sender_addr_raw.as_slice()),
-        &true,
-    )?;
+    STAKER_BY_TOKEN_INDEXER.save(deps.storage, (&staking_token, &sender_addr), &true)?;
 
     // store the time the tokens are locked
     LOCK_INFO.save(
         deps.storage,
         (
-            [sender_addr_raw.as_slice(), staking_token_raw.as_slice()]
-                .concat()
-                .as_slice(),
-            &env.block.time.seconds().to_be_bytes(),
+            &sender_addr,
+            &staking_token,
+            U64Key::from(env.block.time.seconds()),
         ),
         &amount,
     )?;
 
-    POOLS.save(deps.storage, staking_token_raw.as_slice(), &pool_info)?;
+    POOLS.save(deps.storage, &staking_token, &pool_info)?;
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "bond"),
@@ -263,24 +249,19 @@ pub fn unbond(
     amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
-    let sender_addr_raw: CanonicalAddr = deps.api.addr_canonicalize(info.sender.as_str())?;
-    let staking_token_raw: CanonicalAddr = deps.api.addr_canonicalize(staking_token.as_str())?;
 
     let mut pool: PoolInfo = POOLS
-        .load(deps.storage, staking_token_raw.as_slice())
+        .load(deps.storage, &staking_token)
         .map_err(|_| ContractError::InvalidStakingToken {})?;
     let mut staker_reward_info: RewardInfo = REWARD_INFO
-        .load(
-            deps.storage,
-            (sender_addr_raw.as_slice(), staking_token_raw.as_slice()),
-        )
+        .load(deps.storage, (&info.sender, &staking_token))
         .map_err(|_| ContractError::NothingStaked {})?;
 
     // pulls the expired lock entires and accumulates it into unlocked_amount
     pull_unlocked(
         deps.storage,
-        &sender_addr_raw,
-        &staking_token_raw,
+        &info.sender,
+        &staking_token,
         &mut staker_reward_info,
         env.block.time.seconds(),
         pool.lock_period,
@@ -310,24 +291,18 @@ pub fn unbond(
     // Store or remove updated rewards info
     // depends on the left pending reward and bond amount
     if staker_reward_info.pending_reward.is_zero() && staker_reward_info.bond_amount.is_zero() {
-        REWARD_INFO.remove(
-            deps.storage,
-            (sender_addr_raw.as_slice(), staking_token_raw.as_slice()),
-        );
-        STAKER_BY_TOKEN_INDEXER.remove(
-            deps.storage,
-            (staking_token_raw.as_slice(), sender_addr_raw.as_slice()),
-        );
+        REWARD_INFO.remove(deps.storage, (&info.sender, &staking_token));
+        STAKER_BY_TOKEN_INDEXER.remove(deps.storage, (&staking_token, &info.sender));
     } else {
         REWARD_INFO.save(
             deps.storage,
-            (sender_addr_raw.as_slice(), staking_token_raw.as_slice()),
+            (&info.sender, &staking_token),
             &staker_reward_info,
         )?;
     }
 
     // Store updated pool
-    POOLS.save(deps.storage, staking_token_raw.as_slice(), &pool)?;
+    POOLS.save(deps.storage, &staking_token, &pool)?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -353,35 +328,29 @@ pub fn claim_rewards(
     staking_token: Option<Addr>,
 ) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
-    let sender_addr_raw: CanonicalAddr = deps.api.addr_canonicalize(info.sender.as_str())?;
 
-    let reward_infos: Vec<(CanonicalAddr, RewardInfo)> = match staking_token {
+    let reward_infos: Vec<(Addr, RewardInfo)> = match staking_token {
         Some(token) => {
-            let token_raw = deps.api.addr_canonicalize(token.as_str())?;
             let reward_info = REWARD_INFO
-                .load(
-                    deps.storage,
-                    (sender_addr_raw.as_slice(), token_raw.as_slice()),
-                )
+                .load(deps.storage, (&info.sender, &token))
                 .map_err(|_| ContractError::InvalidStakingToken {})?;
 
-            vec![(token_raw, reward_info)]
+            vec![(token, reward_info)]
         }
         None => REWARD_INFO
-            .prefix(sender_addr_raw.as_slice())
+            .prefix(&info.sender)
             .range(deps.storage, None, None, Order::Ascending)
             .map(|item| {
-                let (k, v) = item?;
-                let staking_token_raw = CanonicalAddr::from(k);
-
-                Ok((staking_token_raw, v))
+                let (k, reward_info) = item.unwrap();
+                let staking_token = deserialize_key::<Addr>(k).unwrap();
+                Ok((staking_token, reward_info))
             })
-            .collect::<StdResult<Vec<(CanonicalAddr, RewardInfo)>>>()?,
+            .collect::<StdResult<Vec<(Addr, RewardInfo)>>>()?,
     };
 
     let mut claim_amount = Uint128::zero();
-    for (staking_token_raw, mut staker_reward_info) in reward_infos {
-        let mut pool: PoolInfo = POOLS.load(deps.storage, staking_token_raw.as_slice())?;
+    for (staking_token, mut staker_reward_info) in reward_infos {
+        let mut pool: PoolInfo = POOLS.load(deps.storage, &staking_token)?;
 
         // Compute global pool reward & staker reward
         compute_pool_reward(&config, &mut pool, env.block.time.seconds());
@@ -393,24 +362,18 @@ pub fn claim_rewards(
         // Store or remove updated rewards info
         // depends on the left pending reward and bond amount
         if staker_reward_info.bond_amount.is_zero() {
-            REWARD_INFO.remove(
-                deps.storage,
-                (sender_addr_raw.as_slice(), staking_token_raw.as_slice()),
-            );
-            STAKER_BY_TOKEN_INDEXER.remove(
-                deps.storage,
-                (staking_token_raw.as_slice(), sender_addr_raw.as_slice()),
-            );
+            REWARD_INFO.remove(deps.storage, (&info.sender, &staking_token));
+            STAKER_BY_TOKEN_INDEXER.remove(deps.storage, (&staking_token, &info.sender));
         } else {
             REWARD_INFO.save(
                 deps.storage,
-                (sender_addr_raw.as_slice(), staking_token_raw.as_slice()),
+                (&info.sender, &staking_token),
                 &staker_reward_info,
             )?;
         }
 
         // store updated pool
-        POOLS.save(deps.storage, staking_token_raw.as_slice(), &pool)?;
+        POOLS.save(deps.storage, &staking_token, &pool)?;
     }
 
     let mut messages: Vec<CosmosMsg> = vec![];
@@ -438,7 +401,6 @@ pub fn auto_stake_hook(
     staking_token: Addr,
     sender_addr: Addr,
 ) -> Result<Response, ContractError> {
-    let staking_token_raw: CanonicalAddr = deps.api.addr_canonicalize(staking_token.as_str())?;
     let staking_token_balance: Uint128 = query_token_balance(
         &deps.querier,
         staking_token.clone(),
@@ -446,7 +408,7 @@ pub fn auto_stake_hook(
     )?;
 
     let pool_info: PoolInfo = POOLS
-        .load(deps.storage, staking_token_raw.as_slice())
+        .load(deps.storage, &staking_token)
         .map_err(|_| ContractError::InvalidStakingToken {})?;
 
     // the amount to stake is the difference between the bond amount and the actual balance of the contract
@@ -517,8 +479,8 @@ pub fn compute_staker_reward(pool: &PoolInfo, staker_info: &mut RewardInfo) {
 
 pub fn pull_unlocked(
     storage: &mut dyn Storage,
-    staker: &CanonicalAddr,
-    staking_token: &CanonicalAddr,
+    staker: &Addr,
+    staking_token: &Addr,
     staker_info: &mut RewardInfo,
     current_time: u64,
     lock_period: u64,

@@ -1,7 +1,7 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    from_binary, to_binary, Addr, Binary, CanonicalAddr, Deps, DepsMut, Env, MessageInfo, Response,
+    from_binary, to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response,
 };
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
@@ -50,11 +50,9 @@ pub fn instantiate(
     };
 
     for (staking_token, weight, lock_period) in staking_tokens {
-        let staking_token_raw: CanonicalAddr =
-            deps.api.addr_canonicalize(staking_token.as_str())?;
         POOLS.save(
             deps.storage,
-            staking_token_raw.as_slice(),
+            &deps.api.addr_validate(&staking_token)?,
             &PoolInfo {
                 last_distributed: env.block.time.seconds(),
                 weight,

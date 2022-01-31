@@ -1,19 +1,22 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{from_slice, to_vec, CanonicalAddr, Order, StdResult, Storage};
+use cosmwasm_std::{Addr, Order, StdResult, Storage};
 use cw_storage_plus::{Bound, Item, Map};
 use prism_protocol::airdrop_registry::{AirdropInfo, AirdropInfoElem};
+use prism_protocol::de::deserialize_key;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub owner: CanonicalAddr,
-    pub vault_contract: String,
-    pub airdrop_tokens: Vec<String>,
+    pub owner: Addr,
+    pub vault_contract: Addr,
+    pub airdrop_tokens: Vec<Addr>,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
-pub const AIRDROP_INFO: Map<&[u8], AirdropInfo> = Map::new("airdrop_info");
+
+/// airdrop token -> AirdropInfo
+pub const AIRDROP_INFO: Map<&Addr, AirdropInfo> = Map::new("airdrop_info");
 
 pub fn store_config(storage: &mut dyn Storage, config: &Config) -> StdResult<()> {
     CONFIG.save(storage, config)
@@ -25,64 +28,54 @@ pub fn read_config(storage: &dyn Storage) -> StdResult<Config> {
 
 pub fn store_airdrop_info(
     storage: &mut dyn Storage,
-    airdrop_token: String,
-    airdrop_info: AirdropInfo,
+    airdrop_token: &Addr,
+    airdrop_info: &AirdropInfo,
 ) -> StdResult<()> {
-    let key = to_vec(&airdrop_token)?;
-    AIRDROP_INFO.save(storage, &key, &airdrop_info)
+    AIRDROP_INFO.save(storage, airdrop_token, airdrop_info)
 }
 
 pub fn update_airdrop_info(
     storage: &mut dyn Storage,
-    airdrop_token: String,
-    airdrop_info: AirdropInfo,
+    airdrop_token: &Addr,
+    airdrop_info: &AirdropInfo,
 ) -> StdResult<()> {
-    let key = to_vec(&airdrop_token)?;
-    AIRDROP_INFO.update(storage, &key, |_| -> StdResult<_> { Ok(airdrop_info) })?;
+    AIRDROP_INFO.update(storage, airdrop_token, |_| -> StdResult<_> {
+        Ok(airdrop_info.clone())
+    })?;
     Ok(())
 }
 
-pub fn remove_airdrop_info(storage: &mut dyn Storage, airdrop_token: String) -> StdResult<()> {
-    let key = to_vec(&airdrop_token)?;
-    AIRDROP_INFO.remove(storage, &key);
+pub fn remove_airdrop_info(storage: &mut dyn Storage, airdrop_token: &Addr) -> StdResult<()> {
+    AIRDROP_INFO.remove(storage, airdrop_token);
     Ok(())
 }
 
-pub fn read_airdrop_info(storage: &dyn Storage, airdrop_token: String) -> StdResult<AirdropInfo> {
-    let key = to_vec(&airdrop_token).unwrap();
-    AIRDROP_INFO.load(storage, &key)
+pub fn read_airdrop_info(storage: &dyn Storage, airdrop_token: &Addr) -> StdResult<AirdropInfo> {
+    AIRDROP_INFO.load(storage, airdrop_token)
 }
 
 const MAX_LIMIT: u32 = 30;
 const DEFAULT_LIMIT: u32 = 10;
 pub fn read_all_airdrop_infos(
     storage: &dyn Storage,
-    start_after: Option<String>,
+    start_after: Option<Addr>,
     limit: Option<u32>,
 ) -> StdResult<Vec<AirdropInfoElem>> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
-    let start = calc_range_start(start_after).map(Bound::exclusive);
+    let start = start_after.map(|addr| Bound::exclusive(addr.as_bytes()));
 
     let infos: Vec<AirdropInfoElem> = AIRDROP_INFO
         .range(storage, start, None, Order::Ascending)
         .take(limit)
         .map(|item| {
             let (k, v) = item.unwrap();
-            let key: String = from_slice(&k).unwrap();
+            let airdrop_token = deserialize_key::<Addr>(k).unwrap();
             AirdropInfoElem {
-                airdrop_token: key,
+                airdrop_token: airdrop_token.to_string(),
                 info: v,
             }
         })
         .collect();
 
     Ok(infos)
-}
-
-fn calc_range_start(start_after: Option<String>) -> Option<Vec<u8>> {
-    start_after.map(|air| {
-        let mut v = to_vec(&air).unwrap();
-        v.push(1);
-        v
-    })
 }
