@@ -18,6 +18,9 @@ pub enum ContractError {
     #[error("Cannot unbond more than bond amount")]
     InvalidUnbondAmount {},
 
+    #[error("Current withdrawable amount is zero")]
+    NothingAvailableToUnbond {},
+
     #[error("Invalid Cw20 msg")]
     InvalidCw20Msg {},
 
@@ -26,4 +29,7 @@ pub enum ContractError {
 
     #[error("Duplicate staking token")]
     DuplicateStakingToken {},
+
+    #[error("The staking token is already registered")]
+    AlreadyExists {},
 }

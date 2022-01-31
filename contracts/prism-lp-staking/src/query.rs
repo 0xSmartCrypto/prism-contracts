@@ -3,8 +3,8 @@ use cosmwasm_std::{Addr, CanonicalAddr, Deps, Env};
 use crate::error::ContractError;
 use crate::handle::{compute_pool_reward, compute_staker_reward};
 use crate::state::{
-    read_token_stakers_with_updated_rewards, read_updated_staker_rewards, Config, PoolInfo,
-    RewardInfo, CONFIG, POOLS, REWARD_INFO,
+    get_unlocked_amount, read_token_stakers_with_updated_rewards, read_updated_staker_rewards,
+    Config, PoolInfo, RewardInfo, CONFIG, POOLS, REWARD_INFO,
 };
 
 use prism_protocol::lp_staking::{
@@ -43,6 +43,16 @@ pub fn query_staker_info(
                 deps.storage,
                 (staker_raw.as_slice(), staking_token_raw.as_slice()),
             )?;
+
+            // update the unlocked_amount
+            let (unlocked_amount, _) = get_unlocked_amount(
+                deps.storage,
+                &staker_raw,
+                &staking_token_raw,
+                env.block.time.seconds(),
+                pool.lock_period,
+            )?;
+            reward_info.unlocked_amount += unlocked_amount;
 
             compute_pool_reward(&config, &mut pool, env.block.time.seconds());
             compute_staker_reward(&pool, &mut reward_info);

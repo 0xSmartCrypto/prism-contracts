@@ -5,35 +5,34 @@ use serde::{Deserialize, Serialize};
 
 use crate::handle::{compute_pool_reward, compute_staker_reward};
 
-use prism_protocol::lp_staking::{
-    ConfigResponse, PoolInfoResponse, RewardInfoResponseItem, StakerInfoResponse,
-    StakersInfoResponse,
+use prism_protocol::{
+    de::deserialize_key,
+    lp_staking::{
+        ConfigResponse, PoolInfoResponse, RewardInfoResponseItem, StakerInfoResponse,
+        StakersInfoResponse,
+    },
 };
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const POOLS: Map<&[u8], PoolInfo> = Map::new("pools");
 pub const REWARD_INFO: Map<(&[u8], &[u8]), RewardInfo> = Map::new("reward_info");
+pub const LOCK_INFO: Map<(&[u8], &[u8]), Uint128> = Map::new("lock_info");
 pub const STAKER_BY_TOKEN_INDEXER: Map<(&[u8], &[u8]), bool> = Map::new("staker_by_token");
-pub const LAST_DISTRIBUTED: Item<u64> = Item::new("last_distributed");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    pub owner: Addr,
     pub prism_token: Addr,
     pub distribution_schedule: Vec<(u64, u64, Uint128)>,
-    pub staking_tokens: Vec<(Addr, u64)>,
     pub total_weight: u64,
 }
 
 impl Config {
     pub fn as_res(&self) -> StdResult<ConfigResponse> {
         let res = ConfigResponse {
+            owner: self.owner.to_string(),
             prism_token: self.prism_token.to_string(),
             distribution_schedule: self.distribution_schedule.clone(),
-            staking_tokens: self
-                .staking_tokens
-                .iter()
-                .map(|item| (item.0.to_string(), item.1))
-                .collect(),
             total_weight: self.total_weight,
         };
         Ok(res)
@@ -47,6 +46,7 @@ pub struct PoolInfo {
     pub total_bond_amount: Uint128,
     pub reward_index: Decimal,
     pub pending_reward: Uint128,
+    pub lock_period: u64,
 }
 
 impl PoolInfo {
@@ -58,6 +58,7 @@ impl PoolInfo {
             total_bond_amount: self.total_bond_amount,
             reward_index: self.reward_index,
             pending_reward: self.pending_reward,
+            lock_period: self.lock_period,
         }
     }
 }
@@ -66,6 +67,7 @@ impl PoolInfo {
 pub struct RewardInfo {
     pub reward_index: Decimal,
     pub bond_amount: Uint128,
+    pub unlocked_amount: Uint128,
     pub pending_reward: Uint128,
 }
 
@@ -75,6 +77,7 @@ impl RewardInfo {
             staking_token: staking_token.to_string(),
             bond_amount: self.bond_amount,
             pending_reward: self.pending_reward,
+            withdrawable_amount: self.unlocked_amount,
         }
     }
 }
@@ -115,6 +118,15 @@ pub fn read_token_stakers_with_updated_rewards(
                 (staker_addr_raw.as_slice(), staking_token.as_slice()),
             )?;
 
+            let (unlocked_amount, _) = get_unlocked_amount(
+                storage,
+                &staker_addr_raw,
+                &staking_token,
+                current_time,
+                pool.lock_period,
+            )?;
+            reward_info.unlocked_amount += unlocked_amount;
+
             compute_staker_reward(&pool, &mut reward_info);
 
             Ok(StakerInfoResponse {
@@ -147,9 +159,62 @@ pub fn read_updated_staker_rewards(
             compute_pool_reward(&config, &mut pool, current_time);
             compute_staker_reward(&pool, &mut v);
 
+            let (unlocked_amount, _) = get_unlocked_amount(
+                storage,
+                &staker,
+                &staking_token_raw,
+                current_time,
+                pool.lock_period,
+            )?;
+            v.unlocked_amount += unlocked_amount;
+
             Ok(v.as_res(&staking_token_addr))
         })
         .collect::<StdResult<Vec<RewardInfoResponseItem>>>()
+}
+
+const DEFAULT_LOCK_INFO_READ_LIMIT: usize = 30;
+
+pub fn get_unlocked_amount(
+    storage: &dyn Storage,
+    staker: &CanonicalAddr,
+    staking_token: &CanonicalAddr,
+    current_time: u64,
+    lock_period: u64,
+) -> StdResult<(Uint128, Vec<u64>)> {
+    let prefix = [staker.as_slice(), staking_token.as_slice()].concat();
+
+    let (withdrawable_amount, released_locks) = LOCK_INFO
+        .prefix(prefix.as_slice())
+        .range(storage, None, None, Order::Ascending)
+        .take(DEFAULT_LOCK_INFO_READ_LIMIT)
+        .fold((Uint128::zero(), vec![]), |acc, item| {
+            let (k, v) = item.unwrap();
+            let lock_time = deserialize_key::<u64>(k).unwrap();
+            let (mut amount, mut list) = acc;
+
+            if lock_time + lock_period < current_time {
+                list.push(lock_time);
+                amount += v
+            }
+
+            (amount, list)
+        });
+
+    Ok((withdrawable_amount, released_locks))
+}
+
+pub fn remove_unlocked(
+    storage: &mut dyn Storage,
+    staker: &CanonicalAddr,
+    staking_token: &CanonicalAddr,
+    released_locks: Vec<u64>,
+) {
+    let prefix = [staker.as_slice(), staking_token.as_slice()].concat();
+
+    for time in released_locks {
+        LOCK_INFO.remove(storage, (&prefix, &time.to_be_bytes()));
+    }
 }
 
 fn calc_range_start_addr(start_after: Option<CanonicalAddr>) -> Option<Vec<u8>> {

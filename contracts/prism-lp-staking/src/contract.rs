@@ -7,9 +7,12 @@ use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
 
 use crate::error::ContractError;
-use crate::handle::{bond, claim_rewards, unbond};
+use crate::handle::{
+    add_distribution_schedule, auto_stake_hook, bond, claim_rewards, register_staking_token,
+    unbond, update_owner, update_staking_token,
+};
 use crate::query::{query_config, query_pool_info, query_staker_info, query_token_stakers_info};
-use crate::state::{Config, PoolInfo, CONFIG, LAST_DISTRIBUTED, POOLS};
+use crate::state::{Config, PoolInfo, CONFIG, POOLS};
 
 use prism_protocol::lp_staking::{Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
@@ -40,16 +43,13 @@ pub fn instantiate(
     }
 
     let config = Config {
+        owner: deps.api.addr_validate(&msg.owner)?,
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
         distribution_schedule: msg.distribution_schedule,
-        staking_tokens: staking_tokens
-            .iter()
-            .map(|item| (deps.api.addr_validate(&item.0).unwrap(), item.1))
-            .collect(),
         total_weight: staking_tokens.iter().map(|item| item.1).sum(),
     };
 
-    for (staking_token, weight) in &config.staking_tokens {
+    for (staking_token, weight, lock_period) in staking_tokens {
         let staking_token_raw: CanonicalAddr =
             deps.api.addr_canonicalize(staking_token.as_str())?;
         POOLS.save(
@@ -57,13 +57,13 @@ pub fn instantiate(
             staking_token_raw.as_slice(),
             &PoolInfo {
                 last_distributed: env.block.time.seconds(),
-                weight: *weight,
+                weight,
+                lock_period,
                 ..PoolInfo::default()
             },
         )?;
     }
     CONFIG.save(deps.storage, &config)?;
-    LAST_DISTRIBUTED.save(deps.storage, &env.block.time.seconds())?;
 
     Ok(Response::default())
 }
@@ -77,6 +77,32 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
+        ExecuteMsg::UpdateOwner { owner } => {
+            let new_owner_addr = deps.api.addr_validate(&owner)?;
+
+            update_owner(deps, info, new_owner_addr)
+        }
+        ExecuteMsg::AddDistributionSchedule { schedule } => {
+            add_distribution_schedule(deps, env, info, schedule)
+        }
+        ExecuteMsg::RegisterStakingToken {
+            staking_token,
+            lock_period,
+            weight,
+        } => {
+            let staking_token_addr = deps.api.addr_validate(&staking_token)?;
+
+            register_staking_token(deps, env, info, staking_token_addr, lock_period, weight)
+        }
+        ExecuteMsg::UpdateStakingToken {
+            staking_token,
+            lock_period,
+            weight,
+        } => {
+            let staking_token_addr = deps.api.addr_validate(&staking_token)?;
+
+            update_staking_token(deps, env, info, staking_token_addr, lock_period, weight)
+        }
         ExecuteMsg::Unbond {
             staking_token,
             amount,
@@ -91,6 +117,11 @@ pub fn execute(
 
             claim_rewards(deps, env, info, staking_token_addr)
         }
+        ExecuteMsg::AutoStakeHook { staking_token } => {
+            let staking_token_addr = deps.api.addr_validate(&staking_token)?;
+
+            auto_stake_hook(deps, env, staking_token_addr, info.sender)
+        }
     }
 }
 
@@ -103,7 +134,9 @@ pub fn receive_cw20(
     let cw20_sender: Addr = deps.api.addr_validate(&cw20_msg.sender)?;
 
     match from_binary(&cw20_msg.msg) {
-        Ok(Cw20HookMsg::Bond {}) => bond(deps, env, info.sender, cw20_sender, cw20_msg.amount),
+        Ok(Cw20HookMsg::Bond {}) => {
+            bond(deps, env, info.sender, cw20_sender, cw20_msg.amount, None)
+        }
         Err(_) => Err(ContractError::InvalidCw20Msg {}),
     }
 }
