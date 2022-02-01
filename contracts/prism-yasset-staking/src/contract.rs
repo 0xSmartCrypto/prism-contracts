@@ -21,7 +21,7 @@ use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASS
 use crate::swaps::{deposit_minted_pyluna_hook, luna_to_pyluna_hook, process_delegator_rewards};
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
-use prismswap::asset::AssetInfo;
+use cw_asset::AssetInfo;
 use terra_cosmwasm::TerraMsgWrapper;
 
 const CONTRACT_NAME: &str = "prism-yasset-staking";
@@ -55,12 +55,8 @@ pub fn instantiate(
     WHITELISTED_ASSETS.save(
         deps.storage,
         &vec![
-            AssetInfo::Token {
-                contract_addr: deps.api.addr_validate(&msg.pluna_token)?,
-            },
-            AssetInfo::Token {
-                contract_addr: deps.api.addr_validate(&msg.yluna_token)?,
-            },
+            AssetInfo::Cw20(deps.api.addr_validate(&msg.pluna_token)?),
+            AssetInfo::Cw20(deps.api.addr_validate(&msg.yluna_token)?),
         ],
     )?;
     Ok(Response::default())

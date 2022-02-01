@@ -8,7 +8,6 @@ use cw20::Cw20ExecuteMsg;
 use cw_asset::{Asset, AssetInfo};
 use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
-use prismswap::asset::AssetInfo as PSAssetInfo;
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 
 // helper to successfully init with reasonable defaults
@@ -59,16 +58,16 @@ fn test_convert_and_send() {
 
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
         ],
         [
-            AssetInfo::Native("uusd".to_string()).into(),
-            AssetInfo::Cw20(Addr::unchecked("anc0000")).into(),
+            AssetInfo::Native("uusd".to_string()),
+            AssetInfo::Cw20(Addr::unchecked("anc0000")),
         ],
         [
-            AssetInfo::Native("uluna".to_string()).into(),
-            AssetInfo::Native("uusd".to_string()).into(),
+            AssetInfo::Native("uluna".to_string()),
+            AssetInfo::Native("uusd".to_string()),
         ],
     ]);
 
@@ -77,13 +76,11 @@ fn test_convert_and_send() {
             Asset {
                 info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                 amount: Uint128::from(100u128),
-            }
-            .into(),
+            },
             Asset {
                 info: AssetInfo::Cw20(Addr::unchecked("anc0000")),
                 amount: Uint128::from(200u128),
-            }
-            .into(),
+            },
         ],
         receiver: Some("user0000".to_string()),
     };
@@ -167,26 +164,38 @@ fn test_convert_and_send_native() {
         amount: Uint128::from(amount),
     };
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![uluna_asset.clone().into()],
+        assets: vec![uluna_asset.clone()],
         receiver: Some("user0000".to_string()),
     };
 
     // failure - no funds sent
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, StdError::generic_err("Missing funds payment: uluna"));
+    assert_eq!(
+        err,
+        StdError::generic_err(
+            "Native token balance mismatch between the argument and the transferred"
+        )
+    );
 
     // failure - wrong coin sent
     let info = mock_info("addr0000", &[coin(amount, "ukrt")]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, StdError::generic_err("Missing funds payment: uluna"));
+    assert_eq!(
+        err,
+        StdError::generic_err(
+            "Native token balance mismatch between the argument and the transferred"
+        )
+    );
 
     // failure - wrong amount sent
     let info = mock_info("addr0000", &[coin(amount + 1, "uluna")]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(
         err,
-        StdError::generic_err("Invalid uluna payment - funds/asset amount mismatch")
+        StdError::generic_err(
+            "Native token balance mismatch between the argument and the transferred"
+        )
     );
 
     // failure - missing route
@@ -196,8 +205,8 @@ fn test_convert_and_send_native() {
 
     // add pair for uluna/uusd
     deps.querier.with_pairs(&[[
-        AssetInfo::Native("uluna".to_string()).into(),
-        AssetInfo::Native("uusd".to_string()).into(),
+        AssetInfo::Native("uluna".to_string()),
+        AssetInfo::Native("uusd".to_string()),
     ]]);
 
     // success - since no pair exists from uluna to prism, perform a swap from
@@ -210,7 +219,7 @@ fn test_convert_and_send_native() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "ulunauusd".to_string(),
                 msg: to_binary(&PairExecuteMsg::Swap {
-                    offer_asset: uluna_asset.clone().into(),
+                    offer_asset: uluna_asset.clone(),
                     max_spread: None,
                     belief_price: None,
                     to: Some(MOCK_CONTRACT_ADDR.to_string()),
@@ -234,7 +243,7 @@ fn test_convert_and_send_native() {
 
     // success - same as above but with empty receiver
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![uluna_asset.clone().into()],
+        assets: vec![uluna_asset.clone()],
         receiver: None,
     };
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
@@ -245,7 +254,7 @@ fn test_convert_and_send_native() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "ulunauusd".to_string(),
                 msg: to_binary(&PairExecuteMsg::Swap {
-                    offer_asset: uluna_asset.clone().into(),
+                    offer_asset: uluna_asset.clone(),
                     max_spread: None,
                     belief_price: None,
                     to: Some(MOCK_CONTRACT_ADDR.to_string()),
@@ -272,12 +281,12 @@ fn test_convert_and_send_native() {
     // we do a direct swap and no longer need the BaseSwapHook
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Native("uluna".to_string()).into(),
-            AssetInfo::Native("uusd".to_string()).into(),
+            AssetInfo::Native("uluna".to_string()),
+            AssetInfo::Native("uusd".to_string()),
         ],
         [
-            AssetInfo::Native("uluna".to_string()).into(),
-            AssetInfo::Native("prism0000".to_string()).into(),
+            AssetInfo::Native("uluna".to_string()),
+            AssetInfo::Native("prism0000".to_string()),
         ],
     ]);
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
@@ -287,7 +296,7 @@ fn test_convert_and_send_native() {
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: "prism0000uluna".to_string(),
             msg: to_binary(&PairExecuteMsg::Swap {
-                offer_asset: uluna_asset.clone().into(),
+                offer_asset: uluna_asset.clone(),
                 max_spread: None,
                 belief_price: None,
                 to: Some(info.sender.to_string()),
@@ -303,12 +312,12 @@ fn test_convert_and_send_native() {
     // success - convert and send two native coins with direct prism pairs
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Native("uluna".to_string()).into(),
-            AssetInfo::Native("prism0000".to_string()).into(),
+            AssetInfo::Native("uluna".to_string()),
+            AssetInfo::Native("prism0000".to_string()),
         ],
         [
-            AssetInfo::Native("uusd".to_string()).into(),
-            AssetInfo::Native("prism0000".to_string()).into(),
+            AssetInfo::Native("uusd".to_string()),
+            AssetInfo::Native("prism0000".to_string()),
         ],
     ]);
     let uusd_asset = Asset {
@@ -317,7 +326,7 @@ fn test_convert_and_send_native() {
     };
 
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![uluna_asset.clone().into(), uusd_asset.clone().into()],
+        assets: vec![uluna_asset.clone(), uusd_asset.clone()],
         receiver: None,
     };
 
@@ -329,7 +338,7 @@ fn test_convert_and_send_native() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "prism0000uluna".to_string(),
                 msg: to_binary(&PairExecuteMsg::Swap {
-                    offer_asset: uluna_asset.clone().into(),
+                    offer_asset: uluna_asset.clone(),
                     max_spread: None,
                     belief_price: None,
                     to: Some(info.sender.to_string()),
@@ -343,7 +352,7 @@ fn test_convert_and_send_native() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "prism0000uusd".to_string(),
                 msg: to_binary(&PairExecuteMsg::Swap {
-                    offer_asset: uusd_asset.clone().into(),
+                    offer_asset: uusd_asset.clone(),
                     max_spread: None,
                     belief_price: None,
                     to: Some(info.sender.to_string()),
@@ -370,7 +379,7 @@ fn test_convert_and_send_cw20() {
     };
 
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![yluna_asset.clone().into()],
+        assets: vec![yluna_asset.clone()],
         receiver: Some("user0000".to_string()),
     };
 
@@ -384,8 +393,8 @@ fn test_convert_and_send_cw20() {
 
     // add pair for yluna0000/uusd
     deps.querier.with_pairs(&[[
-        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-        AssetInfo::Native("uusd".to_string()).into(),
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+        AssetInfo::Native("uusd".to_string()),
     ]]);
 
     // success - since no pair exists from yluna to prism, perform a swap from
@@ -434,7 +443,7 @@ fn test_convert_and_send_cw20() {
 
     // success - same as above but with empty receiver
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![yluna_asset.clone().into()],
+        assets: vec![yluna_asset.clone()],
         receiver: None,
     };
     let info = mock_info("addr0000", &[coin(amount, "uluna")]);
@@ -482,12 +491,12 @@ fn test_convert_and_send_cw20() {
     // we do a direct swap and no longer need the BaseSwapHook
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-            AssetInfo::Native("uusd".to_string()).into(),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+            AssetInfo::Native("uusd".to_string()),
         ],
         [
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
         ],
     ]);
     let info = mock_info("addr0000", &[]);
@@ -530,17 +539,17 @@ fn test_convert_and_send_cw20() {
     };
 
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![yluna_asset.into(), pluna_asset.into()],
+        assets: vec![yluna_asset, pluna_asset],
         receiver: None,
     };
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
         ],
         [
-            AssetInfo::Cw20(Addr::unchecked("pluna0000")).into(),
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+            AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
         ],
     ]);
     let info = mock_info("addr0000", &[]);
@@ -617,19 +626,19 @@ fn test_convert_and_send_native_and_cw20() {
         amount: Uint128::from(amount),
     };
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![uluna_asset.clone().into(), yluna_asset.into()],
+        assets: vec![uluna_asset.clone(), yluna_asset],
         receiver: None,
     };
 
     // add direct prism pairs for uluna and yluna
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Native("uluna".to_string()).into(),
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+            AssetInfo::Native("uluna".to_string()),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
         ],
         [
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
         ],
     ]);
 
@@ -652,7 +661,7 @@ fn test_convert_and_send_native_and_cw20() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "prism0000uluna".to_string(),
                 msg: to_binary(&PairExecuteMsg::Swap {
-                    offer_asset: uluna_asset.clone().into(),
+                    offer_asset: uluna_asset.clone(),
                     max_spread: None,
                     belief_price: None,
                     to: Some(info.sender.to_string()),
@@ -695,7 +704,7 @@ fn test_convert_and_send_astroport() {
     };
 
     let msg = ExecuteMsg::ConvertAndSend {
-        assets: vec![yluna_asset.into()],
+        assets: vec![yluna_asset],
         receiver: Some("user0000".to_string()),
     };
 
@@ -709,8 +718,8 @@ fn test_convert_and_send_astroport() {
 
     // add astroport pair for yluna0000/uusd
     deps.querier.with_astro_pairs(&[[
-        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-        AssetInfo::Native("uusd".to_string()).into(),
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+        AssetInfo::Native("uusd".to_string()),
     ]]);
 
     // success - since no pair exists from yluna to prism, perform a swap from
@@ -775,18 +784,18 @@ fn test_distribute() {
     ]);
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
         ],
         [
-            AssetInfo::Native("uusd".to_string()).into(),
-            AssetInfo::Cw20(Addr::unchecked("anc0000")).into(),
+            AssetInfo::Native("uusd".to_string()),
+            AssetInfo::Cw20(Addr::unchecked("anc0000")),
         ],
     ]);
 
-    let asset_infos: Vec<PSAssetInfo> = vec![
-        AssetInfo::Native("uluna".to_string()).into(),
-        AssetInfo::Cw20(Addr::unchecked("anc0000")).into(),
+    let asset_infos = vec![
+        AssetInfo::Native("uluna".to_string()),
+        AssetInfo::Cw20(Addr::unchecked("anc0000")),
     ];
 
     let msg = ExecuteMsg::Distribute { asset_infos };
@@ -822,10 +831,10 @@ fn test_distribute() {
         ],
     );
 
-    let asset_infos: Vec<PSAssetInfo> = vec![
-        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-        AssetInfo::Cw20(Addr::unchecked("anc0000")).into(),
-        AssetInfo::Cw20(Addr::unchecked("pluna0000")).into(),
+    let asset_infos = vec![
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+        AssetInfo::Cw20(Addr::unchecked("anc0000")),
+        AssetInfo::Cw20(Addr::unchecked("pluna0000")),
     ];
     let msg = ExecuteMsg::Distribute { asset_infos };
 
@@ -888,7 +897,7 @@ fn test_distribute_native() {
         amount: Uint128::from(amount),
     };
 
-    let asset_infos: Vec<PSAssetInfo> = vec![uluna_asset.info.clone().into()];
+    let asset_infos = vec![uluna_asset.info.clone()];
     let msg = ExecuteMsg::Distribute { asset_infos };
     let info = mock_info("addr0000", &[]);
 
@@ -911,8 +920,8 @@ fn test_distribute_native() {
 
     // add pair
     deps.querier.with_pairs(&[[
-        AssetInfo::Native("uluna".to_string()).into(),
-        AssetInfo::Native("uusd".to_string()).into(),
+        AssetInfo::Native("uluna".to_string()),
+        AssetInfo::Native("uusd".to_string()),
     ]]);
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
@@ -922,7 +931,7 @@ fn test_distribute_native() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "ulunauusd".to_string(),
                 msg: to_binary(&PairExecuteMsg::Swap {
-                    offer_asset: uluna_asset.clone().into(),
+                    offer_asset: uluna_asset.clone(),
                     max_spread: None,
                     belief_price: None,
                     to: Some(MOCK_CONTRACT_ADDR.to_string()),
@@ -950,12 +959,12 @@ fn test_distribute_native() {
     // recipient set to gov
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Native("uluna".to_string()).into(),
-            AssetInfo::Native("uusd".to_string()).into(),
+            AssetInfo::Native("uluna".to_string()),
+            AssetInfo::Native("uusd".to_string()),
         ],
         [
-            AssetInfo::Native("uluna".to_string()).into(),
-            AssetInfo::Native("prism0000".to_string()).into(),
+            AssetInfo::Native("uluna".to_string()),
+            AssetInfo::Native("prism0000".to_string()),
         ],
     ]);
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -964,7 +973,7 @@ fn test_distribute_native() {
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: "prism0000uluna".to_string(),
             msg: to_binary(&PairExecuteMsg::Swap {
-                offer_asset: uluna_asset.clone().into(),
+                offer_asset: uluna_asset.clone(),
                 max_spread: None,
                 belief_price: None,
                 to: Some("gov0000".to_string()),
@@ -989,7 +998,7 @@ fn test_distribute_cw20() {
         amount: Uint128::from(amount),
     };
 
-    let asset_infos: Vec<PSAssetInfo> = vec![yluna_asset.info.into()];
+    let asset_infos = vec![yluna_asset.info];
     let msg = ExecuteMsg::Distribute { asset_infos };
     let info = mock_info("addr0000", &[]);
 
@@ -1012,8 +1021,8 @@ fn test_distribute_cw20() {
 
     // add pair
     deps.querier.with_pairs(&[[
-        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-        AssetInfo::Native("uusd".to_string()).into(),
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+        AssetInfo::Native("uusd".to_string()),
     ]]);
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
@@ -1052,12 +1061,12 @@ fn test_distribute_cw20() {
     // recipient set to gov
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-            AssetInfo::Native("uusd".to_string()).into(),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+            AssetInfo::Native("uusd".to_string()),
         ],
         [
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
         ],
     ]);
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1099,17 +1108,16 @@ fn test_distribute_native_and_cw20() {
     // add direct prism pairs for uluna and yluna
     deps.querier.with_pairs(&[
         [
-            AssetInfo::Native("uluna".to_string()).into(),
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+            AssetInfo::Native("uluna".to_string()),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
         ],
         [
-            AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-            AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+            AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+            AssetInfo::Cw20(Addr::unchecked("prism0000")),
         ],
     ]);
 
-    let asset_infos: Vec<PSAssetInfo> =
-        vec![uluna_asset.info.clone().into(), yluna_asset.info.into()];
+    let asset_infos = vec![uluna_asset.info.clone(), yluna_asset.info];
     let msg = ExecuteMsg::Distribute { asset_infos };
     let info = mock_info("addr0000", &[]);
 
@@ -1132,7 +1140,7 @@ fn test_distribute_native_and_cw20() {
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: "prism0000uluna".to_string(),
             msg: to_binary(&PairExecuteMsg::Swap {
-                offer_asset: uluna_asset.clone().into(),
+                offer_asset: uluna_asset.clone(),
                 max_spread: None,
                 belief_price: None,
                 to: Some("gov0000".to_string()),
@@ -1199,7 +1207,7 @@ fn test_distribute_native_and_cw20() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "prism0000uluna".to_string(),
                 msg: to_binary(&PairExecuteMsg::Swap {
-                    offer_asset: uluna_asset.clone().into(),
+                    offer_asset: uluna_asset.clone(),
                     max_spread: None,
                     belief_price: None,
                     to: Some("gov0000".to_string()),
@@ -1240,7 +1248,7 @@ fn test_distribute_astroport() {
         amount: Uint128::from(amount),
     };
 
-    let asset_infos: Vec<PSAssetInfo> = vec![yluna_asset.info.into()];
+    let asset_infos = vec![yluna_asset.info];
     let msg = ExecuteMsg::Distribute { asset_infos };
     let info = mock_info("addr0000", &[]);
 
@@ -1259,8 +1267,8 @@ fn test_distribute_astroport() {
 
     // add astroport pair
     deps.querier.with_astro_pairs(&[[
-        AssetInfo::Cw20(Addr::unchecked("yluna0000")).into(),
-        AssetInfo::Native("uusd".to_string()).into(),
+        AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+        AssetInfo::Native("uusd".to_string()),
     ]]);
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1328,8 +1336,8 @@ fn test_base_swap_hook() {
 
     // add pair
     deps.querier.with_pairs(&[[
-        AssetInfo::Native("uusd".to_string()).into(),
-        AssetInfo::Cw20(Addr::unchecked("prism0000")).into(),
+        AssetInfo::Native("uusd".to_string()),
+        AssetInfo::Cw20(Addr::unchecked("prism0000")),
     ]]);
 
     // success
@@ -1344,8 +1352,7 @@ fn test_base_swap_hook() {
                 offer_asset: Asset {
                     amount: Uint128::from(11134u128),
                     info: AssetInfo::Native("uusd".to_string()),
-                }
-                .into(),
+                },
                 max_spread: None,
                 belief_price: None,
                 to: Some("gov0000".to_string()), // by default sends to gov
@@ -1374,8 +1381,7 @@ fn test_base_swap_hook() {
                 offer_asset: Asset {
                     amount: Uint128::from(11134u128),
                     info: AssetInfo::Native("uusd".to_string()),
-                }
-                .into(),
+                },
                 max_spread: None,
                 belief_price: None,
                 to: receiver,

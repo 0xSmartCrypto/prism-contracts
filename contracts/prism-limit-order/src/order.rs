@@ -4,16 +4,16 @@ use cosmwasm_std::{
 };
 use cw20::Cw20ExecuteMsg;
 
-use prismswap::asset::{Asset, AssetInfo};
+use crate::state::{
+    generate_pair_key, remove_order, store_new_order, Config, OrderInfo, CONFIG, ORDERS, PAIRS,
+};
+use cw_asset::{Asset, AssetInfo};
+use prismswap::asset::PrismSwapAsset;
 use prismswap::pair::{
     Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg, ReverseSimulationResponse,
     SimulationResponse,
 };
 use prismswap::querier::{reverse_simulate, simulate};
-
-use crate::state::{
-    generate_pair_key, remove_order, store_new_order, Config, OrderInfo, CONFIG, ORDERS, PAIRS,
-};
 
 pub fn submit_order(
     deps: DepsMut,
@@ -36,9 +36,7 @@ pub fn submit_order(
         match PAIRS.load(deps.storage, &pair_key) {
             Ok(pair_addr) => (pair_addr, None),
             Err(_) => {
-                let prism_asset_info = AssetInfo::Token {
-                    contract_addr: config.prism_token,
-                };
+                let prism_asset_info = AssetInfo::Cw20(config.prism_token);
                 let inter_pair_key =
                     generate_pair_key(&[offer_asset.info.clone(), prism_asset_info.clone()]);
                 let ask_pair_key = generate_pair_key(&[prism_asset_info, ask_asset.info.clone()]);
@@ -58,18 +56,11 @@ pub fn submit_order(
 
     let mut messages: Vec<CosmosMsg> = vec![];
 
-    match offer_asset.info.clone() {
-        AssetInfo::NativeToken { .. } => offer_asset.assert_sent_native_token_balance(&info)?,
-        AssetInfo::Token { contract_addr } => {
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: contract_addr.to_string(),
-                funds: vec![],
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: info.sender.to_string(),
-                    recipient: env.contract.address.to_string(),
-                    amount: offer_asset.amount,
-                })?,
-            }));
+    match offer_asset.info {
+        AssetInfo::Native(..) => offer_asset.assert_sent_native_token_balance(&info)?,
+        AssetInfo::Cw20(..) => {
+            messages
+                .push(offer_asset.transfer_from_msg(info.sender.clone(), env.contract.address)?);
         }
     }
 
@@ -99,10 +90,7 @@ pub fn cancel_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResul
     }
 
     // refund offer asset
-    let messages: Vec<CosmosMsg> = vec![order
-        .offer_asset
-        .clone()
-        .into_msg(&deps.querier, order.bidder_addr.clone())?];
+    let messages: Vec<CosmosMsg> = vec![order.offer_asset.transfer_msg(&order.bidder_addr)?];
 
     remove_order(deps.storage, &order);
 
@@ -117,23 +105,16 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
     let config: Config = CONFIG.load(deps.storage)?;
     let order: OrderInfo = ORDERS.load(deps.storage, &order_id.to_be_bytes())?;
 
-    let prism_asset_info = AssetInfo::Token {
-        contract_addr: config.prism_token,
-    };
+    let prism_asset_info = AssetInfo::Cw20(config.prism_token);
 
     let mut messages: Vec<CosmosMsg> = vec![];
 
-    // subtract the tax from the offer asset, this tax will be deducted when sending the offer asset on the swap message
-    let mut offer_asset = order.offer_asset.clone();
-    let offer_asset_tax = offer_asset.compute_tax(&deps.querier)?; // returns 0 if cw20 or luna
-    offer_asset.amount -= offer_asset_tax;
-
     // if inter pair exists, we first swap the offer asset for $PRISM
     let offer_asset = if let Some(inter_pair_addr) = &order.inter_pair_addr {
-        messages.push(create_swap_msg(&offer_asset, inter_pair_addr)?);
+        messages.push(create_swap_msg(&order.offer_asset, inter_pair_addr)?);
 
         let simul_res: SimulationResponse =
-            simulate(&deps.querier, inter_pair_addr.clone(), &offer_asset)?;
+            simulate(&deps.querier, inter_pair_addr, &order.offer_asset)?;
 
         // since the return asset is $PRISM, no tax
 
@@ -142,14 +123,14 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
             amount: simul_res.return_amount,
         }
     } else {
-        offer_asset.clone()
+        order.offer_asset.clone()
     };
 
     let (offer_asset, return_asset, prism_fee_amount) =
-        if order.ask_asset.info.equal(&prism_asset_info) {
+        if order.ask_asset.info.eq(&prism_asset_info) {
             // if the ask asset $PRISM, take the fee from the ask_asset
             let simul_res: SimulationResponse =
-                simulate(&deps.querier, order.pair_addr.clone(), &offer_asset)?;
+                simulate(&deps.querier, &order.pair_addr, &offer_asset)?;
 
             // since the return asset is $PRISM, no tax
 
@@ -158,17 +139,12 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                 amount: simul_res.return_amount * config.order_fee,
             };
 
-            let sell_prism_fee_simul_res: SimulationResponse = simulate(
-                &deps.querier,
-                config.prism_ust_pair.clone(),
-                &prism_fee_asset,
-            )?;
+            let sell_prism_fee_simul_res: SimulationResponse =
+                simulate(&deps.querier, &config.prism_ust_pair, &prism_fee_asset)?;
             if sell_prism_fee_simul_res.return_amount < config.min_fee_value {
                 let min_fee_asset = Asset {
                     amount: config.min_fee_value,
-                    info: AssetInfo::NativeToken {
-                        denom: config.base_denom,
-                    },
+                    info: AssetInfo::Native(config.base_denom),
                 };
                 // simulate buying min_fee value worth of $PRISM to know how much we should deduct from return asset
                 let buy_prism_fee_simul_res: ReverseSimulationResponse =
@@ -196,25 +172,20 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                     prism_fee_asset.amount,
                 )
             }
-        } else if offer_asset.info.equal(&prism_asset_info) {
+        } else if offer_asset.info.eq(&prism_asset_info) {
             // if the ask asset is not $PRISM, take the fee from the offer_asset
             let prism_fee_asset = Asset {
                 info: prism_asset_info.clone(),
                 amount: offer_asset.amount * config.order_fee,
             };
-            let sell_prism_fee_simul_res: SimulationResponse = simulate(
-                &deps.querier,
-                config.prism_ust_pair.clone(),
-                &prism_fee_asset,
-            )?;
+            let sell_prism_fee_simul_res: SimulationResponse =
+                simulate(&deps.querier, &config.prism_ust_pair, &prism_fee_asset)?;
 
             let (offer_asset, prism_fee) =
                 if sell_prism_fee_simul_res.return_amount < config.min_fee_value {
                     let min_fee_asset = Asset {
                         amount: config.min_fee_value,
-                        info: AssetInfo::NativeToken {
-                            denom: config.base_denom,
-                        },
+                        info: AssetInfo::Native(config.base_denom),
                     };
                     // simulate buying min_fee value worth of $PRISM to know how much we should deduct from offer asset
                     let buy_prism_fee_simul_res: ReverseSimulationResponse =
@@ -240,15 +211,13 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
                 };
 
             let simul_res: SimulationResponse =
-                simulate(&deps.querier, order.pair_addr.clone(), &offer_asset)?;
+                simulate(&deps.querier, &order.pair_addr, &offer_asset)?;
 
             // deduct tax from the return asset to get the actual received amount by the contract
-            let mut return_asset = Asset {
+            let return_asset = Asset {
                 info: order.ask_asset.info.clone(),
                 amount: simul_res.return_amount,
             };
-            let return_asset_tax = return_asset.compute_tax(&deps.querier)?;
-            return_asset.amount -= return_asset_tax;
 
             (offer_asset, return_asset, prism_fee)
         } else {
@@ -264,12 +233,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
     messages.push(create_swap_msg(&offer_asset, &order.pair_addr)?);
 
     // send asset to bidder
-    messages.push(
-        order
-            .ask_asset
-            .clone()
-            .into_msg(&deps.querier, order.bidder_addr.clone())?,
-    );
+    messages.push(order.ask_asset.transfer_msg(order.bidder_addr.clone())?);
 
     // send excess to excess collector
     let excess_amount: Uint128 = return_asset.amount.checked_sub(order.ask_asset.amount)?;
@@ -278,7 +242,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
             amount: excess_amount,
             info: order.ask_asset.info.clone(),
         };
-        messages.push(excess_asset.into_msg(&deps.querier, config.excess_collactor_addr.clone())?);
+        messages.push(excess_asset.transfer_msg(config.excess_collactor_addr.clone())?);
     }
 
     // send fee to executor
@@ -287,11 +251,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
         info: prism_asset_info.clone(),
     };
     if !executor_fee_asset.amount.is_zero() {
-        messages.push(
-            executor_fee_asset
-                .clone()
-                .into_msg(&deps.querier, info.sender)?,
-        );
+        messages.push(executor_fee_asset.transfer_msg(info.sender)?);
     }
 
     // send fee to PRISM stakers
@@ -301,11 +261,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
     };
     // check protocol fee amount, executor_fee_portion could be 100%
     if !protocol_fee_asset.amount.is_zero() {
-        messages.push(
-            protocol_fee_asset
-                .clone()
-                .into_msg(&deps.querier, config.fee_collector_addr)?,
-        );
+        messages.push(protocol_fee_asset.transfer_msg(config.fee_collector_addr)?);
     }
 
     remove_order(deps.storage, &order);
@@ -321,7 +277,7 @@ pub fn execute_order(deps: DepsMut, info: MessageInfo, order_id: u64) -> StdResu
 
 fn create_swap_msg(offer_asset: &Asset, pair_addr: &Addr) -> StdResult<CosmosMsg> {
     let msg: CosmosMsg = match &offer_asset.info {
-        AssetInfo::Token { contract_addr } => CosmosMsg::Wasm(WasmMsg::Execute {
+        AssetInfo::Cw20(contract_addr) => CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: contract_addr.to_string(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Send {
@@ -334,7 +290,7 @@ fn create_swap_msg(offer_asset: &Asset, pair_addr: &Addr) -> StdResult<CosmosMsg
                 })?,
             })?,
         }),
-        AssetInfo::NativeToken { denom } => CosmosMsg::Wasm(WasmMsg::Execute {
+        AssetInfo::Native(denom) => CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: pair_addr.to_string(),
             funds: vec![Coin {
                 denom: denom.to_string(),

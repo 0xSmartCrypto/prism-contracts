@@ -8,6 +8,7 @@ use cosmwasm_std::{
     to_binary, Addr, CosmosMsg, Decimal, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use cw_asset::{Asset, AssetInfo};
 use prism_common::testing::mock_querier::{mock_dependencies, MOCK_CONTRACT_ADDR};
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, DistributionStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
@@ -16,7 +17,6 @@ use prism_protocol::launch_pool::{
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg,
 };
-use prismswap::asset::{Asset, AssetInfo};
 
 #[test]
 fn proper_initialization() {
@@ -721,21 +721,15 @@ fn admin_withdraw_rewards() {
                 msg: to_binary(&ExecuteMsg::AdminSendWithdrawnRewards {
                     original_balances: vec![
                         Asset {
-                            info: AssetInfo::Token {
-                                contract_addr: Addr::unchecked("yluna0000"),
-                            },
+                            info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                             amount: Uint128::from(100u128),
                         },
                         Asset {
-                            info: AssetInfo::Token {
-                                contract_addr: Addr::unchecked("pluna0000"),
-                            },
+                            info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
                             amount: Uint128::from(200u128),
                         },
                         Asset {
-                            info: AssetInfo::NativeToken {
-                                denom: "uluna".to_string(),
-                            },
+                            info: AssetInfo::Native("uluna".to_string()),
                             amount: Uint128::from(0u128),
                         }
                     ],
@@ -750,15 +744,11 @@ fn admin_withdraw_rewards() {
     let msg = ExecuteMsg::AdminSendWithdrawnRewards {
         original_balances: vec![
             Asset {
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000"),
-                },
+                info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                 amount: Uint128::from(100u128),
             },
             Asset {
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000"),
-                },
+                info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
                 amount: Uint128::from(200u128),
             },
         ],
@@ -812,15 +802,11 @@ fn admin_withdraw_rewards() {
     let msg = ExecuteMsg::AdminSendWithdrawnRewards {
         original_balances: vec![
             Asset {
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000"),
-                },
+                info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                 amount: Uint128::from(250u128),
             },
             Asset {
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000"),
-                },
+                info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
                 amount: Uint128::from(400u128),
             },
         ],

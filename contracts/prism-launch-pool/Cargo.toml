@@ -35,6 +35,7 @@ library = []
 
 [dependencies]
 cosmwasm-std = { version = "0.16.0" }
+cw-asset = { version = "0.3.4", features = ["legacy"] }
 cw-storage-plus = { version = "0.8.0" }
 schemars = "0.8.1"
 cw2 = "0.8.0"

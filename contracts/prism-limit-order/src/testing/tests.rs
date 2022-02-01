@@ -6,7 +6,8 @@ use cosmwasm_std::{
     OwnedDeps, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
-use prismswap::asset::{Asset, AssetInfo};
+use cw_asset::{Asset, AssetInfo};
+use prismswap::asset::PrismSwapAssetInfo;
 use prismswap::pair::{
     Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg, ReverseSimulationResponse,
     SimulationResponse,
@@ -48,7 +49,11 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) -> St
 
 // helper to build a pair addr from underlying assets
 pub fn get_pair_addr(asset_infos: &[AssetInfo; 2]) -> String {
-    format!("{}_{}", asset_infos[0], asset_infos[1])
+    format!(
+        "{}_{}",
+        asset_infos[0].to_string_legacy(),
+        asset_infos[1].to_string_legacy()
+    )
 }
 
 // helper to add a trading pair
@@ -104,7 +109,7 @@ pub fn verify_execute_response(
 
     let mut idx = 0;
     match offer_asset.clone().info {
-        AssetInfo::Token { contract_addr } => {
+        AssetInfo::Cw20(contract_addr) => {
             assert_eq!(
                 res.messages[idx],
                 SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -124,7 +129,7 @@ pub fn verify_execute_response(
                 }))
             );
         }
-        AssetInfo::NativeToken { denom } => {
+        AssetInfo::Native(denom) => {
             assert_eq!(
                 res.messages[idx],
                 SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -150,7 +155,7 @@ pub fn verify_execute_response(
     assert_eq!(
         res.messages[idx],
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: ask_asset.info.to_string(),
+            contract_addr: ask_asset.info.to_string_legacy(),
             funds: vec![],
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: USER1_ADDR.to_string(),
@@ -166,7 +171,7 @@ pub fn verify_execute_response(
         assert_eq!(
             res.messages[idx],
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: ask_asset.info.to_string(),
+                contract_addr: ask_asset.info.to_string_legacy(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: EXCESS_COLLECTOR_ADDR.to_string(),
@@ -328,12 +333,8 @@ fn test_add_pairs() {
     init(&mut deps).unwrap();
 
     let asset_infos = [
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(YLUNA_ADDR),
-        },
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
+        AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR)),
     ];
 
     // unauthorized
@@ -366,12 +367,8 @@ fn test_add_pairs() {
 
     // error - neither asset is PRISM
     let asset_infos = [
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PLUNA_ADDR),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(YLUNA_ADDR),
-        },
+        AssetInfo::Cw20(Addr::unchecked(PLUNA_ADDR)),
+        AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR)),
     ];
     let res = add_trading_pair(&mut deps, &asset_infos, OWNER_ADDR).unwrap_err();
     assert_eq!(
@@ -388,12 +385,8 @@ fn test_submit_order() {
 
     // successful submit, offering a token (prism)
     let asset_infos = [
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(YLUNA_ADDR),
-        },
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
+        AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR)),
     ];
     let assets: [Asset; 2] = [
         Asset {
@@ -439,23 +432,19 @@ fn test_submit_order() {
             },
             Attribute {
                 key: "offer_asset".to_string(),
-                value: "1000prism_0001".to_string()
+                value: "cw20:prism_0001:1000".to_string()
             },
             Attribute {
                 key: "ask_asset".to_string(),
-                value: "1000yluna_0001".to_string()
+                value: "cw20:yluna_0001:1000".to_string()
             }
         ]
     );
 
     // successful submit, offering a native token (uluna)
     let asset_infos = [
-        AssetInfo::NativeToken {
-            denom: "uluna".to_string(),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
+        AssetInfo::Native("uluna".to_string()),
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
     ];
     let assets: [Asset; 2] = [
         Asset {
@@ -488,11 +477,11 @@ fn test_submit_order() {
             },
             Attribute {
                 key: "offer_asset".to_string(),
-                value: "1000uluna".to_string()
+                value: "native:uluna:1000".to_string()
             },
             Attribute {
                 key: "ask_asset".to_string(),
-                value: "1000prism_0001".to_string()
+                value: "cw20:prism_0001:1000".to_string()
             }
         ]
     );
@@ -528,12 +517,8 @@ fn test_submit_order() {
 
     // failed submit, unsupported pair
     let asset_infos = [
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PLUNA_ADDR),
-        },
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
+        AssetInfo::Cw20(Addr::unchecked(PLUNA_ADDR)),
     ];
     let assets: [Asset; 2] = [
         Asset {
@@ -581,23 +566,15 @@ fn test_submit_order_with_inter_pair() {
     //      2. prism -> yluna
     // then submit an order for ust -> yluna
     let asset_infos_1 = [
-        AssetInfo::NativeToken {
-            denom: "uusd".to_string(),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
+        AssetInfo::Native("uusd".to_string()),
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
     ];
     let pair_addr_1 = get_pair_addr(&asset_infos_1);
     add_trading_pair(&mut deps, &asset_infos_1, OWNER_ADDR).unwrap();
 
     let asset_infos_2 = [
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(YLUNA_ADDR),
-        },
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
+        AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR)),
     ];
     let pair_addr_2 = get_pair_addr(&asset_infos_2);
     add_trading_pair(&mut deps, &asset_infos_2, OWNER_ADDR).unwrap();
@@ -632,11 +609,11 @@ fn test_submit_order_with_inter_pair() {
             },
             Attribute {
                 key: "offer_asset".to_string(),
-                value: "1000uusd".to_string()
+                value: "native:uusd:1000".to_string()
             },
             Attribute {
                 key: "ask_asset".to_string(),
-                value: "1000yluna_0001".to_string()
+                value: "cw20:yluna_0001:1000".to_string()
             }
         ]
     );
@@ -666,12 +643,8 @@ fn test_cancel_order() {
 
     // successful submit, offering a token (prism)
     let asset_infos = [
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(YLUNA_ADDR),
-        },
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
+        AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR)),
     ];
     let assets: [Asset; 2] = [
         Asset {
@@ -729,7 +702,7 @@ fn test_cancel_order() {
             },
             Attribute {
                 key: "refunded_asset".to_string(),
-                value: "1000prism_0001".to_string()
+                value: "cw20:prism_0001:1000".to_string()
             },
         ]
     );
@@ -757,12 +730,8 @@ fn test_cancel_order() {
     // submit using native token as offer asset
     // successful submit, offering a native token (uluna)
     let asset_infos = [
-        AssetInfo::NativeToken {
-            denom: "uluna".to_string(),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
+        AssetInfo::Native("uluna".to_string()),
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
     ];
     let assets: [Asset; 2] = [
         Asset {
@@ -805,7 +774,7 @@ fn test_cancel_order() {
             },
             Attribute {
                 key: "refunded_asset".to_string(),
-                value: "1000uluna".to_string()
+                value: "native:uluna:1000".to_string()
             },
         ]
     );
@@ -833,12 +802,8 @@ fn test_query_orders() {
     init(&mut deps).unwrap();
 
     let asset_infos = [
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(PRISM_ADDR),
-        },
-        AssetInfo::Token {
-            contract_addr: Addr::unchecked(YLUNA_ADDR),
-        },
+        AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR)),
+        AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR)),
     ];
     let assets: [Asset; 2] = [
         Asset {
@@ -1068,12 +1033,8 @@ pub fn test_execute_yluna_prism() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    let offer_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(YLUNA_ADDR),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR));
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1170,12 +1131,8 @@ pub fn test_execute_yluna_prism_reverse_sim() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    let offer_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(YLUNA_ADDR),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR));
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1184,9 +1141,7 @@ pub fn test_execute_yluna_prism_reverse_sim() {
         info: ask_asset_info.clone(),
         amount: Uint128::from(1000u128),
     };
-    let ust_asset_info = AssetInfo::NativeToken {
-        denom: "uusd".to_string(),
-    };
+    let ust_asset_info = AssetInfo::Native("uusd".to_string());
 
     let amm_swap_return = Uint128::from(1200u128);
     let amm_fee_uusd = config.min_fee_value - Uint128::from(1u128);
@@ -1277,12 +1232,8 @@ pub fn test_execute_yluna_prism_insufficient_return_amount() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    let offer_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(YLUNA_ADDR),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR));
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1291,9 +1242,7 @@ pub fn test_execute_yluna_prism_insufficient_return_amount() {
         info: ask_asset_info.clone(),
         amount: Uint128::from(1000u128),
     };
-    let ust_asset_info = AssetInfo::NativeToken {
-        denom: "uusd".to_string(),
-    };
+    let ust_asset_info = AssetInfo::Native("uusd".to_string());
 
     let amm_swap_return = Uint128::from(1200u128);
     let amm_fee_uusd = config.min_fee_value - Uint128::from(1u128);
@@ -1368,12 +1317,8 @@ pub fn test_execute_prism_yluna() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    let offer_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(YLUNA_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR));
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1465,12 +1410,8 @@ pub fn test_execute_prism_yluna_reverse_sim() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    let offer_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(YLUNA_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR));
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1479,9 +1420,7 @@ pub fn test_execute_prism_yluna_reverse_sim() {
         info: ask_asset_info.clone(),
         amount: Uint128::from(1000u128),
     };
-    let ust_asset_info = AssetInfo::NativeToken {
-        denom: "uusd".to_string(),
-    };
+    let ust_asset_info = AssetInfo::Native("uusd".to_string());
 
     let amm_swap_return = Uint128::from(1200u128);
     let amm_fee_uusd = config.min_fee_value - Uint128::from(1u128);
@@ -1576,12 +1515,9 @@ pub fn test_execute_luna_prism() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    let offer_asset_info = AssetInfo::NativeToken {
-        denom: "uluna".to_string(),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Native("uluna".to_string());
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
+
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1673,12 +1609,8 @@ pub fn test_execute_yluna_prism_no_excess() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    let offer_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(YLUNA_ADDR),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR));
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1770,12 +1702,8 @@ pub fn test_execute_yluna_prism_no_protocol_fee() {
     let res = query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap();
     let config: ConfigResponse = from_binary(&res).unwrap();
 
-    let offer_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(YLUNA_ADDR),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR));
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1845,10 +1773,6 @@ pub fn test_execute_yluna_prism_no_protocol_fee() {
 #[test]
 pub fn test_execute_with_inter_pair() {
     let mut deps = mock_dependencies(&[]);
-    deps.querier.with_tax(
-        Decimal::percent(1),
-        &[(&"uusd".to_string(), &Uint128::from(1000000u128))],
-    );
     let info = mock_info(OWNER_ADDR, &[]);
     let msg = InstantiateMsg {
         base_denom: "uusd".to_string(),
@@ -1864,15 +1788,9 @@ pub fn test_execute_with_inter_pair() {
 
     let info = mock_info(EXECUTOR_ADDR, &[]);
 
-    let offer_asset_info = AssetInfo::NativeToken {
-        denom: "uusd".to_string(),
-    };
-    let ask_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(YLUNA_ADDR),
-    };
-    let prism_asset_info = AssetInfo::Token {
-        contract_addr: Addr::unchecked(PRISM_ADDR),
-    };
+    let offer_asset_info = AssetInfo::Native("uusd".to_string());
+    let ask_asset_info = AssetInfo::Cw20(Addr::unchecked(YLUNA_ADDR));
+    let prism_asset_info = AssetInfo::Cw20(Addr::unchecked(PRISM_ADDR));
     let offer_asset = Asset {
         info: offer_asset_info.clone(),
         amount: Uint128::from(1000u128),
@@ -1965,12 +1883,12 @@ pub fn test_execute_with_inter_pair() {
                 contract_addr: pair_1.to_string(),
                 funds: vec![Coin {
                     denom: "uusd".to_string(),
-                    amount: Uint128::from(990u128), // 1000 minus 1% tax
+                    amount: Uint128::from(1000u128),
                 }],
                 msg: to_binary(&PairExecuteMsg::Swap {
                     offer_asset: Asset {
                         info: offer_asset.info,
-                        amount: Uint128::from(990u128),
+                        amount: Uint128::from(1000u128),
                     },
                     to: None,
                     belief_price: None,
@@ -1994,7 +1912,7 @@ pub fn test_execute_with_inter_pair() {
                 .unwrap(),
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: ask_asset.info.to_string(),
+                contract_addr: ask_asset.info.to_string_legacy(),
                 funds: vec![],
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: USER1_ADDR.to_string(),

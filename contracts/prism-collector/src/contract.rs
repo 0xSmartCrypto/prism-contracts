@@ -3,15 +3,15 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     attr, to_binary, Addr, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdError, StdResult, Uint128, WasmMsg,
+    StdError, StdResult, WasmMsg,
 };
 
 use crate::state::{Config, CONFIG};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use cw2::set_contract_version;
-use cw_asset::{Asset, AssetInfo, AssetInfoUnchecked, AssetUnchecked};
-use prismswap::asset::{Asset as PSAsset, AssetInfo as PSAssetInfo};
+use cw_asset::{Asset, AssetInfo};
+use prismswap::asset::PrismSwapAsset;
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 use prismswap::querier::query_pair_info;
 
@@ -51,47 +51,29 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     }
 }
 
-pub fn verify_payment(info: &MessageInfo, denom: &str, amount: Uint128) -> StdResult<()> {
-    let coin_payment = info
-        .funds
-        .iter()
-        .find(|x| x.denom == denom && x.amount > Uint128::zero())
-        .ok_or_else(|| StdError::generic_err(format!("Missing funds payment: {}", denom)))?;
-    if coin_payment.amount != amount {
-        return Err(StdError::generic_err(format!(
-            "Invalid {} payment - funds/asset amount mismatch",
-            denom
-        )));
-    }
-    Ok(())
-}
-
 pub fn convert_and_send(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    assets: Vec<PSAsset>,
+    assets: Vec<Asset>,
     receiver: Option<String>,
 ) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
-    let mut cw_assets: Vec<Asset> = vec![];
 
     // issue TransferFrom calls for cw20, verify payment for native
-    for asset in assets {
-        let asset = AssetUnchecked::from(asset).check(deps.api)?;
+    for asset in &assets {
         match &asset.info {
             AssetInfo::Cw20(..) => {
                 messages.push(
                     asset.transfer_from_msg(info.sender.clone(), env.contract.address.clone())?,
                 );
             }
-            AssetInfo::Native(denom) => {
-                verify_payment(&info, denom, asset.amount)?;
+            AssetInfo::Native(..) => {
+                asset.assert_sent_native_token_balance(&info)?;
             }
         }
-        cw_assets.push(asset);
     }
 
     // validate reciever or set to sender if unset
@@ -101,7 +83,7 @@ pub fn convert_and_send(
     };
 
     // get prism conversion messages, this will contain base swap hook if needed
-    let mut convert_msgs = get_prism_conversion_msgs(&deps, &env, &config, &cw_assets, &receiver)?;
+    let mut convert_msgs = get_prism_conversion_msgs(&deps, &env, &config, &assets, &receiver)?;
 
     // append prism conversion messages to any TransferFrom messages
     messages.append(&mut convert_msgs);
@@ -111,7 +93,7 @@ pub fn convert_and_send(
         .add_attributes(vec![attr("action", "convert_and_send")]))
 }
 
-pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<PSAssetInfo>) -> StdResult<Response> {
+pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<AssetInfo>) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     let mut assets: Vec<Asset> = vec![];
@@ -119,7 +101,6 @@ pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<PSAssetInfo>) -> Std
     // convert prismswap::AssetInfo to cw_asset::AssetInfo and then
     // create a cw_asset::Asset using the current balance for that asset
     for asset_info in &asset_infos {
-        let asset_info: AssetInfo = AssetInfoUnchecked::from(asset_info).check(deps.api)?;
         let asset_balance =
             asset_info.query_balance(&deps.querier, env.contract.address.clone())?;
 
@@ -207,10 +188,10 @@ pub fn query_prismswap_prism_pair(
 ) -> Option<Addr> {
     query_pair_info(
         &deps.querier,
-        config.prismswap_factory.clone(),
+        &config.prismswap_factory,
         &[
-            asset_info.into(),
-            AssetInfo::Cw20(config.prism_token.clone()).into(),
+            asset_info.clone(),
+            AssetInfo::Cw20(config.prism_token.clone()),
         ],
     )
     .ok()
@@ -224,10 +205,10 @@ pub fn query_prismswap_base_pair(
 ) -> Option<Addr> {
     query_pair_info(
         &deps.querier,
-        config.prismswap_factory.clone(),
+        &config.prismswap_factory,
         &[
-            AssetInfo::Native(config.base_denom.clone()).into(),
-            asset_info.into(),
+            AssetInfo::Native(config.base_denom.clone()),
+            asset_info.clone(),
         ],
     )
     .ok()
@@ -316,7 +297,7 @@ pub fn get_swap_msg(
         AssetInfo::Native(denom) => Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: pair_addr.to_string(),
             msg: to_binary(&PairExecuteMsg::Swap {
-                offer_asset: offer_asset.into(),
+                offer_asset: offer_asset.clone(),
                 max_spread: None,
                 belief_price: None,
                 to: Some(recipient.to_string()),

@@ -11,9 +11,10 @@ use std::str::FromStr;
 use astroport::asset::{AssetInfo as AstroAssetInfo, PairInfo as AstroPairInfo};
 use astroport::factory::PairType;
 use cw20::BalanceResponse as Cw20BalanceResponse;
+use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::StateResponse as VaultStateResponse;
 use prism_protocol::yasset_staking::RewardAssetWhitelistResponse;
-use prismswap::asset::{Asset, AssetInfo, PairInfo};
+use prismswap::asset::{PairInfo, PrismSwapAssetInfo};
 use prismswap::pair::{ReverseSimulationResponse, SimulationResponse};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -99,6 +100,12 @@ pub enum QueryMsg {
     ReverseSimulation { ask_asset: Asset },
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AstroQueryMsg {
+    Pair { asset_infos: [AstroAssetInfo; 2] },
+}
+
 impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<TerraQueryWrapper>) -> QuerierResult {
         match &request {
@@ -153,10 +160,10 @@ impl WasmMockQuerier {
                 }
             }
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
-                match from_binary(msg).unwrap() {
-                    QueryMsg::Pair { asset_infos } => {
-                        let key = pair_key(&asset_infos);
-                        if contract_addr == "astrofactory0000" {
+                if contract_addr == "astrofactory0000" {
+                    match from_binary(msg).unwrap() {
+                        AstroQueryMsg::Pair { asset_infos } => {
+                            let key = astro_pair_key(&asset_infos);
                             match self.astro_factory_querier.pairs.get(&key) {
                                 Some(asset_infos) => SystemResult::Ok(ContractResult::from(
                                     to_binary(&AstroPairInfo {
@@ -171,7 +178,12 @@ impl WasmMockQuerier {
                                     request: msg.as_slice().into(),
                                 }),
                             }
-                        } else {
+                        }
+                    }
+                } else {
+                    match from_binary(msg).unwrap() {
+                        QueryMsg::Pair { asset_infos } => {
+                            let key = pair_key(&asset_infos);
                             match self.factory_querier.pairs.get(&key) {
                                 Some(asset_infos) => {
                                     SystemResult::Ok(ContractResult::from(to_binary(&PairInfo {
@@ -186,71 +198,65 @@ impl WasmMockQuerier {
                                 }),
                             }
                         }
-                    }
-                    QueryMsg::TokenInfo {} => {
-                        let mut total_supply = Uint128::zero();
-                        if let Some(balances) = self.token_querier.balances.get(contract_addr) {
-                            for balance in balances {
-                                total_supply += *balance.1;
+                        QueryMsg::TokenInfo {} => {
+                            let mut total_supply = Uint128::zero();
+                            if let Some(balances) = self.token_querier.balances.get(contract_addr) {
+                                for balance in balances {
+                                    total_supply += *balance.1;
+                                }
                             }
+                            let token_inf: TokenInfoResponse = TokenInfoResponse {
+                                name: "pLuna".to_string(),
+                                symbol: "pLUNA".to_string(),
+                                decimals: 6,
+                                total_supply,
+                            };
+                            SystemResult::Ok(ContractResult::Ok(to_binary(&token_inf).unwrap()))
                         }
-                        let token_inf: TokenInfoResponse = TokenInfoResponse {
-                            name: "pLuna".to_string(),
-                            symbol: "pLUNA".to_string(),
-                            decimals: 6,
-                            total_supply,
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_binary(&token_inf).unwrap()))
-                    }
-                    QueryMsg::Balance { address } => {
-                        let balance = self.token_querier.get_balance(contract_addr, &address);
-                        SystemResult::Ok(ContractResult::Ok(
-                            to_binary(&Cw20BalanceResponse { balance }).unwrap(),
-                        ))
-                    }
-                    QueryMsg::State {} => SystemResult::Ok(ContractResult::Ok(
-                        to_binary(&VaultStateResponse {
-                            exchange_rate: Decimal::one(),
-                            total_bond_amount: self.vault_state_querier.total_bond_amount,
-                            last_index_modification: 0u64,
-                            prev_vault_balance: Uint128::zero(),
-                            actual_unbonded_amount: Uint128::zero(),
-                            last_unbonded_time: 0u64,
-                            last_processed_batch: 0u64,
-                        })
-                        .unwrap(),
-                    )),
-                    QueryMsg::RewardAssetWhitelist {} => SystemResult::Ok(ContractResult::Ok(
-                        to_binary(&RewardAssetWhitelistResponse {
-                            assets: vec![
-                                AssetInfo::Token {
-                                    contract_addr: Addr::unchecked("yluna0000"),
-                                },
-                                AssetInfo::Token {
-                                    contract_addr: Addr::unchecked("pluna0000"),
-                                },
-                                AssetInfo::NativeToken {
-                                    denom: "uluna".to_string(),
-                                },
-                            ],
-                        })
-                        .unwrap(),
-                    )),
-                    QueryMsg::Simulation { offer_asset } => {
-                        let res = self
-                            .simulation_querier
-                            .sim_responses
-                            .get(&(contract_addr.to_string(), offer_asset.info.to_string()))
-                            .unwrap();
-                        SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
-                    }
-                    QueryMsg::ReverseSimulation { ask_asset } => {
-                        let res = self
-                            .simulation_querier
-                            .reverse_sim_responses
-                            .get(&(contract_addr.to_string(), ask_asset.info.to_string()))
-                            .unwrap();
-                        SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
+                        QueryMsg::Balance { address } => {
+                            let balance = self.token_querier.get_balance(contract_addr, &address);
+                            SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&Cw20BalanceResponse { balance }).unwrap(),
+                            ))
+                        }
+                        QueryMsg::State {} => SystemResult::Ok(ContractResult::Ok(
+                            to_binary(&VaultStateResponse {
+                                exchange_rate: Decimal::one(),
+                                total_bond_amount: self.vault_state_querier.total_bond_amount,
+                                last_index_modification: 0u64,
+                                prev_vault_balance: Uint128::zero(),
+                                actual_unbonded_amount: Uint128::zero(),
+                                last_unbonded_time: 0u64,
+                                last_processed_batch: 0u64,
+                            })
+                            .unwrap(),
+                        )),
+                        QueryMsg::RewardAssetWhitelist {} => SystemResult::Ok(ContractResult::Ok(
+                            to_binary(&RewardAssetWhitelistResponse {
+                                assets: vec![
+                                    AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+                                    AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+                                    AssetInfo::Native("uluna".to_string()),
+                                ],
+                            })
+                            .unwrap(),
+                        )),
+                        QueryMsg::Simulation { offer_asset } => {
+                            let res = self
+                                .simulation_querier
+                                .sim_responses
+                                .get(&(contract_addr.to_string(), offer_asset.info.to_string()))
+                                .unwrap();
+                            SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
+                        }
+                        QueryMsg::ReverseSimulation { ask_asset } => {
+                            let res = self
+                                .simulation_querier
+                                .reverse_sim_responses
+                                .get(&(contract_addr.to_string(), ask_asset.info.to_string()))
+                                .unwrap();
+                            SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
+                        }
                     }
                 }
             }
@@ -430,6 +436,15 @@ impl WasmMockQuerier {
     }
 }
 
+pub fn astro_pair_key(asset_infos: &[AstroAssetInfo; 2]) -> String {
+    let mut asset_infos = asset_infos.to_vec();
+    asset_infos.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+
+    std::str::from_utf8(&[asset_infos[0].as_bytes(), asset_infos[1].as_bytes()].concat())
+        .unwrap()
+        .to_string()
+}
+
 pub fn pair_key(asset_infos: &[AssetInfo; 2]) -> String {
     let mut asset_infos = asset_infos.to_vec();
     asset_infos.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
@@ -442,10 +457,10 @@ pub fn pair_key(asset_infos: &[AssetInfo; 2]) -> String {
 // todo: possibly move to prismswap and add a from trait?
 pub fn to_astroport_asset_info(asset_info: &AssetInfo) -> AstroAssetInfo {
     match asset_info {
-        AssetInfo::NativeToken { denom } => AstroAssetInfo::NativeToken {
+        AssetInfo::Native(denom) => AstroAssetInfo::NativeToken {
             denom: denom.to_string(),
         },
-        AssetInfo::Token { contract_addr } => AstroAssetInfo::Token {
+        AssetInfo::Cw20(contract_addr) => AstroAssetInfo::Token {
             contract_addr: contract_addr.clone(),
         },
     }

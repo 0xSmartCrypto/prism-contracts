@@ -9,8 +9,8 @@ use cw2::set_contract_version;
 use crate::order::{cancel_order, execute_order, submit_order};
 use crate::query::{query_config, query_last_order_id, query_order, query_orders};
 use crate::state::{generate_pair_key, Config, CONFIG, LAST_ORDER_ID, PAIRS};
+use cw_asset::AssetInfo;
 use prism_protocol::limit_order::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use prismswap::asset::AssetInfo;
 
 const CONTRACT_NAME: &str = "prism-limit-order";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -155,10 +155,8 @@ pub fn add_pair(
         return Err(StdError::generic_err("unauthorized"));
     }
 
-    let prism_asset_info = AssetInfo::Token {
-        contract_addr: config.prism_token,
-    };
-    if !asset_infos[0].equal(&prism_asset_info) && !asset_infos[1].equal(&prism_asset_info) {
+    let prism_asset_info = AssetInfo::Cw20(config.prism_token);
+    if !asset_infos[0].eq(&prism_asset_info) && !asset_infos[1].eq(&prism_asset_info) {
         return Err(StdError::generic_err(
             "one of the assets has to be PRISM token",
         ));

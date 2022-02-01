@@ -2,9 +2,9 @@ use crate::state::CONFIG;
 use cosmwasm_std::{
     attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
 };
+use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 use prism_protocol::yasset_staking::ExecuteMsg;
-use prismswap::asset::{Asset, AssetInfo};
 use prismswap::querier::{query_balance, query_token_balance};
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
 
@@ -57,11 +57,7 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
     let cfg = CONFIG.load(deps.storage)?;
     let reward_denom = String::from(REWARD_DENOM);
 
-    let luna_amt = query_balance(
-        &deps.querier,
-        env.contract.address.clone(),
-        reward_denom.clone(),
-    )?;
+    let luna_amt = query_balance(&deps.querier, &env.contract.address, reward_denom.clone())?;
 
     Ok(Response::new()
         .add_messages(vec![
@@ -87,16 +83,8 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
 
     // query yluna amount to know how much we received from vault
     // received pluna amount should always be same as yluna amount
-    let yluna_amt = query_token_balance(
-        &deps.querier,
-        cfg.yluna_token.clone(),
-        env.contract.address.clone(),
-    )?;
-    let pluna_amt = query_token_balance(
-        &deps.querier,
-        cfg.pluna_token.clone(),
-        env.contract.address.clone(),
-    )?;
+    let yluna_amt = query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
+    let pluna_amt = query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -104,15 +92,11 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
             msg: to_binary(&ExecuteMsg::DepositRewards {
                 assets: vec![
                     Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: cfg.yluna_token,
-                        },
+                        info: AssetInfo::Cw20(cfg.yluna_token),
                         amount: yluna_amt,
                     },
                     Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: cfg.pluna_token,
-                        },
+                        info: AssetInfo::Cw20(cfg.pluna_token),
                         amount: pluna_amt,
                     },
                 ],
