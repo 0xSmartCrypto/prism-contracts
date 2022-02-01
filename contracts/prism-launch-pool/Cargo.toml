@@ -43,7 +43,6 @@ cw20 = "0.8.0"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 prism-protocol = { path = "../../packages/prism_protocol", default-features = false, version = "1.0.0"}
 hex = "0.4.2"
-prismswap = { path = "../../packages/prismswap", default-features = false, version = "0.1.0"}
 thiserror = { version = "1.0.20" }
 
 [dev-dependencies]
