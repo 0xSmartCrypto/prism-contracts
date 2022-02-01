@@ -6,8 +6,8 @@ use terra_cosmwasm::TerraMsgWrapper;
 use crate::pair::ExecuteMsg as PairExecuteMsg;
 use crate::querier::{query_balance, query_token_balance};
 use cosmwasm_std::{
-    to_binary, Addr, Coin, CosmosMsg, Decimal, MessageInfo, QuerierWrapper, StdError, StdResult,
-    Uint128, WasmMsg,
+    to_binary, Addr, Api, Coin, CosmosMsg, Decimal, MessageInfo, QuerierWrapper, StdError,
+    StdResult, Uint128, WasmMsg,
 };
 
 pub use cw_asset::{Asset, AssetInfo};
@@ -56,6 +56,7 @@ pub trait PrismSwapAssetInfo {
     fn query_pool(&self, querier: &QuerierWrapper, pool_addr: &Addr) -> StdResult<Uint128>;
     fn as_bytes(&self) -> &[u8];
     fn to_string_legacy(&self) -> String;
+    fn check(&self, api: &dyn Api) -> StdResult<()>;
 }
 
 impl PrismSwapAssetInfo for AssetInfo {
@@ -103,6 +104,13 @@ impl PrismSwapAssetInfo for AssetInfo {
             AssetInfo::Cw20(contract_addr) => contract_addr.to_string(),
             AssetInfo::Native(denom) => denom.to_string(),
         }
+    }
+
+    fn check(&self, api: &dyn Api) -> StdResult<()> {
+        if let AssetInfo::Cw20(addr) = self {
+            api.addr_validate(addr.as_str())?;
+        }
+        Ok(())
     }
 }
 

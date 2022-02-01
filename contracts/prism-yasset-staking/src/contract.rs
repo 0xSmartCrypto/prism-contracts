@@ -22,6 +22,7 @@ use crate::swaps::{deposit_minted_pyluna_hook, luna_to_pyluna_hook, process_dele
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
 use cw_asset::AssetInfo;
+use prismswap::asset::PrismSwapAssetInfo;
 use terra_cosmwasm::TerraMsgWrapper;
 
 const CONTRACT_NAME: &str = "prism-yasset-staking";
@@ -73,12 +74,21 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
         ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, info),
-        ExecuteMsg::DepositRewards { assets } => deposit_rewards(deps, env, info, assets),
+        ExecuteMsg::DepositRewards { assets } => {
+            for asset in &assets {
+                asset.info.check(deps.api)?;
+            }
+            deposit_rewards(deps, env, info, assets)
+        }
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
         ExecuteMsg::DepositMintedPylunaHook {} => deposit_minted_pyluna_hook(deps, env),
-        ExecuteMsg::WhitelistRewardAsset { asset } => whitelist_reward_asset(deps, info, asset),
+        ExecuteMsg::WhitelistRewardAsset { asset } => {
+            asset.check(deps.api)?;
+            whitelist_reward_asset(deps, info, asset)
+        }
         ExecuteMsg::RemoveRewardAsset { asset } => {
+            asset.check(deps.api)?;
             remove_whitelisted_reward_asset(deps, info, asset)
         }
     }

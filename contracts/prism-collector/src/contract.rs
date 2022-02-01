@@ -11,7 +11,7 @@ use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, Quer
 
 use cw2::set_contract_version;
 use cw_asset::{Asset, AssetInfo};
-use prismswap::asset::PrismSwapAsset;
+use prismswap::asset::{PrismSwapAsset, PrismSwapAssetInfo};
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 use prismswap::querier::query_pair_info;
 
@@ -44,9 +44,17 @@ pub fn instantiate(
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         ExecuteMsg::ConvertAndSend { assets, receiver } => {
+            for asset in &assets {
+                asset.info.check(deps.api)?;
+            }
             convert_and_send(deps, env, info, assets, receiver)
         }
-        ExecuteMsg::Distribute { asset_infos } => distribute(deps, env, asset_infos),
+        ExecuteMsg::Distribute { asset_infos } => {
+            for asset_info in &asset_infos {
+                asset_info.check(deps.api)?;
+            }
+            distribute(deps, env, asset_infos)
+        }
         ExecuteMsg::BaseSwapHook { receiver } => base_swap_hook(deps, env, info, receiver),
     }
 }
