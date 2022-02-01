@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Cw20HookMsg",
-  "anyOf": [
+  "oneOf": [
     {
       "description": "Bond yLuna to start receiving luna staking rewards",
       "type": "object",
