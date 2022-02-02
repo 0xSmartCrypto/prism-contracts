@@ -106,8 +106,7 @@ pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<AssetInfo>) -> StdRe
 
     let mut assets: Vec<Asset> = vec![];
 
-    // convert prismswap::AssetInfo to cw_asset::AssetInfo and then
-    // create a cw_asset::Asset using the current balance for that asset
+    // create asset objects for each assets_info using our current balance
     for asset_info in &asset_infos {
         let asset_balance =
             asset_info.query_balance(&deps.querier, env.contract.address.clone())?;
@@ -152,7 +151,7 @@ pub fn base_swap_hook(
         return Ok(Response::new());
     }
 
-    // create cw_asset::Asset containing base denom (uusd) and current balance
+    // create a base asset (uusd) object using our current balance
     let base_asset = Asset {
         info: base_asset_info.clone(),
         amount: balance,
