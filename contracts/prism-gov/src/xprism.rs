@@ -28,10 +28,10 @@ pub fn mint_xprism(
 
     let (pending_xprism, pending_prism) = TOTAL_PENDING_WITHDRAW.load(deps.storage)?;
 
-    let prism_amt = query_token_balance(&deps.querier, prism_token, env.contract.address)?
+    let prism_amt = query_token_balance(&deps.querier, &prism_token, &env.contract.address)?
         - amount
         - pending_prism;
-    let xprism_amt = query_supply(&deps.querier, xprism_token.clone())? - pending_xprism;
+    let xprism_amt = query_supply(&deps.querier, &xprism_token)? - pending_xprism;
 
     let xprism_to_mint = if prism_amt.is_zero() {
         amount
@@ -67,8 +67,8 @@ pub fn redeem_xprism(
     let (pending_xprism, pending_prism) = TOTAL_PENDING_WITHDRAW.load(deps.storage)?;
 
     let prism_amt =
-        query_token_balance(&deps.querier, prism_token, env.contract.address)? - pending_prism;
-    let xprism_amt = query_supply(&deps.querier, xprism_token)? - pending_xprism;
+        query_token_balance(&deps.querier, &prism_token, &env.contract.address)? - pending_prism;
+    let xprism_amt = query_supply(&deps.querier, &xprism_token)? - pending_xprism;
 
     let prism_to_return = amount.multiply_ratio(prism_amt, xprism_amt);
 

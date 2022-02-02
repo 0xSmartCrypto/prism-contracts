@@ -22,13 +22,13 @@ use crate::bond::{execute_bond, execute_bond_split};
 use crate::refract::{merge, split};
 use cw0::must_pay;
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, TokenInfoResponse};
+use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::{
     AllHistoryResponse, Config, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
     InstantiateMsg, QueryMsg, State, StateResponse, UnbondRequestsResponse,
     WhitelistedValidatorsResponse, WithdrawableUnbondedResponse,
 };
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
-use prismswap::asset::{Asset, AssetInfo};
 use prismswap::querier::query_token_balance;
 
 const CONTRACT_NAME: &str = "prism-vault";
@@ -358,24 +358,18 @@ pub fn deposit_airdrop_rewards(
     let yluna_staking_addr = conf
         .yluna_staking
         .expect("the reward contract must have been registered");
-    let astrport_token_addr = deps.api.addr_validate(&airdrop_token_contract)?;
+    let airdrop_token_addr = deps.api.addr_validate(&airdrop_token_contract)?;
 
-    let amount = query_token_balance(
-        &deps.querier,
-        astrport_token_addr.clone(),
-        env.contract.address,
-    )?;
+    let amount = query_token_balance(&deps.querier, &airdrop_token_addr, &env.contract.address)?;
 
     let airdrop_reward = Asset {
-        info: AssetInfo::Token {
-            contract_addr: astrport_token_addr.clone(),
-        },
+        info: AssetInfo::Cw20(airdrop_token_addr.clone()),
         amount,
     };
 
     Ok(Response::new().add_messages(vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: astrport_token_addr.to_string(),
+            contract_addr: airdrop_token_addr.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
                 spender: yluna_staking_addr.clone(),
                 amount,

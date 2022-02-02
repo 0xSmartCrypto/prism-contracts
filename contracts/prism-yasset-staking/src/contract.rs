@@ -21,7 +21,8 @@ use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASS
 use crate::swaps::{deposit_minted_pyluna_hook, luna_to_pyluna_hook, process_delegator_rewards};
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
-use prismswap::asset::AssetInfo;
+use cw_asset::AssetInfo;
+use prismswap::asset::PrismSwapAssetInfo;
 use terra_cosmwasm::TerraMsgWrapper;
 
 const CONTRACT_NAME: &str = "prism-yasset-staking";
@@ -55,12 +56,8 @@ pub fn instantiate(
     WHITELISTED_ASSETS.save(
         deps.storage,
         &vec![
-            AssetInfo::Token {
-                contract_addr: deps.api.addr_validate(&msg.pluna_token)?,
-            },
-            AssetInfo::Token {
-                contract_addr: deps.api.addr_validate(&msg.yluna_token)?,
-            },
+            AssetInfo::Cw20(deps.api.addr_validate(&msg.pluna_token)?),
+            AssetInfo::Cw20(deps.api.addr_validate(&msg.yluna_token)?),
         ],
     )?;
     Ok(Response::default())
@@ -77,12 +74,21 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
         ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, info),
-        ExecuteMsg::DepositRewards { assets } => deposit_rewards(deps, env, info, assets),
+        ExecuteMsg::DepositRewards { assets } => {
+            for asset in &assets {
+                asset.info.check(deps.api)?;
+            }
+            deposit_rewards(deps, env, info, assets)
+        }
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
         ExecuteMsg::DepositMintedPylunaHook {} => deposit_minted_pyluna_hook(deps, env),
-        ExecuteMsg::WhitelistRewardAsset { asset } => whitelist_reward_asset(deps, info, asset),
+        ExecuteMsg::WhitelistRewardAsset { asset } => {
+            asset.check(deps.api)?;
+            whitelist_reward_asset(deps, info, asset)
+        }
         ExecuteMsg::RemoveRewardAsset { asset } => {
+            asset.check(deps.api)?;
             remove_whitelisted_reward_asset(deps, info, asset)
         }
     }

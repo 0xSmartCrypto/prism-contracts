@@ -401,11 +401,8 @@ pub fn auto_stake_hook(
     staking_token: Addr,
     sender_addr: Addr,
 ) -> Result<Response, ContractError> {
-    let staking_token_balance: Uint128 = query_token_balance(
-        &deps.querier,
-        staking_token.clone(),
-        env.contract.address.clone(),
-    )?;
+    let staking_token_balance: Uint128 =
+        query_token_balance(&deps.querier, &staking_token, &env.contract.address)?;
 
     let pool_info: PoolInfo = POOLS
         .load(deps.storage, &staking_token)
