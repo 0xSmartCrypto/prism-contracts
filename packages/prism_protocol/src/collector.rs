@@ -1,3 +1,4 @@
+use cosmwasm_std::Addr;
 use cw_asset::{Asset, AssetInfo};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -26,7 +27,8 @@ pub enum ExecuteMsg {
     },
     /// Hook to swap base_denom for $PRISM,
     /// Called when there is not direct pair with requested asset_token
-    BaseSwapHook { receiver: Option<String> },
+    /// Permissioned for internal calls only
+    BaseSwapHook { receiver: Addr },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

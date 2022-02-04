@@ -55,7 +55,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             }
             distribute(deps, env, asset_infos)
         }
-        ExecuteMsg::BaseSwapHook { receiver } => base_swap_hook(deps, env, info, receiver),
+        ExecuteMsg::BaseSwapHook { receiver } => base_swap_hook(deps, env, info, &receiver),
     }
 }
 
@@ -106,8 +106,7 @@ pub fn distribute(deps: DepsMut, env: Env, asset_infos: Vec<AssetInfo>) -> StdRe
 
     let mut assets: Vec<Asset> = vec![];
 
-    // convert prismswap::AssetInfo to cw_asset::AssetInfo and then
-    // create a cw_asset::Asset using the current balance for that asset
+    // create asset objects for each assets_info using our current balance
     for asset_info in &asset_infos {
         let asset_balance =
             asset_info.query_balance(&deps.querier, env.contract.address.clone())?;
@@ -136,7 +135,7 @@ pub fn base_swap_hook(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    receiver: Option<String>,
+    receiver: &Addr,
 ) -> StdResult<Response> {
     let config: Config = CONFIG.load(deps.storage)?;
 
@@ -152,7 +151,7 @@ pub fn base_swap_hook(
         return Ok(Response::new());
     }
 
-    // create cw_asset::Asset containing base denom (uusd) and current balance
+    // create a base asset (uusd) object using our current balance
     let base_asset = Asset {
         info: base_asset_info.clone(),
         amount: balance,
@@ -162,14 +161,8 @@ pub fn base_swap_hook(
     let prism_pair_addr = query_prismswap_prism_pair(&deps, &config, &base_asset_info)
         .ok_or_else(|| StdError::generic_err(format!("Missing route for {}", base_asset.info)))?;
 
-    // validate receiver addr, or set it to the distribution contract if unset
-    let receiver = match receiver {
-        Some(addr_str) => deps.api.addr_validate(&addr_str)?,
-        None => config.distribution_contract,
-    };
-
     // perform the final swap from uusd -> prism
-    let swap_msg = get_swap_msg(&prism_pair_addr, &base_asset, &receiver)?;
+    let swap_msg = get_swap_msg(&prism_pair_addr, &base_asset, receiver)?;
 
     Ok(Response::new()
         .add_message(swap_msg)
@@ -280,7 +273,7 @@ pub fn get_prism_conversion_msgs(
         messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.to_string(),
             msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                receiver: Some(receiver.to_string()),
+                receiver: receiver.clone(),
             })?,
             funds: vec![],
         }))

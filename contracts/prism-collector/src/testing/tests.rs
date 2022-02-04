@@ -144,7 +144,7 @@ fn test_convert_and_send() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("user0000".to_string()),
+                    receiver: Addr::unchecked("user0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -233,7 +233,7 @@ fn test_convert_and_send_native() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("user0000".to_string()),
+                    receiver: Addr::unchecked("user0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -268,7 +268,7 @@ fn test_convert_and_send_native() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some(info.sender.to_string()),
+                    receiver: info.sender,
                 })
                 .unwrap(),
                 funds: vec![],
@@ -432,7 +432,7 @@ fn test_convert_and_send_cw20() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("user0000".to_string()),
+                    receiver: Addr::unchecked("user0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -479,7 +479,7 @@ fn test_convert_and_send_cw20() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some(info.sender.to_string()),
+                    receiver: info.sender,
                 })
                 .unwrap(),
                 funds: vec![],
@@ -757,7 +757,7 @@ fn test_convert_and_send_astroport() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("user0000".to_string()),
+                    receiver: Addr::unchecked("user0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -823,7 +823,7 @@ fn test_distribute() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("gov0000".to_string())
+                    receiver: Addr::unchecked("gov0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -877,7 +877,7 @@ fn test_distribute() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("gov0000".to_string())
+                    receiver: Addr::unchecked("gov0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -945,7 +945,7 @@ fn test_distribute_native() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("gov0000".to_string())
+                    receiver: Addr::unchecked("gov0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -1047,7 +1047,7 @@ fn test_distribute_cw20() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("gov0000".to_string())
+                    receiver: Addr::unchecked("gov0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -1293,7 +1293,7 @@ fn test_distribute_astroport() {
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::BaseSwapHook {
-                    receiver: Some("gov0000".to_string())
+                    receiver: Addr::unchecked("gov0000"),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -1308,7 +1308,9 @@ fn test_base_swap_hook() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
 
-    let msg = ExecuteMsg::BaseSwapHook { receiver: None };
+    let msg = ExecuteMsg::BaseSwapHook {
+        receiver: Addr::unchecked("gov0000"),
+    };
 
     // unauthorized attempt
     let info = mock_info("addr0000", &[]);
@@ -1366,7 +1368,7 @@ fn test_base_swap_hook() {
     );
 
     // success with a receiver specified
-    let receiver = Some("addr0001".to_string());
+    let receiver = Addr::unchecked("addr0001");
     let msg = ExecuteMsg::BaseSwapHook {
         receiver: receiver.clone(),
     };
@@ -1384,7 +1386,7 @@ fn test_base_swap_hook() {
                 },
                 max_spread: None,
                 belief_price: None,
-                to: receiver,
+                to: Some(receiver.to_string()),
             })
             .unwrap(),
             funds: vec![Coin {
