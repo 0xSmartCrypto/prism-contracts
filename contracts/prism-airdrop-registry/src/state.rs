@@ -1,10 +1,10 @@
+use prism_common::de::deserialize_key;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Addr, Order, StdResult, Storage};
 use cw_storage_plus::{Bound, Item, Map};
 use prism_protocol::airdrop_registry::{AirdropInfo, AirdropInfoElem};
-use prism_protocol::de::deserialize_key;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {

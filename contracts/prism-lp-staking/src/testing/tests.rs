@@ -10,7 +10,7 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier, MOCK_CONTRACT_ADDR};
 use prism_protocol::lp_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardInfoResponseItem, StakerInfoResponse, StakersInfoResponse,
+    RewardInfoResponseItem, StakerInfoResponse, StakersInfoResponse, UnbondOrdersResponse,
 };
 
 // helper to successfully init with reasonable defaults
@@ -119,7 +119,7 @@ fn proper_initialization() {
             last_distributed: default_genesis_seconds,
             total_bond_amount: Uint128::zero(),
             reward_index: Decimal::zero(),
-            lock_period: 100u64,
+            unbond_period: 100u64,
         }
     );
     let res = query(
@@ -140,7 +140,7 @@ fn proper_initialization() {
             last_distributed: default_genesis_seconds,
             total_bond_amount: Uint128::zero(),
             reward_index: Decimal::zero(),
-            lock_period: 100u64,
+            unbond_period: 100u64,
         }
     );
 }
@@ -229,7 +229,7 @@ fn test_bond_tokens() {
             total_bond_amount: Uint128::from(100u128),
             reward_index: Decimal::zero(),
             last_distributed: default_genesis_seconds,
-            lock_period: 100u64,
+            unbond_period: 100u64,
         }
     );
 
@@ -286,7 +286,7 @@ fn test_bond_tokens() {
             total_bond_amount: Uint128::from(200u128),
             reward_index: Decimal::from_ratio(33333u128, 100u128),
             last_distributed: default_genesis_seconds + 10,
-            lock_period: 100u64,
+            unbond_period: 100u64,
         }
     );
 
@@ -361,7 +361,7 @@ fn test_auto_stake_hook() {
             total_bond_amount: Uint128::from(100u128),
             reward_index: Decimal::zero(),
             last_distributed: default_genesis_seconds,
-            lock_period: 100u64,
+            unbond_period: 100u64,
         }
     );
 
@@ -369,6 +369,14 @@ fn test_auto_stake_hook() {
         &"lp00001".to_string(),
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(250u128))],
     )]); // 100 bonded + new 150
+
+    // auto stake hook - invalid staking token
+    let msg = ExecuteMsg::AutoStakeHook {
+        staking_token: "lp00003".to_string(),
+    };
+    let info = mock_info("addr0001", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidStakingToken {});
 
     // now bond with auto stake book
     let msg = ExecuteMsg::AutoStakeHook {
@@ -430,7 +438,7 @@ fn test_auto_stake_hook() {
             total_bond_amount: Uint128::from(250u128),
             reward_index: Decimal::zero(),
             last_distributed: default_genesis_seconds,
-            lock_period: 100u64,
+            unbond_period: 100u64,
         }
     );
 }
@@ -449,25 +457,121 @@ fn test_unbond() {
     let info = mock_info("lp00001", &[]);
     execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    // unbond 50 tokens; failed because they are locked for 100 seconds
+    // unbond 50 tokens; an order is created
     let msg = ExecuteMsg::Unbond {
         staking_token: "lp00001".to_string(),
         amount: Some(Uint128::from(50u128)),
     };
 
     let info = mock_info("addr0000", &[]);
-    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
-    assert_eq!(err, ContractError::NothingAvailableToUnbond {});
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    assert_eq!(res.messages.len(), 0);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "unbond"),
+            attr("staking_token", "lp00001"),
+            attr("staker", "addr0000"),
+            attr("amount", "50"),
+            attr("unbond_order_created", "true"),
+            attr(
+                "expected_expire_time",
+                mock_env()
+                    .block
+                    .time
+                    .plus_seconds(100)
+                    .seconds()
+                    .to_string()
+            ),
+        ]
+    );
+
+    // bond amount should decrease
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: Some("lp00001".to_string()),
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::zero(),
+                bond_amount: Uint128::from(50u128),
+                withdrawable_amount: Uint128::zero(),
+            }]
+        }
+    );
+
+    // query unbond orders
+    assert_eq!(
+        from_binary::<UnbondOrdersResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::UnbondOrders {
+                    staker: "addr0000".to_string(),
+                    staking_token: "lp00001".to_string(),
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        UnbondOrdersResponse {
+            withdrawable_amount: Uint128::zero(),
+            orders: vec![(
+                mock_env().block.time.plus_seconds(100).seconds(),
+                Uint128::from(50u128)
+            )]
+        }
+    );
+
+    // try to claim unbonded right after, should fail
+    let msg = ExecuteMsg::ClaimUnbonded {
+        staking_token: "lp00001".to_string(),
+    };
+
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(err, ContractError::NothingAvailableToWithdraw {});
 
     // wait 101 seconds
     let mut env = mock_env();
     env.block.time = env.block.time.plus_seconds(101);
 
-    // normal unbond, tokens are unlocked
-    let msg = ExecuteMsg::Unbond {
-        staking_token: "lp00001".to_string(),
-        amount: Some(Uint128::from(60u128)),
-    };
+    // query unbond orders
+    assert_eq!(
+        from_binary::<UnbondOrdersResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::UnbondOrders {
+                    staker: "addr0000".to_string(),
+                    staking_token: "lp00001".to_string(),
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        UnbondOrdersResponse {
+            withdrawable_amount: Uint128::from(50u64), // now its withdrawable
+            orders: vec![(
+                mock_env().block.time.plus_seconds(100).seconds(),
+                Uint128::from(50u128)
+            )]
+        }
+    );
 
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
     assert_eq!(
@@ -476,20 +580,42 @@ fn test_unbond() {
             contract_addr: "lp00001".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "addr0000".to_string(),
-                amount: Uint128::from(60u128),
+                amount: Uint128::from(50u128),
             })
             .unwrap(),
             funds: vec![],
         }))]
     );
 
+    // now there should be no orders
+    assert_eq!(
+        from_binary::<UnbondOrdersResponse>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::UnbondOrders {
+                    staker: "addr0000".to_string(),
+                    staking_token: "lp00001".to_string(),
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        UnbondOrdersResponse {
+            withdrawable_amount: Uint128::zero(),
+            orders: vec![]
+        }
+    );
+
     // try to unbond too much
     let msg = ExecuteMsg::Unbond {
         staking_token: "lp00001".to_string(),
-        amount: Some(Uint128::from(150u128)),
+        amount: Some(Uint128::from(70u128)),
     };
 
-    let err = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
     assert_eq!(err, ContractError::InvalidUnbondAmount {});
 
     // unbond remaining
@@ -497,19 +623,31 @@ fn test_unbond() {
         staking_token: "lp00001".to_string(),
         amount: None,
     };
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    // another withdraw order is created
     assert_eq!(
-        res.messages,
-        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: "lp00001".to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: "addr0000".to_string(),
-                amount: Uint128::from(40u128),
-            })
-            .unwrap(),
-            funds: vec![],
-        }))]
+        from_binary::<UnbondOrdersResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::UnbondOrders {
+                    staker: "addr0000".to_string(),
+                    staking_token: "lp00001".to_string(),
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        UnbondOrdersResponse {
+            withdrawable_amount: Uint128::zero(),
+            orders: vec![(
+                mock_env().block.time.plus_seconds(100).seconds(),
+                Uint128::from(50u128)
+            )]
+        }
     );
 }
 
@@ -553,61 +691,41 @@ fn test_unbond_2() {
     let info = mock_info("lp00001", &[]);
     execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    // wait 10 seconds and bond 200
-    env.block.time = env.block.time.plus_seconds(10);
-
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: "addr0000".to_string(),
-        amount: Uint128::from(200u128),
-        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
-    });
-    let info = mock_info("lp00001", &[]);
-    execute(deps.as_mut(), env.clone(), info, msg).unwrap();
-
-    // wait 10 seconds, nothing unlocked
-    env.block.time = env.block.time.plus_seconds(10);
-
-    // unbond tokens; failed because they are locked for 100 seconds
+    // unbond 10
     let msg = ExecuteMsg::Unbond {
         staking_token: "lp00001".to_string(),
-        amount: None,
+        amount: Some(Uint128::from(10u128)),
+    };
+    let info = mock_info("addr0000", &[]);
+    execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    // wait 10 seconds and unbond 20
+    env.block.time = env.block.time.plus_seconds(10);
+
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(20u128)),
+    };
+    execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // wait 10 seconds, nothing withdrawable
+    env.block.time = env.block.time.plus_seconds(10);
+
+    // claim unbonded tokens; failed because they are locked for 100 seconds
+    let msg = ExecuteMsg::ClaimUnbonded {
+        staking_token: "lp00001".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
-    assert_eq!(err, ContractError::NothingAvailableToUnbond {});
+    assert_eq!(err, ContractError::NothingAvailableToWithdraw {});
 
-    // wait 81 seconds, 100 unlocks
+    // wait 81 seconds, 10 unlocks
     env.block.time = env.block.time.plus_seconds(81);
 
-    assert_eq!(
-        from_binary::<StakerInfoResponse>(
-            &query(
-                deps.as_ref(),
-                env.clone(),
-                QueryMsg::StakerInfo {
-                    staker: "addr0000".to_string(),
-                    staking_token: None,
-                },
-            )
-            .unwrap()
-        )
-        .unwrap(),
-        StakerInfoResponse {
-            staker: "addr0000".to_string(),
-            reward_infos: vec![RewardInfoResponseItem {
-                staking_token: "lp00001".to_string(),
-                pending_reward: Uint128::from(112221u128), // (1000000 * 10 / (20 + 10)) * 101 / 300
-                bond_amount: Uint128::from(300u128),
-                withdrawable_amount: Uint128::from(100u128),
-            }]
-        }
-    );
-
-    // normal unbond, tokens are unlocked
-    let msg = ExecuteMsg::Unbond {
+    // normal claim unbond, tokens are unlocked
+    let msg = ExecuteMsg::ClaimUnbonded {
         staking_token: "lp00001".to_string(),
-        amount: None,
     };
 
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
@@ -617,39 +735,15 @@ fn test_unbond_2() {
             contract_addr: "lp00001".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "addr0000".to_string(),
-                amount: Uint128::from(100u128),
+                amount: Uint128::from(10u128),
             })
             .unwrap(),
             funds: vec![],
         }))]
     );
 
-    // wait 10 seconds, 200 unlocks
+    // wait 10 seconds, 20 unlocks
     env.block.time = env.block.time.plus_seconds(10);
-
-    assert_eq!(
-        from_binary::<StakerInfoResponse>(
-            &query(
-                deps.as_ref(),
-                env.clone(),
-                QueryMsg::StakerInfo {
-                    staker: "addr0000".to_string(),
-                    staking_token: Some("lp00001".to_string()),
-                },
-            )
-            .unwrap()
-        )
-        .unwrap(),
-        StakerInfoResponse {
-            staker: "addr0000".to_string(),
-            reward_infos: vec![RewardInfoResponseItem {
-                staking_token: "lp00001".to_string(),
-                pending_reward: Uint128::from(123332u128), // (1000000 * 10 / (20 + 10)) * 111 / 300
-                bond_amount: Uint128::from(200u128),
-                withdrawable_amount: Uint128::from(200u128),
-            }]
-        }
-    );
 
     let res = execute(deps.as_mut(), env, info, msg).unwrap();
     assert_eq!(
@@ -658,7 +752,7 @@ fn test_unbond_2() {
             contract_addr: "lp00001".to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: "addr0000".to_string(),
-                amount: Uint128::from(200u128),
+                amount: Uint128::from(20u128),
             })
             .unwrap(),
             funds: vec![],
@@ -1120,7 +1214,7 @@ fn test_overlapping_distribution_schedule() {
                 staking_token: "lp00001".to_string(),
                 pending_reward: Uint128::from(1416665u128),
                 bond_amount: Uint128::from(100u128),
-                withdrawable_amount: Uint128::from(100u128),
+                withdrawable_amount: Uint128::zero(),
             }]
         }
     );
@@ -1133,7 +1227,7 @@ fn test_register_staking_token() {
 
     let msg = ExecuteMsg::RegisterStakingToken {
         staking_token: "lp00003".to_string(),
-        lock_period: 100u64,
+        unbond_period: 100u64,
         weight: 30u64,
     };
 
@@ -1146,7 +1240,7 @@ fn test_register_staking_token() {
     let info = mock_info("owner0000", &[]);
     let invalid_msg = ExecuteMsg::RegisterStakingToken {
         staking_token: "lp00001".to_string(),
-        lock_period: 100u64,
+        unbond_period: 100u64,
         weight: 30u64,
     };
     let err = execute(deps.as_mut(), mock_env(), info, invalid_msg).unwrap_err();
@@ -1196,7 +1290,7 @@ fn test_register_staking_token() {
             total_bond_amount: Uint128::zero(),
             reward_index: Decimal::zero(),
             pending_reward: Uint128::zero(),
-            lock_period: 100u64,
+            unbond_period: 100u64,
         }
     );
 }
@@ -1220,7 +1314,7 @@ fn test_register_staking_token_with_bonding() {
     env.block.time = env.block.time.plus_seconds(50);
     let msg = ExecuteMsg::RegisterStakingToken {
         staking_token: "lp00003".to_string(),
-        lock_period: 100u64,
+        unbond_period: 100u64,
         weight: 30u64,
     };
     let info = mock_info("owner0000", &[]);
@@ -1268,7 +1362,7 @@ fn test_update_staking_token() {
 
     let msg = ExecuteMsg::UpdateStakingToken {
         staking_token: "lp00001".to_string(),
-        lock_period: Some(101u64),
+        unbond_period: Some(101u64),
         weight: Some(20u64),
     };
 
@@ -1281,8 +1375,18 @@ fn test_update_staking_token() {
     let info = mock_info("owner0000", &[]);
     let invalid_msg = ExecuteMsg::UpdateStakingToken {
         staking_token: "lp00003".to_string(),
-        lock_period: Some(101u64),
+        unbond_period: Some(101u64),
         weight: Some(20u64),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, invalid_msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidStakingToken {});
+
+    // invalid staking token with no weight (different path)
+    let info = mock_info("owner0000", &[]);
+    let invalid_msg = ExecuteMsg::UpdateStakingToken {
+        staking_token: "lp00003".to_string(),
+        unbond_period: Some(101u64),
+        weight: None,
     };
     let err = execute(deps.as_mut(), mock_env(), info, invalid_msg).unwrap_err();
     assert_eq!(err, ContractError::InvalidStakingToken {});
@@ -1313,7 +1417,7 @@ fn test_update_staking_token() {
             total_bond_amount: Uint128::zero(),
             reward_index: Decimal::zero(),
             pending_reward: Uint128::zero(),
-            lock_period: 101u64,
+            unbond_period: 101u64,
         }
     );
 }
@@ -1337,7 +1441,7 @@ fn test_update_staking_token_with_bonding_increase_weight() {
     env.block.time = env.block.time.plus_seconds(50);
     let msg = ExecuteMsg::UpdateStakingToken {
         staking_token: "lp00001".to_string(),
-        lock_period: Some(100u64),
+        unbond_period: Some(100u64),
         weight: Some(20u64),
     };
     let info = mock_info("owner0000", &[]);
@@ -1397,7 +1501,7 @@ fn test_update_staking_token_with_bonding_decrease_weight() {
     env.block.time = env.block.time.plus_seconds(50);
     let msg = ExecuteMsg::UpdateStakingToken {
         staking_token: "lp00001".to_string(),
-        lock_period: Some(100u64),
+        unbond_period: Some(100u64),
         weight: Some(5u64),
     };
     let info = mock_info("owner0000", &[]);
@@ -1509,11 +1613,11 @@ fn test_unbond_3() {
         }
     );
 
-    // increment time by 100 secs and unbond
+    // valid unbond. Since there is no unbond period, the tokens are sent directly
     let info = mock_info("addr0000", &[]);
     let mut env = mock_env();
-    env.block.time = env.block.time.plus_seconds(100);
-    // normal unbond
+    env.block.time = env.block.time.plus_seconds(100); // accrue some rewards
+                                                       // normal unbond
     let msg = ExecuteMsg::Unbond {
         staking_token: "lp00001".to_string(),
         amount: Some(Uint128::from(100u128)),
@@ -1595,4 +1699,566 @@ fn test_unbond_3() {
             reward_infos: vec![]
         }
     );
+}
+
+#[test]
+fn test_claim_unbonded() {
+    let mut deps = mock_dependencies(&[]);
+    let info = mock_info("addr0000", &[]);
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        distribution_schedule: default_distribution_schedule(),
+        staking_tokens: vec![
+            ("lp00001".to_string(), 10u64, 100u64),
+            ("lp00002".to_string(), 20u64, 100u64),
+        ],
+    };
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // bond 100 tokens
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "addr0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("lp00001", &[]);
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // invalid claim - invalid staking token
+    let msg = ExecuteMsg::ClaimUnbonded {
+        staking_token: "lp00003".to_string(),
+    };
+    let info = mock_info("addr0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidStakingToken {});
+
+    // invalid claim - nothing staked
+    let msg = ExecuteMsg::ClaimUnbonded {
+        staking_token: "lp00002".to_string(),
+    };
+    let info = mock_info("addr0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::NothingStaked {});
+
+    // check staker info
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::from(0u128),
+                bond_amount: Uint128::from(100u128),
+                withdrawable_amount: Uint128::zero(),
+            }]
+        }
+    );
+
+    // valid unbond at T=0
+    let info = mock_info("addr0000", &[]);
+    let mut env = mock_env();
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(100u128)),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    assert_eq!(res.messages.len(), 0);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "unbond"),
+            attr("staking_token", "lp00001"),
+            attr("staker", "addr0000"),
+            attr("amount", "100"),
+            attr("unbond_order_created", "true"),
+            attr(
+                "expected_expire_time",
+                mock_env()
+                    .block
+                    .time
+                    .plus_seconds(100)
+                    .seconds()
+                    .to_string()
+            ),
+        ]
+    );
+
+    // failure - unbond again, nothing available
+    let info = mock_info("addr0000", &[]);
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(100u128)),
+    };
+    let err = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap_err();
+    assert_eq!(err, ContractError::NothingAvailableToUnbond {});
+
+    // claim unbonded at T=101
+    env.block.time = env.block.time.plus_seconds(101);
+    let msg = ExecuteMsg::ClaimUnbonded {
+        staking_token: "lp00001".to_string(),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "lp00001".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(100u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
+    );
+
+    // verify rewards empty
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![]
+        }
+    );
+}
+
+#[test]
+fn test_claim_unbonded_2() {
+    let mut deps = mock_dependencies(&[]);
+    let info = mock_info("addr0000", &[]);
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        distribution_schedule: default_distribution_schedule(),
+        staking_tokens: vec![
+            ("lp00001".to_string(), 10u64, 0u64),
+            ("lp00002".to_string(), 20u64, 0u64),
+        ],
+    };
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // bond 100 tokens
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "addr0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("lp00001", &[]);
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // check staker info
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::from(0u128),
+                bond_amount: Uint128::from(100u128),
+                withdrawable_amount: Uint128::zero(),
+            }]
+        }
+    );
+
+    // valid unbond at T=0
+    let info = mock_info("addr0000", &[]);
+    let env = mock_env();
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(100u128)),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "lp00001".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(100u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
+
+    // failure - unbond again, nothing staked
+    let info = mock_info("addr0000", &[]);
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(100u128)),
+    };
+    let err = execute(deps.as_mut(), env.clone(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::NothingStaked {});
+
+    // verify rewards empty
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![]
+        }
+    );
+}
+
+#[test]
+fn test_max_withdraws_per_tx() {
+    let mut deps = mock_dependencies(&[]);
+    let info = mock_info("addr0000", &[]);
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        distribution_schedule: default_distribution_schedule(),
+        staking_tokens: vec![
+            ("lp00001".to_string(), 10u64, 100000u64),
+            ("lp00002".to_string(), 20u64, 100000u64),
+        ],
+    };
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // bond 100 tokens, 75 times, at 100 second intervals (total of 7500)
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "addr0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("lp00001", &[]);
+    let mut env = mock_env();
+    for _ in 0..75 {
+        execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+        env.block.time = env.block.time.plus_seconds(100);
+    }
+
+    // check staker info, we have 10K bonded amount and 3.66M in rewards
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::from(3666666u128), // 1M / 3 + 10M / 3
+                bond_amount: Uint128::from(7500u128),
+                withdrawable_amount: Uint128::zero(),
+            }]
+        }
+    );
+
+    // unbond 100 tokens, 75 times, at 100 second intervals
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(100u128)),
+    };
+    let info = mock_info("addr0000", &[]);
+    for _ in 0..75 {
+        execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+        env.block.time = env.block.time.plus_seconds(100);
+    }
+
+    // check staker info, we have 0 bonded amount and 3.66M in rewards
+    let staker_response = from_binary::<StakerInfoResponse>(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::StakerInfo {
+                staker: "addr0000".to_string(),
+                staking_token: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        staker_response,
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::from(3666666u128),
+                bond_amount: Uint128::zero(),
+                withdrawable_amount: Uint128::zero(),
+            }]
+        }
+    );
+
+    // query our unbonded orders, we have a total of 75, but limited to
+    // 30 entries by default
+    let unbonded = from_binary::<UnbondOrdersResponse>(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::UnbondOrders {
+                staker: "addr0000".to_string(),
+                staking_token: "lp00001".to_string(),
+                start_after: None,
+                limit: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(unbonded.orders.len(), 30);
+
+    // claim all of our rewards
+    let msg = ExecuteMsg::ClaimRewards {
+        staking_token: Some("lp00001".to_string()),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "prism0000".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(3666666u128), // 1,000,000 * 10 / (10 + 20)
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
+
+    // verify pending rewards gone, bond amount is zero, withdrawable amount is zero
+    let staker_response = from_binary::<StakerInfoResponse>(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::StakerInfo {
+                staker: "addr0000".to_string(),
+                staking_token: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        staker_response,
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::zero(),
+                bond_amount: Uint128::zero(),
+                withdrawable_amount: Uint128::zero(),
+            }]
+        }
+    );
+
+    // fast forward until everything is available to be unbonded
+    env.block.time = env.block.time.plus_seconds(200000);
+
+    // withdrawable amount only shows 5000, should be 7500, but we're limited
+    // by MAX_ORDER_WITHDRAW_PER_TX
+    let staker_response = from_binary::<StakerInfoResponse>(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::StakerInfo {
+                staker: "addr0000".to_string(),
+                staking_token: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        staker_response,
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::zero(),
+                bond_amount: Uint128::zero(),
+                withdrawable_amount: Uint128::from(5000u128),
+            }]
+        }
+    );
+
+    // first claim unbonded - this will only claim 50/75 orders
+    let msg = ExecuteMsg::ClaimUnbonded {
+        staking_token: "lp00001".to_string(),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "lp00001".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(5000u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "claim_unbonded"),
+            attr("staking_token", "lp00001"),
+            attr("staker", "addr0000"),
+            attr("amount", "5000"),
+        ]
+    );
+
+    // query staker response, withdrawable amount now shows full remaining 2500
+    let staker_response = from_binary::<StakerInfoResponse>(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::StakerInfo {
+                staker: "addr0000".to_string(),
+                staking_token: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        staker_response,
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::zero(),
+                bond_amount: Uint128::zero(),
+                withdrawable_amount: Uint128::from(2500u128),
+            }]
+        }
+    );
+
+    // query our unbonded orders, we now have 25
+    let unbonded = from_binary::<UnbondOrdersResponse>(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::UnbondOrders {
+                staker: "addr0000".to_string(),
+                staking_token: "lp00001".to_string(),
+                start_after: None,
+                limit: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(unbonded.orders.len(), 25);
+
+    // second claim unbonded - this will claim all 25 orders
+    let msg = ExecuteMsg::ClaimUnbonded {
+        staking_token: "lp00001".to_string(),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "lp00001".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(2500u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "claim_unbonded"),
+            attr("staking_token", "lp00001"),
+            attr("staker", "addr0000"),
+            attr("amount", "2500"),
+        ]
+    );
+
+    // query staker info, reward infos has been removed
+    let staker_response = from_binary::<StakerInfoResponse>(
+        &query(
+            deps.as_ref(),
+            env.clone(),
+            QueryMsg::StakerInfo {
+                staker: "addr0000".to_string(),
+                staking_token: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        staker_response,
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![]
+        }
+    );
+
+    // query unbond orders, empty
+    let unbonded = from_binary::<UnbondOrdersResponse>(
+        &query(
+            deps.as_ref(),
+            env,
+            QueryMsg::UnbondOrders {
+                staker: "addr0000".to_string(),
+                staking_token: "lp00001".to_string(),
+                start_after: None,
+                limit: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(unbonded.orders.len(), 0);
 }

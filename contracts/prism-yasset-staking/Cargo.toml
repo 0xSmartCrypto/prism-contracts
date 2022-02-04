@@ -48,4 +48,4 @@ serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
-prism-common = { path = "../../packages/prism_common", default-features = false, version = "1.0.0"}
+prism-common = { path = "../../packages/prism_common", version = "1.0.0"}

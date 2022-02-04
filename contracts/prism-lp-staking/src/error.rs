@@ -18,8 +18,11 @@ pub enum ContractError {
     #[error("Cannot unbond more than bond amount")]
     InvalidUnbondAmount {},
 
-    #[error("Current withdrawable amount is zero")]
+    #[error("Current bond amount is zero")]
     NothingAvailableToUnbond {},
+
+    #[error("Current withdrawable amount is zero")]
+    NothingAvailableToWithdraw {},
 
     #[error("Invalid Cw20 msg")]
     InvalidCw20Msg {},

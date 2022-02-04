@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 pub struct InstantiateMsg {
     pub owner: String,
     pub prism_token: String,
+    /// vector of (start time, end time, reward amount)
     pub distribution_schedule: Vec<(u64, u64, Uint128)>,
+    /// vector of (staking token, weight, unbond period)
     pub staking_tokens: Vec<(String, u64, u64)>,
 }
 
@@ -23,17 +25,20 @@ pub enum ExecuteMsg {
     },
     RegisterStakingToken {
         staking_token: String,
-        lock_period: u64,
+        unbond_period: u64,
         weight: u64,
     },
     UpdateStakingToken {
         staking_token: String,
-        lock_period: Option<u64>,
+        unbond_period: Option<u64>,
         weight: Option<u64>,
     },
     Unbond {
         staking_token: String,
         amount: Option<Uint128>,
+    },
+    ClaimUnbonded {
+        staking_token: String,
     },
     ClaimRewards {
         staking_token: Option<String>,
@@ -65,6 +70,12 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+    UnbondOrders {
+        staking_token: String,
+        staker: String,
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -83,7 +94,7 @@ pub struct PoolInfoResponse {
     pub total_bond_amount: Uint128,
     pub reward_index: Decimal,
     pub pending_reward: Uint128,
-    pub lock_period: u64,
+    pub unbond_period: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -103,4 +114,11 @@ pub struct RewardInfoResponseItem {
     pub bond_amount: Uint128,
     pub pending_reward: Uint128,
     pub withdrawable_amount: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct UnbondOrdersResponse {
+    pub withdrawable_amount: Uint128,
+    /// vector of (time available for withdrawal, amount)
+    pub orders: Vec<(u64, Uint128)>,
 }

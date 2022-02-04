@@ -8,10 +8,12 @@ use cw20::Cw20ReceiveMsg;
 
 use crate::error::ContractError;
 use crate::handle::{
-    add_distribution_schedule, auto_stake_hook, bond, claim_rewards, register_staking_token,
-    unbond, update_owner, update_staking_token,
+    add_distribution_schedule, auto_stake_hook, bond, claim_rewards, claim_unbonded,
+    register_staking_token, unbond, update_owner, update_staking_token,
 };
-use crate::query::{query_config, query_pool_info, query_staker_info, query_token_stakers_info};
+use crate::query::{
+    query_config, query_pool_info, query_staker_info, query_token_stakers_info, query_unbond_orders,
+};
 use crate::state::{Config, PoolInfo, CONFIG, POOLS};
 
 use prism_protocol::lp_staking::{Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
@@ -49,14 +51,14 @@ pub fn instantiate(
         total_weight: staking_tokens.iter().map(|item| item.1).sum(),
     };
 
-    for (staking_token, weight, lock_period) in staking_tokens {
+    for (staking_token, weight, unbond_period) in staking_tokens {
         POOLS.save(
             deps.storage,
             &deps.api.addr_validate(&staking_token)?,
             &PoolInfo {
                 last_distributed: env.block.time.seconds(),
                 weight,
-                lock_period,
+                unbond_period,
                 ..PoolInfo::default()
             },
         )?;
@@ -85,21 +87,21 @@ pub fn execute(
         }
         ExecuteMsg::RegisterStakingToken {
             staking_token,
-            lock_period,
+            unbond_period,
             weight,
         } => {
             let staking_token_addr = deps.api.addr_validate(&staking_token)?;
 
-            register_staking_token(deps, env, info, staking_token_addr, lock_period, weight)
+            register_staking_token(deps, env, info, staking_token_addr, unbond_period, weight)
         }
         ExecuteMsg::UpdateStakingToken {
             staking_token,
-            lock_period,
+            unbond_period,
             weight,
         } => {
             let staking_token_addr = deps.api.addr_validate(&staking_token)?;
 
-            update_staking_token(deps, env, info, staking_token_addr, lock_period, weight)
+            update_staking_token(deps, env, info, staking_token_addr, unbond_period, weight)
         }
         ExecuteMsg::Unbond {
             staking_token,
@@ -108,6 +110,11 @@ pub fn execute(
             let staking_token_addr = deps.api.addr_validate(&staking_token)?;
 
             unbond(deps, env, info, staking_token_addr, amount)
+        }
+        ExecuteMsg::ClaimUnbonded { staking_token } => {
+            let staking_token_addr = deps.api.addr_validate(&staking_token)?;
+
+            claim_unbonded(deps, env, info, staking_token_addr)
         }
         ExecuteMsg::ClaimRewards { staking_token } => {
             let staking_token_addr: Option<Addr> =
@@ -177,6 +184,24 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
                 env,
                 staking_token_addr,
                 start_after_addr,
+                limit,
+            )?)?)
+        }
+        QueryMsg::UnbondOrders {
+            staking_token,
+            staker,
+            start_after,
+            limit,
+        } => {
+            let staking_token_addr = deps.api.addr_validate(&staking_token)?;
+            let staker_addr = deps.api.addr_validate(&staker)?;
+
+            Ok(to_binary(&query_unbond_orders(
+                deps,
+                env,
+                staking_token_addr,
+                staker_addr,
+                start_after,
                 limit,
             )?)?)
         }

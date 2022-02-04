@@ -2,18 +2,17 @@
 use cosmwasm_std::{
     attr, to_binary, Addr, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128, WasmMsg,
 };
-use cosmwasm_std::{Decimal, Order, StdResult, Storage};
+use cosmwasm_std::{Attribute, Decimal, Order, StdResult, Storage};
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
+use prism_common::de::deserialize_key;
 use prismswap::querier::query_token_balance;
 
 use crate::state::{
-    get_unlocked_amount, remove_unlocked, Config, PoolInfo, RewardInfo, CONFIG, LOCK_INFO, POOLS,
-    REWARD_INFO, STAKER_BY_TOKEN_INDEXER,
+    get_withdrawable_amount, remove_withdrawn, Config, PoolInfo, RewardInfo, CONFIG, POOLS,
+    REWARD_INFO, STAKER_BY_TOKEN_INDEXER, UNBOND_ORDERS,
 };
 use crate::ContractError;
-
-use prism_protocol::de::deserialize_key;
 
 pub fn update_owner(
     deps: DepsMut,
@@ -64,7 +63,7 @@ pub fn register_staking_token(
     env: Env,
     info: MessageInfo,
     staking_token: Addr,
-    lock_period: u64,
+    unbond_period: u64,
     weight: u64,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
@@ -101,7 +100,7 @@ pub fn register_staking_token(
         &PoolInfo {
             last_distributed: current_time,
             weight,
-            lock_period,
+            unbond_period,
             ..PoolInfo::default()
         },
     )?;
@@ -118,7 +117,7 @@ pub fn update_staking_token(
     env: Env,
     info: MessageInfo,
     staking_token: Addr,
-    lock_period: Option<u64>,
+    unbond_period: Option<u64>,
     weight: Option<u64>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
@@ -163,11 +162,11 @@ pub fn update_staking_token(
         CONFIG.save(deps.storage, &config)?;
     }
 
-    if let Some(lock_period) = lock_period {
+    if let Some(unbond_period) = unbond_period {
         let mut pool = POOLS
             .load(deps.storage, &staking_token)
             .map_err(|_| ContractError::InvalidStakingToken {})?;
-        pool.lock_period = lock_period;
+        pool.unbond_period = unbond_period;
 
         POOLS.save(deps.storage, &staking_token, &pool)?;
     }
@@ -195,14 +194,14 @@ pub fn bond(
             None => RewardInfo::default(),
         };
 
-    // pulls the expired lock entires and accumulates it into unlocked_amount
-    pull_unlocked(
+    // pulls the expired withdraw orders and accumulates it into withdrawable_amount
+    pull_expired_withdraw_orders(
         deps.storage,
         &sender_addr,
         &staking_token,
         &mut staker_reward_info,
         env.block.time.seconds(),
-        pool_info.lock_period,
+        pool_info.unbond_period,
     )?;
 
     // Compute global pool reward & staker reward
@@ -219,17 +218,6 @@ pub fn bond(
         &staker_reward_info,
     )?;
     STAKER_BY_TOKEN_INDEXER.save(deps.storage, (&staking_token, &sender_addr), &true)?;
-
-    // store the time the tokens are locked
-    LOCK_INFO.save(
-        deps.storage,
-        (
-            &sender_addr,
-            &staking_token,
-            U64Key::from(env.block.time.seconds()),
-        ),
-        &amount,
-    )?;
 
     POOLS.save(deps.storage, &staking_token, &pool_info)?;
 
@@ -257,28 +245,28 @@ pub fn unbond(
         .load(deps.storage, (&info.sender, &staking_token))
         .map_err(|_| ContractError::NothingStaked {})?;
 
-    // pulls the expired lock entires and accumulates it into unlocked_amount
-    pull_unlocked(
+    // pulls the expired withdraw orders and accumulates it into withdrawable_amount
+    let mut orders_pending = pull_expired_withdraw_orders(
         deps.storage,
         &info.sender,
         &staking_token,
         &mut staker_reward_info,
         env.block.time.seconds(),
-        pool.lock_period,
+        pool.unbond_period,
     )?;
 
-    if staker_reward_info.unlocked_amount.is_zero() {
+    if staker_reward_info.bond_amount.is_zero() {
         return Err(ContractError::NothingAvailableToUnbond {});
     }
 
     let amount_to_unbond: Uint128 = if let Some(amount) = amount {
-        if staker_reward_info.unlocked_amount < amount {
+        if staker_reward_info.bond_amount < amount {
             return Err(ContractError::InvalidUnbondAmount {});
         } else {
             amount
         }
     } else {
-        staker_reward_info.unlocked_amount
+        staker_reward_info.bond_amount
     };
 
     // Compute global pool reward & staker reward
@@ -288,36 +276,117 @@ pub fn unbond(
     // Decrease bond_amount
     decrease_bond_amount(&mut pool, &mut staker_reward_info, amount_to_unbond);
 
-    // Store or remove updated rewards info
-    // depends on the left pending reward and bond amount
-    if staker_reward_info.pending_reward.is_zero() && staker_reward_info.bond_amount.is_zero() {
-        REWARD_INFO.remove(deps.storage, (&info.sender, &staking_token));
-        STAKER_BY_TOKEN_INDEXER.remove(deps.storage, (&staking_token, &info.sender));
-    } else {
-        REWARD_INFO.save(
-            deps.storage,
-            (&info.sender, &staking_token),
-            &staker_reward_info,
-        )?;
-    }
-
     // Store updated pool
     POOLS.save(deps.storage, &staking_token, &pool)?;
 
-    Ok(Response::new()
-        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+    let mut messages: Vec<CosmosMsg> = vec![];
+    let mut attributes: Vec<Attribute> = vec![
+        attr("action", "unbond"),
+        attr("staking_token", staking_token.to_string()),
+        attr("staker", info.sender.to_string()),
+        attr("amount", amount_to_unbond.to_string()),
+    ];
+
+    if pool.unbond_period == 0u64 {
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: staking_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: info.sender.to_string(),
                 amount: amount_to_unbond,
             })?,
             funds: vec![],
+        }));
+        attributes.extend(vec![attr("unbond_order_created", "false")]);
+    } else {
+        UNBOND_ORDERS.save(
+            deps.storage,
+            (
+                &info.sender,
+                &staking_token,
+                U64Key::from(env.block.time.seconds()),
+            ),
+            &amount_to_unbond,
+        )?;
+        orders_pending = true;
+        attributes.extend(vec![
+            attr("unbond_order_created", "true"),
+            attr(
+                "expected_expire_time",
+                env.block
+                    .time
+                    .plus_seconds(pool.unbond_period)
+                    .seconds()
+                    .to_string(),
+            ),
+        ]);
+    }
+
+    update_or_remove_staker_rewards(
+        deps.storage,
+        &info,
+        &staking_token,
+        &staker_reward_info,
+        orders_pending,
+    )?;
+
+    Ok(Response::new()
+        .add_messages(messages)
+        .add_attributes(attributes))
+}
+
+pub fn claim_unbonded(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    staking_token: Addr,
+) -> Result<Response, ContractError> {
+    let pool: PoolInfo = POOLS
+        .load(deps.storage, &staking_token)
+        .map_err(|_| ContractError::InvalidStakingToken {})?;
+    let mut staker_reward_info: RewardInfo = REWARD_INFO
+        .load(deps.storage, (&info.sender, &staking_token))
+        .map_err(|_| ContractError::NothingStaked {})?;
+
+    // pulls the expired withdraw orders and accumulates it into withdrawable_amount
+    let orders_pending = pull_expired_withdraw_orders(
+        deps.storage,
+        &info.sender,
+        &staking_token,
+        &mut staker_reward_info,
+        env.block.time.seconds(),
+        pool.unbond_period,
+    )?;
+
+    if staker_reward_info.withdrawable_amount.is_zero() {
+        return Err(ContractError::NothingAvailableToWithdraw {});
+    };
+
+    // reset to 0
+    let amount_to_send = staker_reward_info.withdrawable_amount;
+    staker_reward_info.withdrawable_amount = Uint128::zero();
+
+    update_or_remove_staker_rewards(
+        deps.storage,
+        &info,
+        &staking_token,
+        &staker_reward_info,
+        orders_pending,
+    )?;
+
+    Ok(Response::new()
+        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: staking_token.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: info.sender.to_string(),
+                amount: amount_to_send,
+            })?,
+            funds: vec![],
         })])
         .add_attributes(vec![
-            attr("action", "unbond"),
+            attr("action", "claim_unbonded"),
             attr("staking_token", staking_token),
             attr("staker", info.sender),
-            attr("amount", amount_to_unbond.to_string()),
+            attr("amount", amount_to_send.to_string()),
         ]))
 }
 
@@ -352,6 +421,16 @@ pub fn claim_rewards(
     for (staking_token, mut staker_reward_info) in reward_infos {
         let mut pool: PoolInfo = POOLS.load(deps.storage, &staking_token)?;
 
+        // pulls the expired withdraw orders and accumulates it into withdrawable_amount
+        let orders_pending = pull_expired_withdraw_orders(
+            deps.storage,
+            &info.sender,
+            &staking_token,
+            &mut staker_reward_info,
+            env.block.time.seconds(),
+            pool.unbond_period,
+        )?;
+
         // Compute global pool reward & staker reward
         compute_pool_reward(&config, &mut pool, env.block.time.seconds());
         compute_staker_reward(&pool, &mut staker_reward_info);
@@ -359,18 +438,13 @@ pub fn claim_rewards(
         claim_amount += staker_reward_info.pending_reward;
         staker_reward_info.pending_reward = Uint128::zero();
 
-        // Store or remove updated rewards info
-        // depends on the left pending reward and bond amount
-        if staker_reward_info.bond_amount.is_zero() {
-            REWARD_INFO.remove(deps.storage, (&info.sender, &staking_token));
-            STAKER_BY_TOKEN_INDEXER.remove(deps.storage, (&staking_token, &info.sender));
-        } else {
-            REWARD_INFO.save(
-                deps.storage,
-                (&info.sender, &staking_token),
-                &staker_reward_info,
-            )?;
-        }
+        update_or_remove_staker_rewards(
+            deps.storage,
+            &info,
+            &staking_token,
+            &staker_reward_info,
+            orders_pending,
+        )?;
 
         // store updated pool
         POOLS.save(deps.storage, &staking_token, &pool)?;
@@ -429,7 +503,6 @@ fn increase_bond_amount(pool: &mut PoolInfo, staker_info: &mut RewardInfo, amoun
 fn decrease_bond_amount(pool: &mut PoolInfo, staker_info: &mut RewardInfo, amount: Uint128) {
     pool.total_bond_amount -= amount;
     staker_info.bond_amount -= amount;
-    staker_info.unlocked_amount -= amount;
 }
 
 // compute distributed rewards for the pool and update global reward index
@@ -474,19 +547,40 @@ pub fn compute_staker_reward(pool: &PoolInfo, staker_info: &mut RewardInfo) {
     staker_info.pending_reward += pending_reward;
 }
 
-pub fn pull_unlocked(
+// returns true if there are pending withdraw orders
+pub fn pull_expired_withdraw_orders(
     storage: &mut dyn Storage,
     staker: &Addr,
     staking_token: &Addr,
     staker_info: &mut RewardInfo,
     current_time: u64,
-    lock_period: u64,
+    unbond_period: u64,
+) -> StdResult<bool> {
+    let (withdrawable_amount, expired_orders, order_count) =
+        get_withdrawable_amount(storage, staker, staking_token, current_time, unbond_period)?;
+    staker_info.withdrawable_amount += withdrawable_amount;
+
+    let expired_orders_count = expired_orders.len() as u64;
+    remove_withdrawn(storage, staker, staking_token, expired_orders);
+
+    Ok(order_count > expired_orders_count)
+}
+
+pub fn update_or_remove_staker_rewards(
+    storage: &mut dyn Storage,
+    info: &MessageInfo,
+    staking_token: &Addr,
+    staker_reward_info: &RewardInfo,
+    orders_pending: bool,
 ) -> StdResult<()> {
-    let (unlocked_amount, unlock_list) =
-        get_unlocked_amount(storage, staker, staking_token, current_time, lock_period)?;
-
-    staker_info.unlocked_amount += unlocked_amount;
-    remove_unlocked(storage, staker, staking_token, unlock_list);
-
+    if staker_reward_info.pending_reward.is_zero()
+        && staker_reward_info.bond_amount.is_zero()
+        && !orders_pending
+    {
+        REWARD_INFO.remove(storage, (&info.sender, staking_token));
+        STAKER_BY_TOKEN_INDEXER.remove(storage, (staking_token, &info.sender));
+    } else {
+        REWARD_INFO.save(storage, (&info.sender, staking_token), staker_reward_info)?;
+    }
     Ok(())
 }

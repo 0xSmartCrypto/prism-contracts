@@ -44,7 +44,8 @@ prismswap = { path = "../../packages/prismswap", default-features = false, versi
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 hex = "0.4"
+prism-common = { path = "../../packages/prism_common", version = "1.0.0", default-features = false, features = ["parse_reply"] }
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
-prism-common = { path = "../../packages/prism_common", default-features = false, version = "1.0.0"}
+prism-common = { path = "../../packages/prism_common", version = "1.0.0"}

@@ -1,16 +1,14 @@
 use cosmwasm_std::{Addr, Decimal, Order, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Item, Map, U64Key};
+use prism_common::de::deserialize_key;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::handle::{compute_pool_reward, compute_staker_reward};
 
-use prism_protocol::{
-    de::deserialize_key,
-    lp_staking::{
-        ConfigResponse, PoolInfoResponse, RewardInfoResponseItem, StakerInfoResponse,
-        StakersInfoResponse,
-    },
+use prism_protocol::lp_staking::{
+    ConfigResponse, PoolInfoResponse, RewardInfoResponseItem, StakerInfoResponse,
+    StakersInfoResponse,
 };
 
 pub const CONFIG: Item<Config> = Item::new("config");
@@ -21,8 +19,8 @@ pub const POOLS: Map<&Addr, PoolInfo> = Map::new("pools");
 /// (staker addr, staking token) -> RewardInfo
 pub const REWARD_INFO: Map<(&Addr, &Addr), RewardInfo> = Map::new("reward_info");
 
-/// (staker addr, staking token, lock time) -> amount bonded
-pub const LOCK_INFO: Map<(&Addr, &Addr, U64Key), Uint128> = Map::new("lock_info");
+/// (staker addr, staking token, order_creation_time) -> amount requtested to unbond
+pub const UNBOND_ORDERS: Map<(&Addr, &Addr, U64Key), Uint128> = Map::new("unbond_orders");
 
 /// (staking token, staker addr) -> bool
 pub const STAKER_BY_TOKEN_INDEXER: Map<(&Addr, &Addr), bool> = Map::new("staker_by_token");
@@ -54,7 +52,7 @@ pub struct PoolInfo {
     pub total_bond_amount: Uint128,
     pub reward_index: Decimal,
     pub pending_reward: Uint128,
-    pub lock_period: u64,
+    pub unbond_period: u64,
 }
 
 impl PoolInfo {
@@ -66,7 +64,7 @@ impl PoolInfo {
             total_bond_amount: self.total_bond_amount,
             reward_index: self.reward_index,
             pending_reward: self.pending_reward,
-            lock_period: self.lock_period,
+            unbond_period: self.unbond_period,
         }
     }
 }
@@ -75,7 +73,7 @@ impl PoolInfo {
 pub struct RewardInfo {
     pub reward_index: Decimal,
     pub bond_amount: Uint128,
-    pub unlocked_amount: Uint128,
+    pub withdrawable_amount: Uint128,
     pub pending_reward: Uint128,
 }
 
@@ -85,7 +83,7 @@ impl RewardInfo {
             staking_token: staking_token.to_string(),
             bond_amount: self.bond_amount,
             pending_reward: self.pending_reward,
-            withdrawable_amount: self.unlocked_amount,
+            withdrawable_amount: self.withdrawable_amount,
         }
     }
 }
@@ -117,14 +115,14 @@ pub fn read_token_stakers_with_updated_rewards(
             let mut reward_info: RewardInfo =
                 REWARD_INFO.load(storage, (&staker_addr, &staking_token))?;
 
-            let (unlocked_amount, _) = get_unlocked_amount(
+            let (withdrawable_amount, _, _) = get_withdrawable_amount(
                 storage,
                 &staker_addr,
                 &staking_token,
                 current_time,
-                pool.lock_period,
+                pool.unbond_period,
             )?;
-            reward_info.unlocked_amount += unlocked_amount;
+            reward_info.withdrawable_amount += withdrawable_amount;
 
             compute_staker_reward(&pool, &mut reward_info);
 
@@ -155,56 +153,62 @@ pub fn read_updated_staker_rewards(
             compute_pool_reward(&config, &mut pool, current_time);
             compute_staker_reward(&pool, &mut reward_info);
 
-            let (unlocked_amount, _) = get_unlocked_amount(
+            let (withdrawable_amount, _, _) = get_withdrawable_amount(
                 storage,
                 staker,
                 &staking_token,
                 current_time,
-                pool.lock_period,
+                pool.unbond_period,
             )?;
-            reward_info.unlocked_amount += unlocked_amount;
+            reward_info.withdrawable_amount += withdrawable_amount;
 
             Ok(reward_info.as_res(&staking_token))
         })
         .collect::<StdResult<Vec<RewardInfoResponseItem>>>()
 }
 
-const DEFAULT_LOCK_INFO_READ_LIMIT: usize = 30;
+const MAX_ORDER_WITHDRAW_PER_TX: usize = 50usize;
 
-pub fn get_unlocked_amount(
+pub fn get_withdrawable_amount(
     storage: &dyn Storage,
     staker: &Addr,
     staking_token: &Addr,
     current_time: u64,
-    lock_period: u64,
-) -> StdResult<(Uint128, Vec<u64>)> {
-    let (withdrawable_amount, released_locks) = LOCK_INFO
+    unbond_period: u64,
+) -> StdResult<(Uint128, Vec<u64>, u64)> {
+    // We use order_count and released_locks length to check if there are more withdraw orders pending.
+    // To cover the edge case when we unlock MAX_ORDER_WITHDRAW_PER_TX, we do one more iteration just
+    // to check if there are other orders over the limit.
+
+    let (withdrawable_amount, released_locks, order_count) = UNBOND_ORDERS
         .prefix((staker, staking_token))
         .range(storage, None, None, Order::Ascending)
-        .take(DEFAULT_LOCK_INFO_READ_LIMIT)
-        .fold((Uint128::zero(), vec![]), |acc, item| {
+        .take(MAX_ORDER_WITHDRAW_PER_TX + 1)
+        .fold((Uint128::zero(), vec![], 0u64), |acc, item| {
             let (k, v) = item.unwrap();
-            let lock_time = deserialize_key::<u64>(k).unwrap();
-            let (mut amount, mut list) = acc;
+            let order_time = deserialize_key::<u64>(k).unwrap();
+            let (mut amount, mut list, mut count) = acc;
 
-            if lock_time + lock_period < current_time {
-                list.push(lock_time);
+            count += 1u64;
+            if count <= MAX_ORDER_WITHDRAW_PER_TX as u64
+                && order_time + unbond_period < current_time
+            {
+                list.push(order_time);
                 amount += v
             }
-
-            (amount, list)
+            (amount, list, count)
         });
 
-    Ok((withdrawable_amount, released_locks))
+    Ok((withdrawable_amount, released_locks, order_count))
 }
 
-pub fn remove_unlocked(
+pub fn remove_withdrawn(
     storage: &mut dyn Storage,
     staker: &Addr,
     staking_token: &Addr,
-    released_locks: Vec<u64>,
+    expired_orders: Vec<u64>,
 ) {
-    for time in released_locks {
-        LOCK_INFO.remove(storage, (staker, staking_token, U64Key::from(time)));
+    for time in expired_orders {
+        UNBOND_ORDERS.remove(storage, (staker, staking_token, U64Key::from(time)));
     }
 }

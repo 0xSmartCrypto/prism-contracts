@@ -42,6 +42,7 @@ schemars = "0.8.1"
 prism-protocol = { path = "../../packages/prism_protocol", default-features = false, version = "1.0.0"}
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 cw-storage-plus = { version = "0.8.0", features = ["iterator"]}
+prism-common = { path = "../../packages/prism_common", version = "1.0.0", default-features = false, features = ["key_serialization"] }
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"

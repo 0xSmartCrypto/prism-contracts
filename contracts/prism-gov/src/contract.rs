@@ -1,5 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
+use prism_common::parse_reply_instantiate_data;
 
 use crate::polls::{cast_vote, create_poll, end_poll, execute_poll, failed_poll, snapshot_poll};
 use crate::state::{
@@ -9,15 +10,16 @@ use crate::state::{
 use crate::voting::{query_voting_tokens, stake_voting_tokens, withdraw_voting_tokens};
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply, Response,
-    StdError, StdResult, Uint128,
+    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply, ReplyOn,
+    Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw20::Cw20ReceiveMsg;
+use cw20::{Cw20ReceiveMsg, MinterResponse};
+use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
 
 use crate::xprism::{
-    claim_redeemed_prism, mint_xprism, query_prism_withdraw_orders, redeem_xprism,
-    TOTAL_PENDING_WITHDRAW,
+    claim_redeemed_prism, mint_xprism, query_prism_withdraw_orders, query_xprism_state,
+    redeem_xprism, TOTAL_PENDING_WITHDRAW,
 };
 use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{
@@ -26,6 +28,7 @@ use prism_protocol::gov::{
 };
 
 pub const POLL_EXECUTE_REPLY_ID: u64 = 1;
+pub const INSTANTIATE_REPLY_ID: u64 = 2;
 pub const MIN_POLL_GAS_LIMIT: u64 = 1_000_000;
 
 const CONTRACT_NAME: &str = "prism-gov";
@@ -34,7 +37,7 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
@@ -63,14 +66,34 @@ pub fn instantiate(
 
     TOTAL_PENDING_WITHDRAW.save(deps.storage, &(Uint128::zero(), Uint128::zero()))?;
 
-    Ok(Response::default())
+    Ok(Response::new().add_submessage(SubMsg {
+        msg: WasmMsg::Instantiate {
+            code_id: msg.token_code_id,
+            msg: to_binary(&TokenInstantiateMsg {
+                name: "Prism Governace Token".to_string(),
+                symbol: "xPRISM".to_string(),
+                decimals: 6,
+                initial_balances: vec![],
+                mint: Some(MinterResponse {
+                    minter: env.contract.address.to_string(),
+                    cap: None,
+                }),
+            })?,
+            funds: vec![],
+            admin: None,
+            label: "".to_string(),
+        }
+        .into(),
+        id: INSTANTIATE_REPLY_ID,
+        gas_limit: None,
+        reply_on: ReplyOn::Success,
+    }))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
-        ExecuteMsg::PostInitialize { xprism_token } => post_initialize(deps, info, xprism_token),
         ExecuteMsg::UpdateConfig {
             owner,
             quorum,
@@ -160,30 +183,28 @@ pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> StdResult<Response> {
             let poll_id: u64 = read_tmp_poll_id(deps.storage)?;
             failed_poll(deps, poll_id)
         }
+        INSTANTIATE_REPLY_ID => set_xprism_token(deps, msg),
         _ => Err(StdError::generic_err("reply id is invalid")),
     }
 }
 
-pub fn post_initialize(
-    deps: DepsMut,
-    info: MessageInfo,
-    xprism_token: String,
-) -> StdResult<Response> {
+pub fn set_xprism_token(deps: DepsMut, msg: Reply) -> StdResult<Response> {
     let mut config: Config = config_read(deps.storage).load()?;
 
-    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
     if config.xprism_token.is_some() {
+        // should never happen
         return Err(StdError::generic_err("xprism token was already set"));
     }
 
-    config.xprism_token = Some(deps.api.addr_canonicalize(&xprism_token)?);
+    let res = parse_reply_instantiate_data(msg)
+        .map_err(|_| StdError::generic_err("error parsing xprism instantiation reply"))?;
+    let xprism_token_addr = deps.api.addr_validate(&res.contract_address)?;
+
+    config.xprism_token = Some(deps.api.addr_canonicalize(xprism_token_addr.as_str())?);
 
     config_store(deps.storage).save(&config)?;
 
-    Ok(Response::default())
+    Ok(Response::new().add_attribute("xprism_token_addr", xprism_token_addr))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -282,6 +303,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             limit,
             order_by,
         )?),
+        QueryMsg::XprismState {} => to_binary(&query_xprism_state(deps, env)?),
     }
 }
 

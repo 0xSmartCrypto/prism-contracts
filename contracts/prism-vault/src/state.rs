@@ -1,10 +1,10 @@
+use prism_common::de::deserialize_key;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Addr, Decimal, Order, StdError, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Item, Map, U64Key};
 
-use prism_protocol::de::deserialize_key;
 use prism_protocol::vault::{Config, State, UnbondHistory, UnbondRequest};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

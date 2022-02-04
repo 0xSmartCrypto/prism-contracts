@@ -942,6 +942,7 @@ dependencies = [
  "cw-storage-plus",
  "cw2",
  "cw20 0.8.1",
+ "prism-common",
  "prism-protocol",
  "schemars",
  "serde",
@@ -981,6 +982,7 @@ dependencies = [
  "schemars",
  "serde",
  "terra-cosmwasm",
+ "thiserror",
 ]
 
 [[package]]

@@ -1,11 +1,14 @@
 use crate::state::{calc_range_end, calc_range_start, config_read, DEFAULT_LIMIT, MAX_LIMIT};
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError,
-    StdResult, Storage, Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Order, Response,
+    StdError, StdResult, Storage, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::{Bound, Item, Map};
-use prism_protocol::{common::OrderBy, gov::PrismWithdrawOrdersResponse};
+use prism_protocol::{
+    common::OrderBy,
+    gov::{PrismWithdrawOrdersResponse, XprismStateResponse},
+};
 use prismswap::querier::{query_supply, query_token_balance};
 use std::convert::TryInto;
 
@@ -154,6 +157,15 @@ fn compute_withdrawable(
         WITHDRAW_ORDERS.remove(storage, (address.as_bytes(), &t.to_be_bytes()))
     }
 
+    TOTAL_PENDING_WITHDRAW.update(
+        storage,
+        |(mut xprism, mut prism)| -> StdResult<(Uint128, Uint128)> {
+            xprism = xprism.checked_sub(w_xprism)?;
+            prism = prism.checked_sub(w_prism)?;
+            Ok((xprism, prism))
+        },
+    )?;
+
     Ok((w_xprism, w_prism))
 }
 
@@ -201,5 +213,27 @@ pub fn query_prism_withdraw_orders(
     Ok(PrismWithdrawOrdersResponse {
         claimable_amount,
         orders,
+    })
+}
+
+pub fn query_xprism_state(deps: Deps, env: Env) -> StdResult<XprismStateResponse> {
+    let cfg = config_read(deps.storage).load()?;
+    let prism_token = deps.api.addr_humanize(&cfg.prism_token)?;
+    let xprism_token = deps.api.addr_humanize(&cfg.xprism_token.unwrap())?;
+
+    let (pending_xprism, pending_prism) = TOTAL_PENDING_WITHDRAW.load(deps.storage)?;
+
+    let prism_amt =
+        query_token_balance(&deps.querier, &prism_token, &env.contract.address)? - pending_prism;
+    let xprism_amt = query_supply(&deps.querier, &xprism_token)? - pending_xprism;
+
+    let exchange_rate = Decimal::from_ratio(prism_amt, xprism_amt);
+
+    Ok(XprismStateResponse {
+        exchange_rate,
+        effective_xprism_supply: xprism_amt,
+        effective_underlying_prism: prism_amt,
+        total_pending_withdraw_xprism: pending_xprism,
+        total_pending_withdraw_prism: pending_prism,
     })
 }
