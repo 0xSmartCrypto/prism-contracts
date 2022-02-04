@@ -1,6 +1,6 @@
 use cosmwasm_std::{Addr, Decimal, Order, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Item, Map, U64Key};
-use prism_common::de::deserialize_key;
+use prism_protocol::internal::de::deserialize_key;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

@@ -1,4 +1,4 @@
-use prism_common::de::deserialize_key;
+use prism_protocol::internal::de::deserialize_key;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

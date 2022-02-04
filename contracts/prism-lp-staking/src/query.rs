@@ -1,6 +1,6 @@
 use cosmwasm_std::{Addr, Deps, Env, Order, StdResult, Uint128};
 use cw_storage_plus::{Bound, U64Key};
-use prism_common::de::deserialize_key;
+use prism_protocol::internal::de::deserialize_key;
 
 use crate::error::ContractError;
 use crate::handle::{compute_pool_reward, compute_staker_reward};

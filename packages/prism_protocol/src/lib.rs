@@ -8,3 +8,6 @@ pub mod limit_order;
 pub mod lp_staking;
 pub mod vault;
 pub mod yasset_staking;
+
+#[cfg(feature = "internal")]
+pub mod internal;

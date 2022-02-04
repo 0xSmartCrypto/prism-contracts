@@ -942,7 +942,6 @@ dependencies = [
  "cw-storage-plus",
  "cw2",
  "cw20 0.8.1",
- "prism-common",
  "prism-protocol",
  "schemars",
  "serde",
@@ -982,7 +981,6 @@ dependencies = [
  "schemars",
  "serde",
  "terra-cosmwasm",
- "thiserror",
 ]
 
 [[package]]
@@ -1069,6 +1067,7 @@ dependencies = [
  "schemars",
  "serde",
  "terra-cosmwasm",
+ "thiserror",
 ]
 
 [[package]]
@@ -1113,7 +1112,7 @@ dependencies = [
 
 [[package]]
 name = "prismswap"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",

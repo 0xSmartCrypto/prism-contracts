@@ -5,7 +5,7 @@ use cosmwasm_std::{
 use cosmwasm_std::{Attribute, Decimal, Order, StdResult, Storage};
 use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::U64Key;
-use prism_common::de::deserialize_key;
+use prism_protocol::internal::de::deserialize_key;
 use prismswap::querier::query_token_balance;
 
 use crate::state::{

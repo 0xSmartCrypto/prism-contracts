@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use prism_common::parse_reply_instantiate_data;
+use prism_protocol::internal::parse_reply_instantiate_data;
 
 use crate::polls::{cast_vote, create_poll, end_poll, execute_poll, failed_poll, snapshot_poll};
 use crate::state::{
