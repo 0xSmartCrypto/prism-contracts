@@ -118,6 +118,7 @@ fn proper_initialization() {
             pending_reward: Uint128::zero(),
             last_distributed: default_genesis_seconds,
             total_bond_amount: Uint128::zero(),
+            total_pending_withdraw: Uint128::zero(),
             reward_index: Decimal::zero(),
             unbond_period: 100u64,
         }
@@ -139,6 +140,7 @@ fn proper_initialization() {
             pending_reward: Uint128::zero(),
             last_distributed: default_genesis_seconds,
             total_bond_amount: Uint128::zero(),
+            total_pending_withdraw: Uint128::zero(),
             reward_index: Decimal::zero(),
             unbond_period: 100u64,
         }
@@ -227,6 +229,7 @@ fn test_bond_tokens() {
             staking_token: "lp00001".to_string(),
             pending_reward: Uint128::zero(),
             total_bond_amount: Uint128::from(100u128),
+            total_pending_withdraw: Uint128::zero(),
             reward_index: Decimal::zero(),
             last_distributed: default_genesis_seconds,
             unbond_period: 100u64,
@@ -284,6 +287,7 @@ fn test_bond_tokens() {
             staking_token: "lp00001".to_string(),
             pending_reward: Uint128::zero(),
             total_bond_amount: Uint128::from(200u128),
+            total_pending_withdraw: Uint128::zero(),
             reward_index: Decimal::from_ratio(33333u128, 100u128),
             last_distributed: default_genesis_seconds + 10,
             unbond_period: 100u64,
@@ -359,6 +363,7 @@ fn test_auto_stake_hook() {
             staking_token: "lp00001".to_string(),
             pending_reward: Uint128::zero(),
             total_bond_amount: Uint128::from(100u128),
+            total_pending_withdraw: Uint128::zero(),
             reward_index: Decimal::zero(),
             last_distributed: default_genesis_seconds,
             unbond_period: 100u64,
@@ -436,6 +441,7 @@ fn test_auto_stake_hook() {
             staking_token: "lp00001".to_string(),
             pending_reward: Uint128::zero(),
             total_bond_amount: Uint128::from(250u128),
+            total_pending_withdraw: Uint128::zero(),
             reward_index: Decimal::zero(),
             last_distributed: default_genesis_seconds,
             unbond_period: 100u64,
@@ -508,6 +514,31 @@ fn test_unbond() {
                 bond_amount: Uint128::from(50u128),
                 withdrawable_amount: Uint128::zero(),
             }]
+        }
+    );
+
+    // pending withdraw amount should increase
+    assert_eq!(
+        from_binary::<PoolInfoResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::PoolInfo {
+                    staking_token: "lp00001".to_string()
+                }
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        PoolInfoResponse {
+            weight: 10u64,
+            staking_token: "lp00001".to_string(),
+            pending_reward: Uint128::zero(),
+            total_bond_amount: Uint128::from(50u128),
+            total_pending_withdraw: Uint128::from(50u128),
+            reward_index: Decimal::zero(),
+            last_distributed: mock_env().block.time.seconds(),
+            unbond_period: 100u64,
         }
     );
 
@@ -592,7 +623,7 @@ fn test_unbond() {
         from_binary::<UnbondOrdersResponse>(
             &query(
                 deps.as_ref(),
-                env,
+                env.clone(),
                 QueryMsg::UnbondOrders {
                     staker: "addr0000".to_string(),
                     staking_token: "lp00001".to_string(),
@@ -606,6 +637,31 @@ fn test_unbond() {
         UnbondOrdersResponse {
             withdrawable_amount: Uint128::zero(),
             orders: vec![]
+        }
+    );
+
+    // pending withdraw should be zero
+    assert_eq!(
+        from_binary::<PoolInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::PoolInfo {
+                    staking_token: "lp00001".to_string()
+                }
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        PoolInfoResponse {
+            weight: 10u64,
+            staking_token: "lp00001".to_string(),
+            pending_reward: Uint128::zero(),
+            total_bond_amount: Uint128::from(50u128),
+            total_pending_withdraw: Uint128::zero(), // back to zero
+            reward_index: Decimal::zero(),
+            last_distributed: 1571797419, // current time minus 101
+            unbond_period: 100u64,
         }
     );
 
@@ -1288,6 +1344,7 @@ fn test_register_staking_token() {
             last_distributed: mock_env().block.time.seconds(),
             staking_token: "lp00003".to_string(),
             total_bond_amount: Uint128::zero(),
+            total_pending_withdraw: Uint128::zero(),
             reward_index: Decimal::zero(),
             pending_reward: Uint128::zero(),
             unbond_period: 100u64,
@@ -1415,6 +1472,7 @@ fn test_update_staking_token() {
             last_distributed: mock_env().block.time.seconds(),
             staking_token: "lp00001".to_string(),
             total_bond_amount: Uint128::zero(),
+            total_pending_withdraw: Uint128::zero(),
             reward_index: Decimal::zero(),
             pending_reward: Uint128::zero(),
             unbond_period: 101u64,
