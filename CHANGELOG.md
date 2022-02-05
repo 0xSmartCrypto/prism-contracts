@@ -1,6 +1,7 @@
-## v1.0.0 RC1
+## v1.0.0 RC2
 
-* First release candidate for:
+* Second release candidate for:
   * Gov
   * LP Staking
   * Collector
+* Collector logic improved. Fixed issue with collector hook on `ConvertAndSend` operation
