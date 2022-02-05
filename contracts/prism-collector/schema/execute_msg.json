@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ExecuteMsg",
-  "oneOf": [
+  "anyOf": [
     {
       "description": "Any user can call convert to swap the asset tokens that collector holds for $PRISM, the resulting $PRISM is sent to distribution_contract",
       "type": "object",
@@ -57,7 +57,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Hook to swap base_denom for $PRISM, Called when there is not direct pair with requested asset_token",
+      "description": "Hook to swap base_denom for $PRISM, Called when there is not direct pair with requested asset_token Permissioned for internal calls only",
       "type": "object",
       "required": [
         "base_swap_hook"
@@ -65,12 +65,16 @@
       "properties": {
         "base_swap_hook": {
           "type": "object",
+          "required": [
+            "prev_base_balance",
+            "receiver"
+          ],
           "properties": {
+            "prev_base_balance": {
+              "$ref": "#/definitions/Uint128"
+            },
             "receiver": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "$ref": "#/definitions/Addr"
             }
           }
         }
@@ -111,7 +115,7 @@
     },
     "AssetInfoBase_for_Addr": {
       "description": "Represents the type of an fungible asset\n\nEach **asset info** instance can be one of two variants:\n\n- CW20 tokens. To create an **asset info** instance of this type, provide the contract address. - Native SDK coins. To create an **asset info** instance of this type, provide the denomination.",
-      "oneOf": [
+      "anyOf": [
         {
           "type": "object",
           "required": [
