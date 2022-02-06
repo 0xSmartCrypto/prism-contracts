@@ -115,7 +115,7 @@ fn proper_initialization() {
             msg: WasmMsg::Instantiate {
                 code_id: DEFAULT_TOKEN_CODE_ID,
                 msg: to_binary(&TokenInstantiateMsg {
-                    name: "Prism Governace Token".to_string(),
+                    name: "Prism Governance Token".to_string(),
                     symbol: "xPRISM".to_string(),
                     decimals: 6,
                     initial_balances: vec![],
