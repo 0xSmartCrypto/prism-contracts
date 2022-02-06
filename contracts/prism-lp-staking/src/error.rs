@@ -35,4 +35,7 @@ pub enum ContractError {
 
     #[error("The staking token is already registered")]
     AlreadyExists {},
+
+    #[error("Can only execute one unbond operation per block")]
+    UnbondOrderOverwrite {},
 }

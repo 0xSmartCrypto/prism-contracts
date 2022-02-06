@@ -3250,7 +3250,16 @@ fn redeem_xprism() {
         }
     );
 
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    // only one per block
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("can only execute one redeem_xprism operation per block")
+    );
+    // increase time
+    let mut env = mock_env();
+    env.block.time = env.block.time.plus_seconds(1);
+    let res = execute(deps.as_mut(), env, info, msg).unwrap();
     assert_eq!(
         res.attributes,
         vec![
