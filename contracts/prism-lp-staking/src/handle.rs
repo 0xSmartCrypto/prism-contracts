@@ -295,6 +295,19 @@ pub fn unbond(
         }));
         attributes.extend(vec![attr("unbond_order_created", "false")]);
     } else {
+        if UNBOND_ORDERS
+            .load(
+                deps.storage,
+                (
+                    &info.sender,
+                    &staking_token,
+                    U64Key::from(env.block.time.seconds()),
+                ),
+            )
+            .is_ok()
+        {
+            return Err(ContractError::UnbondOrderOverwrite {});
+        };
         UNBOND_ORDERS.save(
             deps.storage,
             (
