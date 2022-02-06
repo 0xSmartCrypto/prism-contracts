@@ -2320,3 +2320,178 @@ fn test_max_withdraws_per_tx() {
     .unwrap();
     assert_eq!(unbonded.orders.len(), 0);
 }
+
+#[test]
+fn test_claim_unbonded_after_claiming_rewards() {
+    let mut deps = mock_dependencies(&[]);
+    let info = mock_info("addr0000", &[]);
+    let mut env = mock_env();
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        distribution_schedule: default_distribution_schedule(),
+        staking_tokens: vec![
+            ("lp00001".to_string(), 10u64, 200u64),
+            ("lp00002".to_string(), 20u64, 200u64),
+        ],
+    };
+    instantiate(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // bond 100 tokens
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "addr0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info("lp00001", &[]);
+    execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+
+    // check staker info
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::from(0u128),
+                bond_amount: Uint128::from(100u128),
+                withdrawable_amount: Uint128::zero(),
+            }]
+        }
+    );
+
+    // unbond at T=100
+    let info = mock_info("addr0000", &[]);
+    env.block.time = env.block.time.plus_seconds(10);
+    let msg = ExecuteMsg::Unbond {
+        staking_token: "lp00001".to_string(),
+        amount: Some(Uint128::from(100u128)),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    assert_eq!(res.messages.len(), 0);
+
+    // claim rewards at T=500, this is after the unbond period, need to
+    // make sure that after we claim rewards, our subsequent ClaimUnbonded works
+    let msg = ExecuteMsg::ClaimRewards {
+        staking_token: None,
+    };
+    env.block.time = env.block.time.plus_seconds(400);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "prism0000".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(33333u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
+    );
+
+    // we still have a pending withdraw, so rewards should not be cleaned yet
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![RewardInfoResponseItem {
+                staking_token: "lp00001".to_string(),
+                pending_reward: Uint128::zero(),
+                bond_amount: Uint128::zero(),
+                withdrawable_amount: Uint128::from(100u128),
+            }]
+        }
+    );
+
+    // unbond orders is empty
+    assert_eq!(
+        from_binary::<UnbondOrdersResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::UnbondOrders {
+                    staker: "addr0000".to_string(),
+                    staking_token: "lp00001".to_string(),
+                    start_after: None,
+                    limit: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        UnbondOrdersResponse {
+            withdrawable_amount: Uint128::zero(),
+            orders: vec![]
+        }
+    );
+
+    // claim unbonded, we get our bonded 100 back
+    let msg = ExecuteMsg::ClaimUnbonded {
+        staking_token: "lp00001".to_string(),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "lp00001".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: "addr0000".to_string(),
+                amount: Uint128::from(100u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "claim_unbonded"),
+            attr("staking_token", "lp00001"),
+            attr("staker", "addr0000"),
+            attr("amount", "100"),
+        ]
+    );
+
+    // rewards are now empty
+    assert_eq!(
+        from_binary::<StakerInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::StakerInfo {
+                    staker: "addr0000".to_string(),
+                    staking_token: None,
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        StakerInfoResponse {
+            staker: "addr0000".to_string(),
+            reward_infos: vec![]
+        }
+    );
+}

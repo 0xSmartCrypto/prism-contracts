@@ -583,6 +583,7 @@ pub fn update_or_remove_staker_rewards(
 ) -> StdResult<()> {
     if staker_reward_info.pending_reward.is_zero()
         && staker_reward_info.bond_amount.is_zero()
+        && staker_reward_info.withdrawable_amount.is_zero()
         && !orders_pending
     {
         REWARD_INFO.remove(storage, (&info.sender, staking_token));
