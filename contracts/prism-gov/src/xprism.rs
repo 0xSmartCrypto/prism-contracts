@@ -77,6 +77,16 @@ pub fn redeem_xprism(
 
     let end_time = env.block.time.plus_seconds(cfg.redemption_time).seconds();
 
+    // if a withdraw order exists for the same timestamp, its because another redeem tx was executed on the same block, return error
+    if WITHDRAW_ORDERS
+        .load(deps.storage, (sender.as_bytes(), &end_time.to_be_bytes()))
+        .is_ok()
+    {
+        return Err(StdError::generic_err(
+            "can only execute one redeem_xprism operation per block",
+        ));
+    };
+
     WITHDRAW_ORDERS.save(
         deps.storage,
         (sender.as_bytes(), &end_time.to_be_bytes()),
