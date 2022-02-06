@@ -276,9 +276,6 @@ pub fn unbond(
     // Decrease bond_amount
     decrease_bond_amount(&mut pool, &mut staker_reward_info, amount_to_unbond);
 
-    // Store updated pool
-    POOLS.save(deps.storage, &staking_token, &pool)?;
-
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut attributes: Vec<Attribute> = vec![
         attr("action", "unbond"),
@@ -307,6 +304,9 @@ pub fn unbond(
             ),
             &amount_to_unbond,
         )?;
+
+        pool.total_pending_withdraw += amount_to_unbond;
+
         orders_pending = true;
         attributes.extend(vec![
             attr("unbond_order_created", "true"),
@@ -320,6 +320,9 @@ pub fn unbond(
             ),
         ]);
     }
+
+    // Store updated pool
+    POOLS.save(deps.storage, &staking_token, &pool)?;
 
     update_or_remove_staker_rewards(
         deps.storage,
@@ -340,7 +343,7 @@ pub fn claim_unbonded(
     info: MessageInfo,
     staking_token: Addr,
 ) -> Result<Response, ContractError> {
-    let pool: PoolInfo = POOLS
+    let mut pool: PoolInfo = POOLS
         .load(deps.storage, &staking_token)
         .map_err(|_| ContractError::InvalidStakingToken {})?;
     let mut staker_reward_info: RewardInfo = REWARD_INFO
@@ -364,6 +367,10 @@ pub fn claim_unbonded(
     // reset to 0
     let amount_to_send = staker_reward_info.withdrawable_amount;
     staker_reward_info.withdrawable_amount = Uint128::zero();
+
+    // subtract pending from total
+    pool.total_pending_withdraw -= amount_to_send;
+    POOLS.save(deps.storage, &staking_token, &pool)?;
 
     update_or_remove_staker_rewards(
         deps.storage,
@@ -482,8 +489,9 @@ pub fn auto_stake_hook(
         .load(deps.storage, &staking_token)
         .map_err(|_| ContractError::InvalidStakingToken {})?;
 
-    // the amount to stake is the difference between the bond amount and the actual balance of the contract
-    let amount = staking_token_balance - pool_info.total_bond_amount;
+    // the amount to stake is the difference between (bond_amount + pending_withdraw) and the actual balance of the contract
+    let amount =
+        staking_token_balance - pool_info.total_bond_amount - pool_info.total_pending_withdraw;
 
     bond(
         deps,
@@ -575,6 +583,7 @@ pub fn update_or_remove_staker_rewards(
 ) -> StdResult<()> {
     if staker_reward_info.pending_reward.is_zero()
         && staker_reward_info.bond_amount.is_zero()
+        && staker_reward_info.withdrawable_amount.is_zero()
         && !orders_pending
     {
         REWARD_INFO.remove(storage, (&info.sender, staking_token));

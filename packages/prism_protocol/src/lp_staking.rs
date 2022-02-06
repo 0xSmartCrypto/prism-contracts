@@ -92,6 +92,7 @@ pub struct PoolInfoResponse {
     pub last_distributed: u64,
     pub staking_token: String,
     pub total_bond_amount: Uint128,
+    pub total_pending_withdraw: Uint128,
     pub reward_index: Decimal,
     pub pending_reward: Uint128,
     pub unbond_period: u64,
