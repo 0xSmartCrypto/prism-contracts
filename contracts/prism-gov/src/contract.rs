@@ -10,8 +10,8 @@ use crate::state::{
 use crate::voting::{query_voting_tokens, stake_voting_tokens, withdraw_voting_tokens};
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Reply, ReplyOn,
-    Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
+    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo, Reply,
+    ReplyOn, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw20::{Cw20ReceiveMsg, MinterResponse};
@@ -478,4 +478,9 @@ fn validate_poll_gas_limit(poll_gas_limit: u64) -> StdResult<()> {
     } else {
         Ok(())
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: Empty) -> StdResult<Response> {
+    Ok(Response::default())
 }
