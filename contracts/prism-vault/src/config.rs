@@ -179,7 +179,7 @@ pub fn execute_register_validator(
     info: MessageInfo,
     validator: String,
 ) -> StdResult<Response> {
-    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
+    let config = CONFIG.load(deps.storage)?;
 
     if config.owner != info.sender && env.contract.address != info.sender {
         return Err(StdError::generic_err("unauthorized"));
