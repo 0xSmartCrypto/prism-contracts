@@ -12,13 +12,13 @@
         "distribute": {
           "type": "object",
           "required": [
-            "asset_tokens"
+            "asset_infos"
           ],
           "properties": {
-            "asset_tokens": {
+            "asset_infos": {
               "type": "array",
               "items": {
-                "type": "string"
+                "$ref": "#/definitions/AssetInfoBase_for_Addr"
               }
             }
           }
@@ -42,7 +42,7 @@
             "assets": {
               "type": "array",
               "items": {
-                "$ref": "#/definitions/Asset"
+                "$ref": "#/definitions/AssetBase_for_Addr"
               }
             },
             "receiver": {
@@ -57,7 +57,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Hook to swap base_denom for $PRISM, Called when there is not direct pair with requested asset_token",
+      "description": "Hook to swap base_denom for $PRISM, Called when there is not direct pair with requested asset_token Permissioned for internal calls only",
       "type": "object",
       "required": [
         "base_swap_hook"
@@ -65,12 +65,16 @@
       "properties": {
         "base_swap_hook": {
           "type": "object",
+          "required": [
+            "prev_base_balance",
+            "receiver"
+          ],
           "properties": {
+            "prev_base_balance": {
+              "$ref": "#/definitions/Uint128"
+            },
             "receiver": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "$ref": "#/definitions/Addr"
             }
           }
         }
@@ -83,9 +87,8 @@
       "description": "A human readable address.\n\nIn Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.\n\nThis type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.\n\nThis type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.",
       "type": "string"
     },
-    "Asset": {
-      "title": "Description",
-      "description": "This enum describes asset.",
+    "AssetBase_for_Addr": {
+      "description": "Represents a fungible asset with a known amount\n\nEach asset instance contains two values: [`info`], which specifies the asset's type (CW20 or native), and its [`amount`], which specifies the asset's amount",
       "type": "object",
       "required": [
         "amount",
@@ -93,7 +96,7 @@
       ],
       "properties": {
         "amount": {
-          "description": "the amount of an asset",
+          "description": "Specifies the asset's amount",
           "allOf": [
             {
               "$ref": "#/definitions/Uint128"
@@ -101,57 +104,38 @@
           ]
         },
         "info": {
-          "description": "the available type of asset from [`AssetInfo`]",
+          "description": "Specifies the asset's type (CW20 or native)",
           "allOf": [
             {
-              "$ref": "#/definitions/AssetInfo"
+              "$ref": "#/definitions/AssetInfoBase_for_Addr"
             }
           ]
         }
       }
     },
-    "AssetInfo": {
-      "title": "Description",
-      "description": "This enum describes available types of Token. ## Examples ``` # use cosmwasm_std::Addr; # use prismswap::asset::AssetInfo::{NativeToken, Token}; Token { contract_addr: Addr::unchecked(\"terra...\") }; NativeToken { denom: String::from(\"uluna\") }; ```",
+    "AssetInfoBase_for_Addr": {
+      "description": "Represents the type of an fungible asset\n\nEach **asset info** instance can be one of two variants:\n\n- CW20 tokens. To create an **asset info** instance of this type, provide the contract address. - Native SDK coins. To create an **asset info** instance of this type, provide the denomination.",
       "anyOf": [
         {
-          "description": "Token",
           "type": "object",
           "required": [
-            "token"
+            "cw20"
           ],
           "properties": {
-            "token": {
-              "type": "object",
-              "required": [
-                "contract_addr"
-              ],
-              "properties": {
-                "contract_addr": {
-                  "$ref": "#/definitions/Addr"
-                }
-              }
+            "cw20": {
+              "$ref": "#/definitions/Addr"
             }
           },
           "additionalProperties": false
         },
         {
-          "description": "Native token",
           "type": "object",
           "required": [
-            "native_token"
+            "native"
           ],
           "properties": {
-            "native_token": {
-              "type": "object",
-              "required": [
-                "denom"
-              ],
-              "properties": {
-                "denom": {
-                  "type": "string"
-                }
-              }
+            "native": {
+              "type": "string"
             }
           },
           "additionalProperties": false

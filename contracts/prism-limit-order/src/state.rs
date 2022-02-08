@@ -3,7 +3,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Addr, Decimal, Order, StdResult, Storage, Uint128};
-use prismswap::asset::{Asset, AssetInfo};
+use cw_asset::{Asset, AssetInfo};
+use prismswap::asset::PrismSwapAssetInfo;
 
 use prism_protocol::limit_order::{ConfigResponse, OrderBy, OrderResponse};
 

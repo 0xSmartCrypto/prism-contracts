@@ -17,15 +17,13 @@ pub struct InstantiateMsg {
     pub snapshot_period: u64,
     pub redemption_time: u64,
     pub poll_gas_limit: u64,
+    pub token_code_id: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
-    PostInitialize {
-        xprism_token: String,
-    },
     UpdateConfig {
         owner: Option<String>,
         quorum: Option<Decimal>,
@@ -113,11 +111,13 @@ pub enum QueryMsg {
         limit: Option<u32>,
         order_by: Option<OrderBy>,
     },
+    XprismState {},
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
+    pub prism_token: String,
     pub xprism_token: String,
     pub quorum: Decimal,
     pub threshold: Decimal,
@@ -181,6 +181,15 @@ pub struct VoterInfo {
 pub struct PrismWithdrawOrdersResponse {
     pub claimable_amount: Uint128,
     pub orders: Vec<(u64, Uint128)>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct XprismStateResponse {
+    pub exchange_rate: Decimal, // PRISM per xPRISM
+    pub effective_xprism_supply: Uint128,
+    pub effective_underlying_prism: Uint128,
+    pub total_pending_withdraw_xprism: Uint128,
+    pub total_pending_withdraw_prism: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

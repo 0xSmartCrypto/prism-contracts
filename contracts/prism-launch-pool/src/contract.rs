@@ -10,6 +10,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use cw_asset::{Asset, AssetInfo};
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, VestingStatusResponse,
 };
@@ -17,8 +18,6 @@ use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
     RewardAssetWhitelistResponse,
 };
-use prismswap::asset::{Asset, AssetInfo};
-use prismswap::querier::{query_balance, query_token_balance};
 use std::cmp::min;
 use std::convert::TryInto;
 
@@ -112,14 +111,7 @@ pub fn to_asset_balance(
     address: &Addr,
     asset_info: &AssetInfo,
 ) -> StdResult<Asset> {
-    let amount = match asset_info.clone() {
-        AssetInfo::Token { contract_addr } => query_token_balance(
-            &deps.querier,
-            Addr::unchecked(contract_addr),
-            address.clone(),
-        )?,
-        AssetInfo::NativeToken { denom } => query_balance(&deps.querier, address.clone(), denom)?,
-    };
+    let amount = asset_info.query_balance(&deps.querier, address)?;
 
     Ok(Asset {
         info: asset_info.clone(),
@@ -184,7 +176,7 @@ pub fn admin_send_withdrawn_rewards(
         };
 
         if !send_asset.amount.is_zero() {
-            messages.push(send_asset.into_msg(&deps.querier, cfg.owner.clone())?);
+            messages.push(send_asset.transfer_msg(cfg.owner.clone())?);
         }
     }
 

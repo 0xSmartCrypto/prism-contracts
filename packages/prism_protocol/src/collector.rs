@@ -1,4 +1,5 @@
-use prismswap::asset::Asset;
+use cosmwasm_std::{Addr, Uint128};
+use cw_asset::{Asset, AssetInfo};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +17,7 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     /// Any user can call convert to swap the asset tokens that collector holds
     /// for $PRISM, the resulting $PRISM is sent to distribution_contract
-    Distribute { asset_tokens: Vec<String> },
+    Distribute { asset_infos: Vec<AssetInfo> },
     /// Any user can call ConvertAndSend to swap the provided assets to
     /// $PRISM and send to the reciver address (or sender if empty)
     /// Requires the sender to increase allowance for the requested assets
@@ -26,7 +27,11 @@ pub enum ExecuteMsg {
     },
     /// Hook to swap base_denom for $PRISM,
     /// Called when there is not direct pair with requested asset_token
-    BaseSwapHook { receiver: Option<String> },
+    /// Permissioned for internal calls only
+    BaseSwapHook {
+        receiver: Addr,
+        prev_base_balance: Uint128,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -3,8 +3,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Addr, Decimal, Uint128};
+use cw_asset::AssetInfo;
 use cw_storage_plus::{Item, Map};
-use prismswap::asset::AssetInfo;
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const WHITELISTED_ASSETS: Item<Vec<AssetInfo>> = Item::new("whitelisted_assets");

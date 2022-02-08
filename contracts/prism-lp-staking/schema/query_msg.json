@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "QueryMsg",
-  "anyOf": [
+  "oneOf": [
     {
       "type": "object",
       "required": [
@@ -48,12 +48,6 @@
           "properties": {
             "staker": {
               "type": "string"
-            },
-            "staking_token": {
-              "type": [
-                "string",
-                "null"
-              ]
             }
           }
         }

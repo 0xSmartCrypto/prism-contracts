@@ -2,7 +2,7 @@ use crate::contract::{pull_pending_rewards, update_reward_index};
 use crate::error::ContractError;
 use crate::state::{CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage, Uint128};
-use prismswap::asset::{Asset, AssetInfo};
+use cw_asset::{Asset, AssetInfo};
 use std::convert::TryInto;
 
 // seconds in a day, make time discrete per day
@@ -88,10 +88,8 @@ pub fn claim_withdrawn_rewards(
         &Uint128::zero(),
     )?;
     let to_withdraw = Asset {
-        info: AssetInfo::Token {
-            contract_addr: cfg.prism_token,
-        },
+        info: AssetInfo::Cw20(cfg.prism_token),
         amount,
     };
-    Ok(Response::new().add_message(to_withdraw.into_msg(&deps.querier, info.sender)?))
+    Ok(Response::new().add_message(to_withdraw.transfer_msg(info.sender)?))
 }

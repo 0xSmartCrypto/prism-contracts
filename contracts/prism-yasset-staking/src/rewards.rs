@@ -9,9 +9,10 @@ use crate::state::{
 };
 
 use cw20::Cw20ExecuteMsg;
+use cw_asset::{Asset, AssetInfo};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::yasset_staking::{RewardInfoResponse, StakingMode};
-use prismswap::asset::{Asset, AssetInfo};
+use prismswap::asset::PrismSwapAssetInfo;
 use terra_cosmwasm::TerraMsgWrapper;
 
 // deposit whitelisted reward assets
@@ -44,11 +45,7 @@ pub fn deposit_rewards(
         }
 
         // no need to handle native tokens, because native tokens can not be whitelisted
-        if let AssetInfo::Token {
-            contract_addr: token_addr,
-            ..
-        } = &asset.info
-        {
+        if let AssetInfo::Cw20(token_addr) = &asset.info {
             if env.contract.address != info.sender {
                 messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: token_addr.to_string(),
@@ -62,7 +59,7 @@ pub fn deposit_rewards(
             }
 
             let mut pool_info = POOL_INFO
-                .load(deps.storage, asset.info.to_string().as_bytes())
+                .load(deps.storage, asset.info.as_bytes())
                 .unwrap_or_default();
 
             let stakers_portion_amount = asset.amount * stakers_portion;
@@ -83,7 +80,7 @@ pub fn deposit_rewards(
                 let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond_amount);
                 pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
 
-                POOL_INFO.save(deps.storage, asset.info.to_string().as_bytes(), &pool_info)?;
+                POOL_INFO.save(deps.storage, asset.info.as_bytes(), &pool_info)?;
             }
         }
     }
@@ -124,7 +121,7 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
         // save updated reward
         REWARDS.save(
             deps.storage,
-            (info.sender.as_bytes(), asset_info.to_string().as_bytes()),
+            (info.sender.as_bytes(), asset_info.as_bytes()),
             &reward_info,
         )?;
 
@@ -133,9 +130,9 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
             continue;
         }
 
-        if staking_mode == StakingMode::Default || asset_info.to_string() == cfg.prism_token {
-            // re-implement into_msg here because life is cruel
-            if let AssetInfo::Token { contract_addr } = asset_info {
+        if let AssetInfo::Cw20(contract_addr) = asset_info {
+            if staking_mode == StakingMode::Default || contract_addr == cfg.prism_token {
+                // re-implement into_msg here because life is cruel
                 messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: contract_addr.to_string(),
                     msg: to_binary(&Cw20ExecuteMsg::Transfer {
@@ -145,21 +142,20 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
                     funds: vec![],
                 }))
             } else {
-                // this is a logic error in the code, native reward assets not allowed
-                panic!("Native reward assets not supported");
+                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: contract_addr.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                        spender: cfg.collector.to_string(),
+                        amount: claim_asset.amount,
+                        expires: None,
+                    })?,
+                    funds: vec![],
+                }));
+                assets_to_swap.push(claim_asset.clone());
             }
         } else {
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: asset_info.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                    spender: cfg.collector.to_string(),
-                    amount: claim_asset.amount,
-                    expires: None,
-                })?,
-                funds: vec![],
-            }));
-
-            assets_to_swap.push(claim_asset.clone());
+            // this is a logic error in the code, native reward assets not allowed
+            return Err(StdError::generic_err("Native reward assets not supported"));
         }
 
         attributes.push(attr("claimed_asset", format!("{}", &claim_asset)));
@@ -189,23 +185,21 @@ pub fn compute_asset_rewards(
     asset_info: &AssetInfo,
 ) -> StdResult<RewardInfo> {
     let pool_info = POOL_INFO
-        .load(storage, asset_info.to_string().as_bytes())
+        .load(storage, asset_info.as_bytes())
         .unwrap_or_default();
 
-    let mut reward_info: RewardInfo = match REWARDS.load(
-        storage,
-        (staker.as_bytes(), asset_info.to_string().as_bytes()),
-    ) {
-        Ok(mut info) => {
-            let pending_reward =
-                (bond_amount * pool_info.reward_index).checked_sub(bond_amount * info.index)?;
+    let mut reward_info: RewardInfo =
+        match REWARDS.load(storage, (staker.as_bytes(), asset_info.as_bytes())) {
+            Ok(mut info) => {
+                let pending_reward =
+                    (bond_amount * pool_info.reward_index).checked_sub(bond_amount * info.index)?;
 
-            info.pending_reward += pending_reward;
+                info.pending_reward += pending_reward;
 
-            info
-        }
-        Err(_) => RewardInfo::default(),
-    };
+                info
+            }
+            Err(_) => RewardInfo::default(),
+        };
 
     reward_info.index = pool_info.reward_index;
     Ok(reward_info)
@@ -221,11 +215,7 @@ pub fn compute_all_rewards(
         let reward_info = compute_asset_rewards(storage, staker, bond_amount, asset)?;
 
         // save updated reward
-        REWARDS.save(
-            storage,
-            (staker.as_bytes(), asset.to_string().as_bytes()),
-            &reward_info,
-        )?;
+        REWARDS.save(storage, (staker.as_bytes(), asset.as_bytes()), &reward_info)?;
     }
 
     Ok(())

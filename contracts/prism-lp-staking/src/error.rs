@@ -18,6 +18,12 @@ pub enum ContractError {
     #[error("Cannot unbond more than bond amount")]
     InvalidUnbondAmount {},
 
+    #[error("Current bond amount is zero")]
+    NothingAvailableToUnbond {},
+
+    #[error("Current withdrawable amount is zero")]
+    NothingAvailableToWithdraw {},
+
     #[error("Invalid Cw20 msg")]
     InvalidCw20Msg {},
 
@@ -26,4 +32,10 @@ pub enum ContractError {
 
     #[error("Duplicate staking token")]
     DuplicateStakingToken {},
+
+    #[error("The staking token is already registered")]
+    AlreadyExists {},
+
+    #[error("Can only execute one unbond operation per block")]
+    UnbondOrderOverwrite {},
 }

@@ -19,13 +19,28 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "astroport"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e584f958fdd1eba188f5c45fd174f670e04db9bf5ca5d60edcc89de581135434"
+dependencies = [
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20 0.8.1",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+ "uint",
+]
+
+[[package]]
+name = "astroport"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b56c6d8a5a14a5f569a3473a962ed1d12bfec2a19ef43584c86aae5667bdeaa8"
 dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
- "cw20",
+ "cw20 0.8.1",
  "schemars",
  "serde",
  "terra-cosmwasm",
@@ -356,6 +371,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cw-asset"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7c9abacef91caa3e5a18b07c28d9d0f709de0779bf6bb1b92161e830f66024f"
+dependencies = [
+ "astroport 0.3.1",
+ "cosmwasm-std",
+ "cw20 0.9.1",
+ "schemars",
+ "serde",
+]
+
+[[package]]
 name = "cw-storage-plus"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -371,6 +399,18 @@ name = "cw0"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c497f885a40918a02df7d938c81809965fa05cfc21b3dc591e9950237b5de0a9"
+dependencies = [
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "cw0"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d759bb5418a3bdf091e1f1be17de2a15d95d2be4fee28045c2e461f4c6d9d1ca"
 dependencies = [
  "cosmwasm-std",
  "schemars",
@@ -397,7 +437,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a11a2adbd52258f5b4ed5323f62bc6e559f2cefbe52ef0e58290016fde5bb083"
 dependencies = [
  "cosmwasm-std",
- "cw0",
+ "cw0 0.8.1",
+ "schemars",
+ "serde",
+]
+
+[[package]]
+name = "cw20"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac49b013ca1e355fd988cc1926acc9a16d7fd45cfb595ee330455582a788b100"
+dependencies = [
+ "cosmwasm-std",
+ "cw0 0.9.1",
  "schemars",
  "serde",
 ]
@@ -889,7 +941,7 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
  "cw2",
- "cw20",
+ "cw20 0.8.1",
  "prism-protocol",
  "schemars",
  "serde",
@@ -899,27 +951,32 @@ dependencies = [
 name = "prism-collector"
 version = "1.0.0"
 dependencies = [
+ "astroport 0.3.1",
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-asset",
  "cw-storage-plus",
+ "cw0 0.8.1",
  "cw2",
- "cw20",
+ "cw20 0.8.1",
  "prism-common",
  "prism-protocol",
  "prismswap",
  "schemars",
  "serde",
  "terra-cosmwasm",
+ "thiserror",
 ]
 
 [[package]]
 name = "prism-common"
 version = "1.0.0"
 dependencies = [
- "astroport",
+ "astroport 1.0.1",
  "cosmwasm-schema",
  "cosmwasm-std",
- "cw20",
+ "cw-asset",
+ "cw20 0.8.1",
  "prism-protocol",
  "prismswap",
  "schemars",
@@ -936,7 +993,7 @@ dependencies = [
  "cosmwasm-storage",
  "cw-storage-plus",
  "cw2",
- "cw20",
+ "cw20 0.8.1",
  "hex",
  "prism-common",
  "prism-protocol",
@@ -951,13 +1008,13 @@ version = "1.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-asset",
  "cw-storage-plus",
  "cw2",
- "cw20",
+ "cw20 0.8.1",
  "hex",
  "prism-common",
  "prism-protocol",
- "prismswap",
  "schemars",
  "serde",
  "serde_json",
@@ -970,9 +1027,10 @@ version = "1.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-asset",
  "cw-storage-plus",
  "cw2",
- "cw20",
+ "cw20 0.8.1",
  "prism-common",
  "prism-protocol",
  "prismswap",
@@ -990,8 +1048,10 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
  "cw2",
- "cw20",
+ "cw20 0.8.1",
+ "prism-common",
  "prism-protocol",
+ "prismswap",
  "schemars",
  "serde",
  "thiserror",
@@ -1003,11 +1063,12 @@ version = "1.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
- "cw20",
- "prismswap",
+ "cw-asset",
+ "cw20 0.8.1",
  "schemars",
  "serde",
  "terra-cosmwasm",
+ "thiserror",
 ]
 
 [[package]]
@@ -1017,10 +1078,11 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-vm",
+ "cw-asset",
  "cw-storage-plus",
- "cw0",
+ "cw0 0.8.1",
  "cw2",
- "cw20",
+ "cw20 0.8.1",
  "prism-common",
  "prism-protocol",
  "prismswap",
@@ -1037,9 +1099,10 @@ version = "1.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-asset",
  "cw-storage-plus",
  "cw2",
- "cw20",
+ "cw20 0.8.1",
  "prism-common",
  "prism-protocol",
  "prismswap",
@@ -1050,12 +1113,13 @@ dependencies = [
 
 [[package]]
 name = "prismswap"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
+ "cw-asset",
  "cw-storage-plus",
- "cw20",
+ "cw20 0.8.1",
  "schemars",
  "serde",
  "terra-cosmwasm",

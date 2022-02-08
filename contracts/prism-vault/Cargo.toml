@@ -37,17 +37,18 @@ backtraces = ["cosmwasm-std/backtraces"]
 cw0 = { version = "0.8.0" }
 cw2 = "0.8.0"
 cw20 = { version = "0.8.0" }
+cw-asset = { version = "0.3.4", features = ["legacy"] }
 cosmwasm-std = { version = "0.16.0", features = ["iterator", "staking"] }
 cw-storage-plus = { version = "0.8.0", features = ["iterator"] }
 terra-cosmwasm = { version = "2.2.0" }
 schemars = "0.8.1"
-prismswap = { path = "../../packages/prismswap", default-features = false, version = "0.1.0"}
+prismswap = { path = "../../packages/prismswap", version = "1.0.0"}
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 rand = "0.5.0"
-prism-protocol = { path = "../../packages/prism_protocol", default-features = false, version = "1.0.0"}
+prism-protocol = { path = "../../packages/prism_protocol", version = "1.0.0", features = ["internal"]}
 signed_integer = { path = "../../packages/signed_integers", default-features = false, version = "0.1.0"}
 
 [dev-dependencies]
 cosmwasm-vm = { version = "0.16.0", default-features = false, features = ["iterator"] }
 cosmwasm-schema = "0.16.0"
-prism-common = { path = "../../packages/prism_common", default-features = false, version = "1.0.0"}
+prism-common = { path = "../../packages/prism_common", version = "1.0.0"}

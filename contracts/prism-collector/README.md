@@ -1,11 +1,18 @@
 # Prism Collector
 
-This contract is responsible for collecting protocol fee rewards and unstaked y-asset delegator rewards from the yasset-staking contract, converting those rewards to PRISM, and sending those PRISM tokens to the [gov](/contracts/prism-gov) contract. Additionally, when the yasset staker has elected to stake with xprism staking mode, this contract provides functionality to swap input assets to PRISM and send them back to the specified receiver.
+This contract is responsible for collecting protocol fees, converting those assets to PRISM, and sending the resulting PRISM tokens to the [gov](/contracts/prism-gov) contract, which results in xPRISM accruing value.  
+
+Sources of protocol fees include:
+- all delegator rewards from unstaked y-assets (denominated in pluna/yluna)
+- 10% of delegator from staked y-assets (denominated in pluna/yluna)
+- all airdrop rewards from unstaked y-assets (denominated in airdrop token)
+- 10% of airdrop rewards from staked y-assets (denominated in airdrop token)
+- all prismswap protocol fees (denominated in the ask asset from every swap)
 
 ## ExecuteMsg:
-- **ConvertAndSend**: Convert the input assets into PRISM (via astroport) and send the resulting PRISM to the specified receiver.  This contains logic to perform an intermediate swap to UST if there is no direct pair from input asset to PRISM.  This method is called by the [yasset-staking](/contracts/prism-yasset-staking) when claiming rewards but only if the staker is staking with xprism mode. 
-- **Distribute**: Convert our current balance of the input tokens into PRISM (via astroport) and send the resulting PRISM to the [gov](/contracts/prism-gov) contract.  This method also contains logic to perform an intermediate swap to UST if there is no direct pair from input token to PRISM.  This method is called by ???.  
-- **BaseSwapHook**: Hook when we need an intermediate swap to UST, this method converts our UST balance to PRISM and sends to the configured receiver.  The receiver will either be the yasset staker or the governance contract, depending on whether this was called from ConvertAndSend or Distribute.  
+- **ConvertAndSend**: Convert the input assets into PRISM and send the resulting PRISM to the specified receiver.
+- **Distribute**: Convert our current balance of the specified assets into PRISM and sends the resulting PRISM to the [gov](/contracts/prism-gov) contract.  This method is executed at random intervals by an automated bot.  
+- **BaseSwapHook**: Hook when we need an intermediate swap to UST, this method converts our entire UST balance to PRISM and sends to the configured receiver.  
 
 ## QueryMsg:
 - **Config**: Retrieves configuration information for this contract.

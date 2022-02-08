@@ -4,7 +4,7 @@ use cosmwasm_std::{
     StdError, SubMsg, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
-use prismswap::asset::{Asset, AssetInfo};
+use cw_asset::{Asset, AssetInfo};
 use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
@@ -416,15 +416,11 @@ fn test_deposit_minted_pyluna_hook() {
             msg: to_binary(&ExecuteMsg::DepositRewards {
                 assets: vec![
                     Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("yluna0000".to_string()),
-                        },
+                        info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                         amount: Uint128::from(1000000u128),
                     },
                     Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("pluna0000".to_string()),
-                        },
+                        info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
                         amount: Uint128::from(1000000u128),
                     },
                 ]
@@ -448,12 +444,8 @@ fn test_whitelist() {
         res,
         RewardAssetWhitelistResponse {
             assets: vec![
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000".to_string())
-                },
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000".to_string())
-                }
+                AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+                AssetInfo::Cw20(Addr::unchecked("yluna0000")),
             ]
         }
     );
@@ -461,9 +453,7 @@ fn test_whitelist() {
     // whitelist one more
 
     let msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::Token {
-            contract_addr: Addr::unchecked("mir0000".to_string()),
-        },
+        asset: AssetInfo::Cw20(Addr::unchecked("mir0000")),
     };
 
     // unauth attempt
@@ -478,7 +468,7 @@ fn test_whitelist() {
         res.attributes,
         vec![
             attr("action", "whitelist_reward_asset"),
-            attr("whitelisted_asset", "mir0000"),
+            attr("whitelisted_asset", "cw20:mir0000"),
         ]
     );
 
@@ -489,24 +479,16 @@ fn test_whitelist() {
         res,
         RewardAssetWhitelistResponse {
             assets: vec![
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000".to_string())
-                },
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000".to_string())
-                },
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("mir0000".to_string())
-                }
+                AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+                AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+                AssetInfo::Cw20(Addr::unchecked("mir0000")),
             ]
         }
     );
 
     // try to register native asset
     let msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::NativeToken {
-            denom: "uusd".to_string(),
-        },
+        asset: AssetInfo::Native("uusd".to_string()),
     };
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(
@@ -516,9 +498,7 @@ fn test_whitelist() {
 
     // remove whiteslited asset
     let msg = ExecuteMsg::RemoveRewardAsset {
-        asset: AssetInfo::Token {
-            contract_addr: Addr::unchecked("yluna0000".to_string()),
-        },
+        asset: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
     };
 
     // unauth attempt
@@ -533,7 +513,7 @@ fn test_whitelist() {
         res.attributes,
         vec![
             attr("action", "remove_whitelisted_reward_asset"),
-            attr("removed_asset", "yluna0000"),
+            attr("removed_asset", "cw20:yluna0000"),
         ]
     );
 
@@ -545,21 +525,15 @@ fn test_whitelist() {
         res,
         RewardAssetWhitelistResponse {
             assets: vec![
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000".to_string())
-                },
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked("mir0000".to_string())
-                }
+                AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+                AssetInfo::Cw20(Addr::unchecked("mir0000")),
             ]
         }
     );
 
     // try to remove non whitelisted asset
     let msg = ExecuteMsg::RemoveRewardAsset {
-        asset: AssetInfo::Token {
-            contract_addr: Addr::unchecked("random0000".to_string()),
-        },
+        asset: AssetInfo::Cw20(Addr::unchecked("random0000")),
     };
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(err, StdError::generic_err("this asset is not whitelisted"));
@@ -576,9 +550,7 @@ fn test_internal_deposit_rewards() {
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![Asset {
             amount: Uint128::from(100u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("mir0000".to_string()),
-            },
+            info: AssetInfo::Cw20(Addr::unchecked("mir0000")),
         }],
     };
 
@@ -586,7 +558,7 @@ fn test_internal_deposit_rewards() {
     let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
     assert_eq!(
         err,
-        StdError::generic_err("asset mir0000 is not whitelisted")
+        StdError::generic_err("asset cw20:mir0000 is not whitelisted")
     );
 
     // deposit when bond amount is zero
@@ -595,15 +567,11 @@ fn test_internal_deposit_rewards() {
         assets: vec![
             Asset {
                 amount: Uint128::from(1000u128),
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("yluna0000".to_string()),
-                },
+                info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
             },
             Asset {
                 amount: Uint128::from(1000u128),
-                info: AssetInfo::Token {
-                    contract_addr: Addr::unchecked("pluna0000".to_string()),
-                },
+                info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
             },
         ],
     };
@@ -646,9 +614,7 @@ fn test_internal_deposit_rewards() {
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![Asset {
             amount: Uint128::from(5000u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("yluna0000".to_string()),
-            },
+            info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
         }],
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -691,9 +657,7 @@ fn test_external_deposit_rewards() {
     init(&mut deps);
 
     let msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::Token {
-            contract_addr: Addr::unchecked("mir0000".to_string()),
-        },
+        asset: AssetInfo::Cw20(Addr::unchecked("mir0000")),
     };
     let info = mock_info("gov0000", &[]);
     execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -703,9 +667,7 @@ fn test_external_deposit_rewards() {
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![Asset {
             amount: Uint128::from(1000u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("mir0000".to_string()),
-            },
+            info: AssetInfo::Cw20(Addr::unchecked("mir0000")),
         }],
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -755,9 +717,7 @@ fn test_claim_rewards() {
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![Asset {
             amount: Uint128::from(100u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("yluna0000".to_string()),
-            },
+            info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
         }],
     };
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
@@ -782,15 +742,11 @@ fn test_claim_rewards() {
             staking_mode: None,
             rewards: vec![
                 Asset {
-                    info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked("pluna0000".to_string())
-                    },
+                    info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
                     amount: Uint128::from(0u128)
                 },
                 Asset {
-                    info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked("yluna0000".to_string())
-                    },
+                    info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                     amount: Uint128::from(90u128)
                 }
             ]
@@ -810,7 +766,7 @@ fn test_claim_rewards() {
         res.attributes,
         vec![
             attr("action", "claim_rewards"),
-            attr("claimed_asset", "90yluna0000"),
+            attr("claimed_asset", "cw20:yluna0000:90"),
         ]
     );
     assert_eq!(
@@ -849,9 +805,7 @@ fn test_claim_rewards_xprism_mode() {
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![Asset {
             amount: Uint128::from(100u128),
-            info: AssetInfo::Token {
-                contract_addr: Addr::unchecked("yluna0000".to_string()),
-            },
+            info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
         }],
     };
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
@@ -876,15 +830,11 @@ fn test_claim_rewards_xprism_mode() {
             staking_mode: Some(StakingMode::XPrism),
             rewards: vec![
                 Asset {
-                    info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked("pluna0000".to_string())
-                    },
+                    info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
                     amount: Uint128::from(0u128)
                 },
                 Asset {
-                    info: AssetInfo::Token {
-                        contract_addr: Addr::unchecked("yluna0000".to_string())
-                    },
+                    info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                     amount: Uint128::from(90u128)
                 }
             ]
@@ -899,7 +849,7 @@ fn test_claim_rewards_xprism_mode() {
         res.attributes,
         vec![
             attr("action", "claim_rewards"),
-            attr("claimed_asset", "90yluna0000"),
+            attr("claimed_asset", "cw20:yluna0000:90"),
         ]
     );
     assert_eq!(
@@ -919,9 +869,7 @@ fn test_claim_rewards_xprism_mode() {
                 contract_addr: "collector0000".to_string(),
                 msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
                     assets: vec![Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("yluna0000")
-                        },
+                        info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
                         amount: Uint128::from(90u128),
                     }],
                     receiver: Some("alice0000".to_string()),

@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::testing::{mock_env, mock_info};
-use prismswap::asset::{Asset, AssetInfo};
+use cw_asset::{Asset, AssetInfo};
 
 use crate::config::MAX_VALIDATORS;
 use crate::contract::{execute, instantiate, query};
@@ -3203,9 +3203,7 @@ fn proper_deposit_airdrop_reward() {
                 contract_addr: YLUNA_STAKING.to_string(),
                 msg: to_binary(&StakingExecuteMsg::DepositRewards {
                     assets: vec![Asset {
-                        info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked("airdrop_token"),
-                        },
+                        info: AssetInfo::Cw20(Addr::unchecked("airdrop_token")),
                         amount: Uint128::from(1000u128)
                     }],
                 })

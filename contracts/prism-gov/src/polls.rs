@@ -126,7 +126,7 @@ pub fn end_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Response> {
     let total_supply = match a_poll.supply_snapshot {
         Some(v) => v,
         None => {
-            let supply = query_supply(&deps.querier, xprism_addr.clone())?;
+            let supply = query_supply(&deps.querier, &xprism_addr)?;
             a_poll.supply_snapshot = Some(supply);
 
             supply
@@ -324,7 +324,7 @@ pub fn cast_vote(
     if time_to_end < config.snapshot_period && a_poll.supply_snapshot.is_none() {
         let supply = query_supply(
             &deps.querier,
-            deps.api.addr_humanize(&config.xprism_token.unwrap())?,
+            &deps.api.addr_humanize(&config.xprism_token.unwrap())?,
         )?;
         a_poll.supply_snapshot = Some(supply);
     }
@@ -365,7 +365,7 @@ pub fn snapshot_poll(deps: DepsMut, env: Env, poll_id: u64) -> StdResult<Respons
     // store the current supply amount for quorum calculation
     let supply = query_supply(
         &deps.querier,
-        deps.api.addr_humanize(&config.xprism_token.unwrap())?,
+        &deps.api.addr_humanize(&config.xprism_token.unwrap())?,
     )?;
 
     a_poll.supply_snapshot = Some(supply);
