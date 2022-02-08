@@ -87,6 +87,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         validator,
         token_admin: "admin0000".to_string(),
         token_code_id: 6u64,
+        manager: "manager0000".to_string(),
     };
 
     let owner_info = mock_info(owner, &[coin(1000000, UNDERLYING_COIN_DENOM)]);
@@ -121,6 +122,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         owner: None,
         yluna_staking: Some(yluna_staking.to_string()),
         airdrop_registry_contract: Some("airdrop_registry".to_string()),
+        manager: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), owner_info, register_msg).unwrap();
@@ -184,6 +186,7 @@ fn proper_initialization() {
         validator: validator.address.clone(),
         token_admin: "admin0000".to_string(),
         token_code_id: 3u64,
+        manager: "manager0000".to_string(),
     };
 
     let init_amt = 1_000_000;
@@ -400,6 +403,7 @@ fn proper_initialization() {
         cluna_contract: "cluna".to_string(),
         airdrop_registry_contract: "".to_string(),
         initialized: false,
+        manager: "manager0000".to_string(),
     };
 
     assert_eq!(expected_conf, query_conf);
@@ -974,6 +978,7 @@ fn proper_deregister() {
     //must be able to deregister while there is no delegation
     let msg = ExecuteMsg::DeregisterValidator {
         validator: validator.address.clone(),
+        redel_validator: validator2.address.clone(),
     };
 
     let owner_info = mock_info(OWNER, &[]);
@@ -984,7 +989,7 @@ fn proper_deregister() {
         vec![
             attr("action", "de_register_validator"),
             attr("validator", validator.address.clone()),
-            attr("new-validator", validator2.address.clone()),
+            attr("redel_validator", validator2.address.clone()),
         ]
     );
 
@@ -1001,6 +1006,7 @@ fn proper_deregister() {
     // check invalid sender
     let msg = ExecuteMsg::DeregisterValidator {
         validator: validator.address.clone(),
+        redel_validator: validator2.address.clone(),
     };
 
     let invalid_info = mock_info("invalid", &[]);
@@ -1009,6 +1015,7 @@ fn proper_deregister() {
 
     let msg = ExecuteMsg::DeregisterValidator {
         validator: validator.address.clone(),
+        redel_validator: validator2.address.clone(),
     };
 
     let owner_info = mock_info(OWNER, &[]);
@@ -1056,7 +1063,8 @@ fn proper_deregister() {
 
     // fails if there is only one validator
     let msg = ExecuteMsg::DeregisterValidator {
-        validator: validator2.address,
+        validator: validator2.address.clone(),
+        redel_validator: validator2.address,
     };
 
     let owner_info = mock_info(OWNER, &[]);
@@ -2966,6 +2974,7 @@ pub fn proper_update_config() {
         validator: validator.address,
         token_admin: "admin0000".to_string(),
         token_code_id: 0u64,
+        manager: "manager0000".to_string(),
     };
 
     let owner_info = mock_info(OWNER, &[coin(1000000, "uluna")]);
@@ -2976,6 +2985,7 @@ pub fn proper_update_config() {
         owner: Some(new_owner.clone()),
         yluna_staking: None,
         airdrop_registry_contract: None,
+        manager: None,
     };
     let info = mock_info(&invalid_owner, &[]);
     let res = execute(deps.as_mut(), mock_env(), info, update_config);
@@ -2986,6 +2996,7 @@ pub fn proper_update_config() {
         owner: Some(new_owner.clone()),
         yluna_staking: None,
         airdrop_registry_contract: None,
+        manager: None,
     };
     let info = mock_info(OWNER, &[]);
     let res = execute(deps.as_mut(), mock_env(), info, update_config).unwrap();
@@ -3022,6 +3033,7 @@ pub fn proper_update_config() {
         owner: None,
         yluna_staking: Some("new reward".to_string()),
         airdrop_registry_contract: None,
+        manager: None,
     };
     let new_owner_info = mock_info(&new_owner, &[]);
     let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_config).unwrap();
@@ -3045,6 +3057,7 @@ pub fn proper_update_config() {
         owner: None,
         yluna_staking: None,
         airdrop_registry_contract: Some("new airdrop".to_string()),
+        manager: None,
     };
     let new_owner_info = mock_info(&new_owner, &[]);
     let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_config).unwrap();

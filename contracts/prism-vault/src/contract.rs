@@ -8,8 +8,8 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 
 use crate::config::{
-    execute_deregister_validator, execute_register_validator, execute_update_config,
-    execute_update_params, set_token_address,
+    execute_deregister_validator, execute_redelegate, execute_register_validator,
+    execute_update_config, execute_update_params, set_token_address,
 };
 
 use crate::state::{
@@ -61,6 +61,7 @@ pub fn instantiate(
         initialized: false, // will be set to true once yluna_staking and airdrop registry addresses are set
         token_code_id: msg.token_code_id,
         token_admin: deps.api.addr_validate(&msg.token_admin)?,
+        manager: deps.api.addr_validate(&msg.manager)?,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -159,9 +160,10 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::RegisterValidator { validator } => {
             execute_register_validator(deps, env, info, validator)
         }
-        ExecuteMsg::DeregisterValidator { validator } => {
-            execute_deregister_validator(deps, env, info, validator)
-        }
+        ExecuteMsg::DeregisterValidator {
+            validator,
+            redel_validator,
+        } => execute_deregister_validator(deps, env, info, validator, redel_validator),
         ExecuteMsg::CheckSlashing {} => execute_slashing(deps, env),
         ExecuteMsg::UpdateParams {
             epoch_period,
@@ -181,7 +183,15 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             owner,
             yluna_staking,
             airdrop_registry_contract,
-        } => execute_update_config(deps, info, owner, yluna_staking, airdrop_registry_contract),
+            manager,
+        } => execute_update_config(
+            deps,
+            info,
+            owner,
+            yluna_staking,
+            airdrop_registry_contract,
+            manager,
+        ),
         ExecuteMsg::ClaimAirdrop {
             airdrop_token_contract,
             airdrop_contract,
@@ -199,6 +209,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::DepositAirdropReward {
             airdrop_token_contract,
         } => deposit_airdrop_rewards(deps, env, airdrop_token_contract),
+        ExecuteMsg::Redelgate {
+            source_val,
+            target_val,
+            amount,
+        } => execute_redelegate(deps, env, info, source_val, target_val, amount),
     }
 }
 

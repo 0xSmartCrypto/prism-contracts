@@ -13,6 +13,7 @@ pub struct InstantiateMsg {
     pub validator: String,
     pub token_admin: String,
     pub token_code_id: u64,
+    pub manager: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -27,13 +28,17 @@ pub enum ExecuteMsg {
         owner: Option<String>,
         yluna_staking: Option<String>,
         airdrop_registry_contract: Option<String>,
+        manager: Option<String>,
     },
 
     /// Register receives the reward contract address
     RegisterValidator { validator: String },
 
     /// Remove the validator from validators whitelist
-    DeregisterValidator { validator: String },
+    DeregisterValidator {
+        validator: String,
+        redel_validator: String,
+    },
 
     /// update the parameters that is needed for the contract
     UpdateParams {
@@ -41,6 +46,17 @@ pub enum ExecuteMsg {
         unbonding_period: Option<u64>,
         peg_recovery_fee: Option<Decimal>,
         er_threshold: Option<Decimal>,
+    },
+
+    ////////////////////
+    /// Manager's operations
+    ////////////////////
+
+    /// Redelgates from source validator to target validator
+    Redelgate {
+        source_val: String,
+        target_val: String,
+        amount: Uint128,
     },
 
     ////////////////////
@@ -128,6 +144,7 @@ pub struct ConfigResponse {
     pub yluna_contract: String,
     pub airdrop_registry_contract: String,
     pub initialized: bool,
+    pub manager: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]

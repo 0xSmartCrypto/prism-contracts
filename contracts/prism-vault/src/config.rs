@@ -1,19 +1,18 @@
 use crate::{
     contract::validate_rate,
     state::{
-        read_validators, remove_white_validators, store_white_validators, Parameters, CONFIG,
-        PARAMETERS,
+        is_valid_validator, read_validators, remove_white_validators, store_white_validators,
+        Parameters, CONFIG, PARAMETERS,
     },
 };
 use cosmwasm_std::{
-    attr, to_binary, Addr, Attribute, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env,
-    MessageInfo, Reply, ReplyOn, Response, StakingMsg, StdError, StdResult, SubMsg, WasmMsg,
+    attr, to_binary, Addr, Attribute, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env,
+    MessageInfo, Reply, ReplyOn, Response, StakingMsg, StdError, StdResult, SubMsg, Uint128,
+    WasmMsg,
 };
 use cw20::MinterResponse;
 use prism_protocol::{internal::parse_reply_instantiate_data, vault::ExecuteMsg};
 use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
-
-use rand::{Rng, SeedableRng, XorShiftRng};
 
 pub const MAX_VALIDATORS: u64 = 20;
 
@@ -123,6 +122,7 @@ pub fn execute_update_config(
     owner: Option<String>,
     yluna_staking: Option<String>,
     airdrop_registry_contract: Option<String>,
+    manager: Option<String>,
 ) -> StdResult<Response> {
     // only owner must be able to send this message.
     let mut config = CONFIG.load(deps.storage)?;
@@ -152,6 +152,10 @@ pub fn execute_update_config(
         config.airdrop_registry_contract = deps.api.addr_validate(&airdrop)?;
     }
 
+    if let Some(manager) = manager {
+        config.manager = deps.api.addr_validate(&manager)?;
+    }
+
     let placeholder_addr = Addr::unchecked("");
     if !config.initialized
         && config.yluna_staking.ne(&placeholder_addr)
@@ -175,9 +179,9 @@ pub fn execute_register_validator(
     info: MessageInfo,
     validator: String,
 ) -> StdResult<Response> {
-    let vault_conf = CONFIG.load(deps.storage)?.assert_initialized()?;
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
 
-    if vault_conf.owner != info.sender && env.contract.address != info.sender {
+    if config.owner != info.sender && env.contract.address != info.sender {
         return Err(StdError::generic_err("unauthorized"));
     }
 
@@ -217,15 +221,17 @@ pub fn execute_deregister_validator(
     env: Env,
     info: MessageInfo,
     validator: String,
+    redel_validator: String,
 ) -> StdResult<Response> {
-    let token = CONFIG.load(deps.storage)?.assert_initialized()?;
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     let validator_addr = Addr::unchecked(&validator);
+    let redel_validator = Addr::unchecked(&redel_validator);
 
-    if token.owner != info.sender {
+    if config.owner != info.sender {
         return Err(StdError::generic_err("unauthorized"));
     }
-    let validators_before_remove = read_validators(deps.storage)?;
 
+    let validators_before_remove = read_validators(deps.storage)?;
     if validators_before_remove.len() == 1 {
         return Err(StdError::generic_err(
             "Cannot remove the last whitelisted validator",
@@ -238,23 +244,22 @@ pub fn execute_deregister_validator(
         .querier
         .query_delegation(env.contract.address.clone(), validator.clone());
 
-    let mut replaced_val = Addr::unchecked("");
+    let is_redel_valid = is_valid_validator(deps.storage, &redel_validator)?;
+    if !is_redel_valid {
+        return Err(StdError::generic_err(
+            "The chosen validator to redelegate is currently not supported",
+        ));
+    }
+
     let mut messages: Vec<SubMsg> = vec![];
 
     if let Ok(q) = query {
         let delegated_amount = q;
-        let validators = read_validators(deps.storage)?;
-
-        // redelegate the amount to a random validator.
-        let block_height = env.block.height;
-        let mut rng = XorShiftRng::seed_from_u64(block_height);
-        let random_index = rng.gen_range(0, validators.len());
-        replaced_val = Addr::unchecked(validators.get(random_index).unwrap().as_str());
 
         if let Some(delegation) = delegated_amount {
             messages.push(SubMsg::new(CosmosMsg::Staking(StakingMsg::Redelegate {
                 src_validator: validator.to_string(),
-                dst_validator: replaced_val.to_string(),
+                dst_validator: redel_validator.to_string(),
                 amount: delegation.amount,
             })));
 
@@ -274,6 +279,82 @@ pub fn execute_deregister_validator(
         .add_attributes(vec![
             attr("action", "de_register_validator"),
             attr("validator", validator),
-            attr("new-validator", replaced_val),
+            attr("redel_validator", redel_validator),
+        ]))
+}
+
+/// This operation can only be executed by the owner or manager
+/// Requests a redelegation from source validator to target validator
+pub fn execute_redelegate(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    source_val: String,
+    target_val: String,
+    amount: Uint128,
+) -> StdResult<Response> {
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
+    let params: Parameters = PARAMETERS.load(deps.storage)?;
+
+    let source_val_addr = Addr::unchecked(&source_val);
+    let target_val_addr = Addr::unchecked(&target_val);
+
+    if config.owner != info.sender && config.manager != info.sender {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    let is_source_valid = is_valid_validator(deps.storage, &source_val_addr)?;
+    let is_target_valid = is_valid_validator(deps.storage, &target_val_addr)?;
+
+    if !is_source_valid || !is_target_valid {
+        return Err(StdError::generic_err("Invalid validators"));
+    }
+
+    let del_query_res = deps
+        .querier
+        .query_delegation(env.contract.address.clone(), source_val_addr.clone())?;
+
+    if let Some(delegation) = del_query_res {
+        if delegation.amount.amount.lt(&amount) {
+            return Err(StdError::generic_err(
+                "The delegation of the source validator is less than the requested amount",
+            ));
+        }
+
+        if delegation
+            .can_redelegate
+            .amount
+            .ne(&delegation.amount.amount)
+        {
+            return Err(StdError::generic_err("There is a redelegation in progress"));
+        }
+    } else {
+        return Err(StdError::generic_err(
+            "The source validator delegation is not available",
+        ));
+    };
+
+    let messages: Vec<SubMsg> = vec![
+        SubMsg::new(CosmosMsg::Staking(StakingMsg::Redelegate {
+            src_validator: source_val_addr.to_string(),
+            dst_validator: target_val_addr.to_string(),
+            amount: Coin::new(amount.u128(), params.underlying_coin_denom),
+        })),
+        SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: env.contract.address.to_string(),
+            msg: to_binary(&ExecuteMsg::UpdateGlobalIndex {
+                airdrop_hooks: None,
+            })?,
+            funds: vec![],
+        })),
+    ];
+
+    Ok(Response::new()
+        .add_submessages(messages)
+        .add_attributes(vec![
+            attr("action", "redelegate"),
+            attr("source_validator", source_val),
+            attr("target_validator", target_val),
+            attr("redelegated_amount", amount),
         ]))
 }

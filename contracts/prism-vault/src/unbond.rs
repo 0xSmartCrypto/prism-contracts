@@ -78,7 +78,7 @@ pub(crate) fn execute_unbond(
         // the contract must stop if
         if undelegation_amount == Uint128::new(1) {
             return Err(StdError::generic_err(
-                "Burn amount must be greater than 1 ubluna",
+                "Burn amount must be greater than 1 micro unit",
             ));
         }
 

@@ -69,6 +69,7 @@ pub struct Config {
     pub initialized: bool,
     pub token_admin: Addr,
     pub token_code_id: u64,
+    pub manager: Addr,
 }
 
 impl Config {
@@ -81,6 +82,7 @@ impl Config {
             pluna_contract: self.pluna_contract.to_string(),
             airdrop_registry_contract: self.airdrop_registry_contract.to_string(),
             initialized: self.initialized,
+            manager: self.manager.to_string(),
         }
     }
 
