@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ExecuteMsg",
-  "oneOf": [
+  "anyOf": [
     {
       "description": "Owner's operations Set the owener",
       "type": "object",
@@ -18,25 +18,7 @@
                 "null"
               ]
             },
-            "cluna_contract": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "owner": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "pluna_contract": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "yluna_contract": {
               "type": [
                 "string",
                 "null"

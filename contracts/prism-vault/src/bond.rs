@@ -16,7 +16,7 @@ pub fn execute_bond_split(
     info: MessageInfo,
     validator: Option<String>,
 ) -> StdResult<Response> {
-    let config = CONFIG.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     let (mint_amount_with_fee, mut sub_messages, payment_amt) =
         _execute_bond(deps, &env, &info, &validator)?;
     sub_messages.pop();
@@ -25,7 +25,7 @@ pub fn execute_bond_split(
         .add_submessages(sub_messages)
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.yluna_contract.unwrap(),
+                contract_addr: config.yluna_contract.to_string(),
                 msg: to_binary(&TokenMsg::Mint {
                     recipient: info.sender.clone().into_string(),
                     amount: mint_amount_with_fee,
@@ -33,7 +33,7 @@ pub fn execute_bond_split(
                 funds: vec![],
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.pluna_contract.unwrap(),
+                contract_addr: config.pluna_contract.to_string(),
                 msg: to_binary(&TokenMsg::Mint {
                     recipient: info.sender.clone().into_string(),
                     amount: mint_amount_with_fee,
@@ -111,11 +111,7 @@ pub fn _execute_bond(
     state.update_exchange_rate(total_supply, requested_with_fee);
     STATE.save(deps.storage, &state)?;
 
-    let config = CONFIG.load(deps.storage)?;
-    let token_address = config
-        .cluna_contract
-        .expect("the cluna contract must have been registered");
-
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     Ok((
         mint_amount_with_fee,
         vec![
@@ -127,7 +123,7 @@ pub fn _execute_bond(
                 },
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: token_address,
+                contract_addr: config.cluna_contract.to_string(),
                 msg: to_binary(&TokenMsg::Mint {
                     recipient: sender.to_string(),
                     amount: mint_amount_with_fee,

@@ -1,14 +1,14 @@
 use crate::contract::{query_total_issued, slashing};
 use crate::state::{
     get_finished_amount, get_unbond_batches, read_unbond_history, remove_unbond_wait_list,
-    store_unbond_history, store_unbond_wait_list, CONFIG, CURRENT_BATCH, PARAMETERS, STATE,
+    store_unbond_history, store_unbond_wait_list, State, UnbondHistory, CONFIG, CURRENT_BATCH,
+    PARAMETERS, STATE,
 };
 use cosmwasm_std::{
     attr, coin, coins, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
     Response, StakingMsg, StdError, StdResult, Storage, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
-use prism_protocol::vault::{State, UnbondHistory};
 use rand::{Rng, SeedableRng, XorShiftRng};
 use signed_integer::SignedInt;
 
@@ -17,7 +17,6 @@ use signed_integer::SignedInt;
 pub(crate) fn execute_unbond(
     mut deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
     amount: Uint128,
     sender: String,
 ) -> StdResult<Response> {
@@ -125,14 +124,11 @@ pub(crate) fn execute_unbond(
     STATE.save(deps.storage, &state)?;
 
     // Send Burn message to cluna contract
-    let config = CONFIG.load(deps.storage)?;
-    let cluna_contract = config
-        .cluna_contract
-        .expect("the token contract must have been registered");
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
 
     let burn_msg = Cw20ExecuteMsg::Burn { amount };
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: cluna_contract,
+        contract_addr: config.cluna_contract.to_string(),
         msg: to_binary(&burn_msg)?,
         funds: vec![],
     })));
