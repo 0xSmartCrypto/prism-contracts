@@ -674,7 +674,7 @@ fn proper_bond() {
 }
 
 #[test]
-fn proper_bond_no_validator() {
+fn proper_pick_bond_validator() {
     let mut deps = dependencies(&[]);
 
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
@@ -682,7 +682,8 @@ fn proper_bond_no_validator() {
     set_validator_mock(&mut deps.querier);
 
     let addr1 = "addr1000".to_string();
-    let bond_amount = Uint128::new(10000);
+    let bond_amount = Uint128::new(20000);
+    let bond_amount_2 = Uint128::new(10000);
 
     init(
         deps.borrow_mut(),
@@ -706,18 +707,14 @@ fn proper_bond_no_validator() {
 
     let bond_msg = ExecuteMsg::Bond { validator: None };
 
-    let mut env = mock_env();
-    // verify time is what we think it is to verify the logic to pick the validator
-    assert_eq!(env.block.time.nanos(), 1571797419879305533);
-
-    // bond, expect to bond with second validator (logic uses time.nanos % sorted validator list)
+    // first bond will go to the first validator it will be directly selected since it has the lowest delegation
     let info = mock_info(addr1.as_str(), &[coin(bond_amount.u128(), "uluna")]);
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), bond_msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg.clone()).unwrap();
     assert_eq!(
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
-                validator: validator2.address,
+                validator: validator.address.clone(),
                 amount: Coin {
                     denom: UNDERLYING_COIN_DENOM.to_string(),
                     amount: bond_amount,
@@ -739,30 +736,85 @@ fn proper_bond_no_validator() {
     deps.querier.with_token_balances(&[(
         &"cluna".to_string(),
         &[(
-            &mock_env().contract.address.to_string(),
+            &MOCK_CONTRACT_ADDR.to_string(),
             &(INITIAL_DEPOSIT_AMOUNT + bond_amount),
         )],
     )]);
 
-    // increment time, bond again, expect to bond with first validator
-    env.block.time = env.block.time.plus_nanos(1);
-    let info = mock_info(addr1.as_str(), &[coin(bond_amount.u128(), "uluna")]);
-    let res = execute(deps.as_mut(), env, info.clone(), bond_msg).unwrap();
+    deps.querier.update_staking(
+        "uluna",
+        &[validator.clone(), validator2.clone()],
+        &[sample_delegation(
+            validator.address.clone(),
+            coin(INITIAL_DEPOSIT_AMOUNT.u128() + bond_amount.u128(), "uluna"),
+        )],
+    );
+
+    // now second validator should be selected
+
+    let info = mock_info(addr1.as_str(), &[coin(bond_amount_2.u128(), "uluna")]);
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg.clone()).unwrap();
     assert_eq!(
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
-                validator: validator.address,
+                validator: validator2.address.clone(), // validator 2
                 amount: Coin {
                     denom: UNDERLYING_COIN_DENOM.to_string(),
-                    amount: bond_amount,
+                    amount: bond_amount_2,
                 },
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: CLUNA_CONTRACT.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Mint {
                     recipient: info.sender.to_string(),
-                    amount: bond_amount,
+                    amount: bond_amount_2,
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+        ]
+    );
+
+    // update token balances for proper exchange rate
+    deps.querier.with_token_balances(&[(
+        &"cluna".to_string(),
+        &[(
+            &mock_env().contract.address.to_string(),
+            &(INITIAL_DEPOSIT_AMOUNT + bond_amount + bond_amount_2),
+        )],
+    )]);
+
+    deps.querier.update_staking(
+        "uluna",
+        &[validator.clone(), validator2.clone()],
+        &[sample_delegation(
+            validator.address,
+            coin(
+                INITIAL_DEPOSIT_AMOUNT.u128() + bond_amount.u128() + bond_amount_2.u128(),
+                "uluna",
+            ),
+        )],
+    );
+
+    // now validator 2 should be selcteed again, because bond_amount_2 < bond_amount
+    let info = mock_info(addr1.as_str(), &[coin(bond_amount_2.u128(), "uluna")]);
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
+                validator: validator2.address, // validator 2
+                amount: Coin {
+                    denom: UNDERLYING_COIN_DENOM.to_string(),
+                    amount: bond_amount_2,
+                },
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: CLUNA_CONTRACT.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: info.sender.to_string(),
+                    amount: bond_amount_2,
                 })
                 .unwrap(),
                 funds: vec![],
