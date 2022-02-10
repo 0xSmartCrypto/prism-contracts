@@ -252,7 +252,7 @@ pub fn base_swap_hook(
         &deps,
         &env,
         &config,
-        &vec![base_asset],
+        &[base_asset],
         receiver,
         &dest_asset_info,
     )?;
@@ -273,7 +273,7 @@ pub fn get_swap_msgs(
     deps: &DepsMut,
     env: &Env,
     cfg: &Config,
-    assets: &Vec<Asset>,
+    assets: &[Asset],
     receiver: &Addr,
     dest_asset_info: &AssetInfo,
 ) -> Result<(Vec<CosmosMsg>, bool), ContractError> {
