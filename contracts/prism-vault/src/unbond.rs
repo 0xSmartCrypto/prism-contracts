@@ -1,14 +1,14 @@
 use crate::contract::{query_total_issued, slashing};
 use crate::state::{
     get_finished_amount, get_unbond_batches, read_unbond_history, remove_unbond_wait_list,
-    store_unbond_history, store_unbond_wait_list, CONFIG, CURRENT_BATCH, PARAMETERS, STATE,
+    store_unbond_history, store_unbond_wait_list, State, UnbondHistory, CONFIG, CURRENT_BATCH,
+    PARAMETERS, STATE,
 };
 use cosmwasm_std::{
-    attr, coin, coins, to_binary, BankMsg, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
-    Response, StakingMsg, StdError, StdResult, Storage, SubMsg, Uint128, WasmMsg,
+    attr, coin, coins, to_binary, BankMsg, CosmosMsg, Decimal, DepsMut, Env, MessageInfo,
+    QuerierWrapper, Response, StakingMsg, StdError, StdResult, Storage, SubMsg, Uint128, WasmMsg,
 };
 use cw20::Cw20ExecuteMsg;
-use prism_protocol::vault::{State, UnbondHistory};
 use rand::{Rng, SeedableRng, XorShiftRng};
 use signed_integer::SignedInt;
 
@@ -17,7 +17,6 @@ use signed_integer::SignedInt;
 pub(crate) fn execute_unbond(
     mut deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
     amount: Uint128,
     sender: String,
 ) -> StdResult<Response> {
@@ -79,7 +78,7 @@ pub(crate) fn execute_unbond(
         // the contract must stop if
         if undelegation_amount == Uint128::new(1) {
             return Err(StdError::generic_err(
-                "Burn amount must be greater than 1 ubluna",
+                "Burn amount must be greater than 1 micro unit",
             ));
         }
 
@@ -88,8 +87,9 @@ pub(crate) fn execute_unbond(
         let block_height = env.block.height;
 
         // Send undelegated requests to possibly more than one validators
-        let mut undelegated_msgs = pick_validator(
-            deps.as_ref(),
+        let mut undelegated_msgs = pick_unbond_validator(
+            &deps.querier,
+            params.underlying_coin_denom,
             undelegation_amount,
             delegator.to_string(),
             block_height,
@@ -125,14 +125,11 @@ pub(crate) fn execute_unbond(
     STATE.save(deps.storage, &state)?;
 
     // Send Burn message to cluna contract
-    let config = CONFIG.load(deps.storage)?;
-    let cluna_contract = config
-        .cluna_contract
-        .expect("the token contract must have been registered");
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
 
     let burn_msg = Cw20ExecuteMsg::Burn { amount };
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: cluna_contract,
+        contract_addr: config.cluna_contract.to_string(),
         msg: to_binary(&burn_msg)?,
         funds: vec![],
     })));
@@ -319,21 +316,17 @@ fn process_withdraw_rate(
     Ok(())
 }
 
-fn pick_validator(
-    deps: Deps,
+fn pick_unbond_validator(
+    querier: &QuerierWrapper,
+    denom: String,
     claim: Uint128,
     delegator: String,
     block_height: u64,
 ) -> StdResult<Vec<SubMsg>> {
-    //read params
-    let params = PARAMETERS.load(deps.storage)?;
-    let coin_denom = params.underlying_coin_denom;
-
     let mut messages: Vec<SubMsg> = vec![];
     let mut claimed = claim;
 
-    let all_delegations = deps
-        .querier
+    let all_delegations = querier
         .query_all_delegations(delegator)
         .expect("There must be at least one delegation");
 
@@ -359,7 +352,7 @@ fn pick_validator(
         if undelegated_amount.u128() > 0 {
             let msgs: CosmosMsg = CosmosMsg::Staking(StakingMsg::Undelegate {
                 validator: delegation.validator,
-                amount: coin(undelegated_amount.u128(), &*coin_denom),
+                amount: coin(undelegated_amount.u128(), denom.clone()),
             });
             messages.push(SubMsg::new(msgs));
         }

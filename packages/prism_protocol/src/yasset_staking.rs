@@ -91,6 +91,7 @@ pub enum QueryMsg {
     PoolInfo { asset_token: String },
     RewardInfo { staker_addr: String },
     RewardAssetWhitelist {},
+    BondAmount {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

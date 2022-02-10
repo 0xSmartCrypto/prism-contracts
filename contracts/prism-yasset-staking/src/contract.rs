@@ -39,9 +39,7 @@ pub fn instantiate(
 ) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    if msg.protocol_fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
-        return Err(StdError::generic_err("invalid protocol fee"));
-    }
+    validate_protocol_fee(msg.protocol_fee)?;
 
     CONFIG.save(
         deps.storage,
@@ -158,9 +156,7 @@ fn update_config(
     }
 
     if let Some(protocol_fee) = protocol_fee {
-        if protocol_fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
-            return Err(StdError::generic_err("invalid protocol fee"));
-        }
+        validate_protocol_fee(protocol_fee)?;
         cfg.protocol_fee = protocol_fee;
     }
 
@@ -176,6 +172,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::PoolInfo { asset_token } => to_binary(&query_pool_info(deps, asset_token)?),
         QueryMsg::RewardAssetWhitelist {} => to_binary(&query_whitelist(deps)?),
         QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
+        QueryMsg::BondAmount {} => to_binary(&query_bond_amount(deps)?),
     }
 }
 
@@ -209,4 +206,21 @@ pub fn query_pool_info(deps: Deps, asset_token: String) -> StdResult<PoolInfoRes
         asset_token,
         reward_index: pool_info.reward_index,
     })
+}
+
+pub fn query_bond_amount(deps: Deps) -> StdResult<Uint128> {
+    let bond_amount = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+
+    Ok(bond_amount)
+}
+
+fn validate_protocol_fee(fee: Decimal) -> StdResult<Decimal> {
+    if fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
+        return Err(StdError::generic_err(format!(
+            "fee can not be bigger than {}",
+            MAX_PROTOCOL_FEE
+        )));
+    }
+
+    Ok(fee)
 }

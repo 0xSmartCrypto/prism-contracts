@@ -4,7 +4,7 @@ use std::fs::create_dir_all;
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 use prism_protocol::vault::{
     AllHistoryResponse, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
-    InstantiateMsg, QueryMsg, StateResponse, UnbondHistory, WhitelistedValidatorsResponse,
+    InstantiateMsg, QueryMsg, StateResponse, UnbondHistoryResponse, WhitelistedValidatorsResponse,
     WithdrawableUnbondedResponse,
 };
 
@@ -22,7 +22,7 @@ fn main() {
     export_schema(&schema_for!(CurrentBatchResponse), &out_dir);
     export_schema(&schema_for!(Cw20HookMsg), &out_dir);
     export_schema(&schema_for!(StateResponse), &out_dir);
-    export_schema(&schema_for!(UnbondHistory), &out_dir);
+    export_schema(&schema_for!(UnbondHistoryResponse), &out_dir);
     export_schema(&schema_for!(WhitelistedValidatorsResponse), &out_dir);
     export_schema(&schema_for!(WithdrawableUnbondedResponse), &out_dir);
 }

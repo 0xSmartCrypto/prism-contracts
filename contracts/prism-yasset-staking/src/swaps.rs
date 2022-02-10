@@ -1,4 +1,4 @@
-use crate::state::CONFIG;
+use crate::state::{CONFIG, TOTAL_BOND_AMOUNT};
 use cosmwasm_std::{
     attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
 };
@@ -81,10 +81,14 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
 pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // query yluna amount to know how much we received from vault
+    // query pluna amount to know how much we received from vault
     // received pluna amount should always be same as yluna amount
-    let yluna_amt = query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
+    // we query both amounts to prevent manipulation by sending one of the tokens to the contract
     let pluna_amt = query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
+
+    let bonded_yluna = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+    let yluna_amt = query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
+    let reward_yluna = yluna_amt.checked_sub(bonded_yluna)?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -93,7 +97,7 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
                 assets: vec![
                     Asset {
                         info: AssetInfo::Cw20(cfg.yluna_token),
-                        amount: yluna_amt,
+                        amount: reward_yluna,
                     },
                     Asset {
                         info: AssetInfo::Cw20(cfg.pluna_token),

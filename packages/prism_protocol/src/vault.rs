@@ -3,8 +3,6 @@ use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-pub type UnbondRequest = Vec<(u64, Uint128)>;
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub epoch_period: u64,
@@ -13,38 +11,9 @@ pub struct InstantiateMsg {
     pub peg_recovery_fee: Decimal,
     pub er_threshold: Decimal,
     pub validator: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct State {
-    pub exchange_rate: Decimal,
-    pub total_bond_amount: Uint128,
-    pub last_index_modification: u64,
-    pub prev_vault_balance: Uint128,
-    pub actual_unbonded_amount: Uint128,
-    pub last_unbonded_time: u64,
-    pub last_processed_batch: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Config {
-    pub creator: String,
-    pub yluna_staking: Option<String>,
-    pub cluna_contract: Option<String>,
-    pub yluna_contract: Option<String>,
-    pub pluna_contract: Option<String>,
-    pub airdrop_registry_contract: Option<String>,
-}
-
-impl State {
-    pub fn update_exchange_rate(&mut self, total_issued: Uint128, requested_with_fee: Uint128) {
-        let actual_supply = total_issued + requested_with_fee;
-        if self.total_bond_amount.is_zero() || actual_supply.is_zero() {
-            self.exchange_rate = Decimal::one()
-        } else {
-            self.exchange_rate = Decimal::from_ratio(self.total_bond_amount, actual_supply);
-        }
-    }
+    pub token_admin: String,
+    pub token_code_id: u64,
+    pub manager: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -58,17 +27,18 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<String>,
         yluna_staking: Option<String>,
-        cluna_contract: Option<String>,
-        yluna_contract: Option<String>,
-        pluna_contract: Option<String>,
         airdrop_registry_contract: Option<String>,
+        manager: Option<String>,
     },
 
     /// Register receives the reward contract address
     RegisterValidator { validator: String },
 
     /// Remove the validator from validators whitelist
-    DeregisterValidator { validator: String },
+    DeregisterValidator {
+        validator: String,
+        redel_validator: String,
+    },
 
     /// update the parameters that is needed for the contract
     UpdateParams {
@@ -76,6 +46,17 @@ pub enum ExecuteMsg {
         unbonding_period: Option<u64>,
         peg_recovery_fee: Option<Decimal>,
         er_threshold: Option<Decimal>,
+    },
+
+    ////////////////////
+    /// Manager's operations
+    ////////////////////
+
+    /// Redelgates from source validator to target validator
+    Redelgate {
+        source_val: String,
+        target_val: String,
+        amount: Uint128,
     },
 
     ////////////////////
@@ -155,16 +136,18 @@ pub enum Cw20HookMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct UnbondHistory {
-    pub batch_id: u64,
-    pub time: u64,
-    pub amount: Uint128,
-    pub applied_exchange_rate: Decimal,
-    pub withdraw_rate: Decimal,
-    pub released: bool,
+pub struct ConfigResponse {
+    pub owner: String,
+    pub yluna_staking: String,
+    pub cluna_contract: String,
+    pub pluna_contract: String,
+    pub yluna_contract: String,
+    pub airdrop_registry_contract: String,
+    pub initialized: bool,
+    pub manager: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct StateResponse {
     pub exchange_rate: Decimal,
     pub total_bond_amount: Uint128,
@@ -173,16 +156,6 @@ pub struct StateResponse {
     pub actual_unbonded_amount: Uint128,
     pub last_unbonded_time: u64,
     pub last_processed_batch: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ConfigResponse {
-    pub owner: String,
-    pub yluna_staking: Option<String>,
-    pub cluna_contract: Option<String>,
-    pub pluna_contract: Option<String>,
-    pub yluna_contract: Option<String>,
-    pub airdrop_registry_contract: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -200,13 +173,26 @@ pub struct CurrentBatchResponse {
 pub struct WithdrawableUnbondedResponse {
     pub withdrawable: Uint128,
 }
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct UnbondRequestsResponse {
     pub address: String,
-    pub requests: UnbondRequest,
+    pub requests: UnbondRequestResponse,
 }
+
+pub type UnbondRequestResponse = Vec<(u64, Uint128)>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AllHistoryResponse {
-    pub history: Vec<UnbondHistory>,
+    pub history: Vec<UnbondHistoryResponse>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct UnbondHistoryResponse {
+    pub batch_id: u64,
+    pub time: u64,
+    pub amount: Uint128,
+    pub applied_exchange_rate: Decimal,
+    pub withdraw_rate: Decimal,
+    pub released: bool,
 }
