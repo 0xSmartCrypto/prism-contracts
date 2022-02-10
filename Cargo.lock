@@ -1094,6 +1094,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-xprism-boost"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-asset",
+ "cw-storage-plus",
+ "cw2",
+ "cw20 0.8.1",
+ "hex",
+ "prism-common",
+ "prism-protocol",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "prism-yasset-staking"
 version = "1.0.0"
 dependencies = [
