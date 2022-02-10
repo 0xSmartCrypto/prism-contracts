@@ -2,8 +2,8 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult, Uint128,
+    from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    Uint128,
 };
 
 use prism_protocol::yasset_staking::{
@@ -12,8 +12,8 @@ use prism_protocol::yasset_staking::{
 };
 
 use crate::rewards::{
-    claim_rewards, deposit_rewards, query_reward_info, remove_whitelisted_reward_asset,
-    whitelist_reward_asset,
+    claim_rewards, convert_and_claim_rewards, deposit_rewards, mint_xprism_claim_hook,
+    query_reward_info, remove_whitelisted_reward_asset, whitelist_reward_asset,
 };
 use crate::staking::{bond, unbond};
 use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
@@ -48,7 +48,7 @@ pub fn instantiate(
             yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
             pluna_token: deps.api.addr_validate(&msg.pluna_token)?,
             prism_token: deps.api.addr_validate(&msg.prism_token)?,
-            withdraw_fee: validate_rate(msg.withdraw_fee)?,
+            xprism_token: deps.api.addr_validate(&msg.xprism_token)?,
         },
     )?;
 
@@ -74,6 +74,14 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
         ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, info),
+        ExecuteMsg::ConvertAndClaimRewards { claim_asset } => {
+            claim_asset.check(deps.api)?;
+            convert_and_claim_rewards(deps, env, info, claim_asset)
+        }
+        ExecuteMsg::MintXprismClaimHook {
+            receiver,
+            prev_balance,
+        } => mint_xprism_claim_hook(deps, info, env, receiver, prev_balance),
         ExecuteMsg::DepositRewards { assets } => {
             for asset in &assets {
                 asset.info.check(deps.api)?;
@@ -102,7 +110,7 @@ pub fn receive_cw20(
     let msg = cw20_msg.msg;
 
     match from_binary(&msg)? {
-        Cw20HookMsg::Bond { mode } => {
+        Cw20HookMsg::Bond {} => {
             let cfg = CONFIG.load(deps.storage)?;
 
             // only yluna token contract can execute this message
@@ -110,7 +118,7 @@ pub fn receive_cw20(
                 return Err(StdError::generic_err("unauthorized"));
             }
 
-            bond(deps, cw20_msg.sender, cw20_msg.amount, mode)
+            bond(deps, cw20_msg.sender, cw20_msg.amount)
         }
     }
 }
@@ -143,7 +151,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         yluna_token: cfg.yluna_token.to_string(),
         pluna_token: cfg.pluna_token.to_string(),
         prism_token: cfg.prism_token.to_string(),
-        withdraw_fee: cfg.withdraw_fee,
+        xprism_token: cfg.xprism_token.to_string(),
     })
 }
 
@@ -154,15 +162,4 @@ pub fn query_pool_info(deps: Deps, asset_token: String) -> StdResult<PoolInfoRes
         asset_token,
         reward_index: pool_info.reward_index,
     })
-}
-
-fn validate_rate(rate: Decimal) -> StdResult<Decimal> {
-    if rate > Decimal::one() {
-        return Err(StdError::generic_err(format!(
-            "Rate can not be bigger than one (given value: {})",
-            rate
-        )));
-    }
-
-    Ok(rate)
 }

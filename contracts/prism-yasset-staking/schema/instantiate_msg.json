@@ -10,7 +10,7 @@
     "prism_token",
     "protocol_fee",
     "vault",
-    "withdraw_fee",
+    "xprism_token",
     "yluna_token"
   ],
   "properties": {
@@ -35,8 +35,8 @@
     "vault": {
       "type": "string"
     },
-    "withdraw_fee": {
-      "$ref": "#/definitions/Decimal"
+    "xprism_token": {
+      "type": "string"
     },
     "yluna_token": {
       "type": "string"

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ExecuteMsg",
-  "oneOf": [
+  "anyOf": [
     {
       "type": "object",
       "required": [
@@ -48,6 +48,51 @@
       "properties": {
         "claim_rewards": {
           "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Withdraw pending rewards and convert to a whitelisted asset info",
+      "type": "object",
+      "required": [
+        "convert_and_claim_rewards"
+      ],
+      "properties": {
+        "convert_and_claim_rewards": {
+          "type": "object",
+          "required": [
+            "claim_asset"
+          ],
+          "properties": {
+            "claim_asset": {
+              "$ref": "#/definitions/AssetInfoBase_for_Addr"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "mint_xprism_claim_hook"
+      ],
+      "properties": {
+        "mint_xprism_claim_hook": {
+          "type": "object",
+          "required": [
+            "prev_balance",
+            "receiver"
+          ],
+          "properties": {
+            "prev_balance": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "receiver": {
+              "$ref": "#/definitions/Addr"
+            }
+          }
         }
       },
       "additionalProperties": false
@@ -188,7 +233,7 @@
     },
     "AssetInfoBase_for_Addr": {
       "description": "Represents the type of an fungible asset\n\nEach **asset info** instance can be one of two variants:\n\n- CW20 tokens. To create an **asset info** instance of this type, provide the contract address. - Native SDK coins. To create an **asset info** instance of this type, provide the denomination.",
-      "oneOf": [
+      "anyOf": [
         {
           "type": "object",
           "required": [

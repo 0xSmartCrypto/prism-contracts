@@ -166,8 +166,10 @@ pub fn receive_cw20(
         }
     } else if config.prism_token == sender_raw {
         match from_binary(&cw20_msg.msg) {
-            Ok(Cw20HookMsg::MintXprism {}) => {
-                mint_xprism(deps, env, cw20_msg.sender, cw20_msg.amount)
+            Ok(Cw20HookMsg::MintXprism { receiver }) => {
+                let receiver = receiver.unwrap_or(cw20_msg.sender);
+                deps.api.addr_validate(&receiver)?;
+                mint_xprism(deps, env, receiver, cw20_msg.amount)
             }
             _ => Err(StdError::generic_err("invalid cw20 hook message")),
         }

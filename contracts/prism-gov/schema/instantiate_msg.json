@@ -11,6 +11,7 @@
     "redemption_time",
     "snapshot_period",
     "threshold",
+    "token_code_id",
     "voting_period"
   ],
   "properties": {
@@ -45,6 +46,11 @@
     },
     "threshold": {
       "$ref": "#/definitions/Decimal"
+    },
+    "token_code_id": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "voting_period": {
       "type": "integer",
