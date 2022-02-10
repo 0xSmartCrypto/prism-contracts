@@ -16,6 +16,7 @@ pub const BOND_AMOUNTS: Map<&[u8], BondInfo> = Map::new("bond_amounts");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    pub owner: Addr,
     pub vault: Addr,
     pub gov: Addr,
     pub collector: Addr,

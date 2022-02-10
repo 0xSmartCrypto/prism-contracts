@@ -19,6 +19,7 @@ use prism_protocol::yasset_staking::{
 
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
         vault: "vault0000".to_string(),
         gov: "gov0000".to_string(),
         collector: "collector0000".to_string(),
@@ -47,6 +48,7 @@ fn test_init() {
     assert_eq!(
         res,
         ConfigResponse {
+            owner: "owner0000".to_string(),
             vault: "vault0000".to_string(),
             gov: "gov0000".to_string(),
             collector: "collector0000".to_string(),
@@ -364,7 +366,7 @@ fn test_whitelist() {
     assert_eq!(err, StdError::generic_err("unauthorized"));
 
     // valid attempt
-    let info = mock_info("gov0000", &[]);
+    let info = mock_info("owner0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.attributes,
@@ -409,7 +411,7 @@ fn test_whitelist() {
     assert_eq!(err, StdError::generic_err("unauthorized"));
 
     // valid attempt
-    let info = mock_info("gov0000", &[]);
+    let info = mock_info("owner0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.attributes,
@@ -561,7 +563,7 @@ fn test_external_deposit_rewards() {
     let msg = ExecuteMsg::WhitelistRewardAsset {
         asset: AssetInfo::Cw20(Addr::unchecked("mir0000")),
     };
-    let info = mock_info("gov0000", &[]);
+    let info = mock_info("owner0000", &[]);
     execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // the difference with internal deposit, is that tokens need to be transfered first
@@ -823,7 +825,7 @@ fn test_convert_and_claim_rewards_yluna() {
     let msg = ExecuteMsg::WhitelistRewardAsset {
         asset: AssetInfo::Cw20(Addr::unchecked("anc0000")),
     };
-    let info = mock_info("gov0000", &[]);
+    let info = mock_info("owner0000", &[]);
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.attributes,

@@ -5,8 +5,11 @@ use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
 use cw_asset::{Asset, AssetInfo};
 
+pub const MAX_PROTOCOL_FEE: &str = "0.5";
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    pub owner: String,
     pub vault: String,
     pub gov: String,
     pub collector: String,
@@ -59,8 +62,13 @@ pub enum ExecuteMsg {
     },
 
     ////////////////////////
-    /// Gov operations
+    /// Owner operations
     ////////////////////////
+    UpdateConfig {
+        owner: Option<String>,
+        collector: Option<String>,
+        protocol_fee: Option<Decimal>,
+    },
     WhitelistRewardAsset {
         asset: AssetInfo,
     },
@@ -87,6 +95,7 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
+    pub owner: String,
     pub vault: String,
     pub gov: String,
     pub collector: String,

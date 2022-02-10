@@ -1,14 +1,16 @@
+use std::str::FromStr;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
-    Uint128,
+    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    StdResult, Uint128,
 };
 
 use prism_protocol::yasset_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardAssetWhitelistResponse,
+    RewardAssetWhitelistResponse, MAX_PROTOCOL_FEE,
 };
 
 use crate::rewards::{
@@ -37,9 +39,14 @@ pub fn instantiate(
 ) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
+    if msg.protocol_fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
+        return Err(StdError::generic_err("invalid protocol fee"));
+    }
+
     CONFIG.save(
         deps.storage,
         &Config {
+            owner: deps.api.addr_validate(&msg.owner)?,
             vault: deps.api.addr_validate(&msg.vault)?,
             gov: deps.api.addr_validate(&msg.gov)?,
             collector: deps.api.addr_validate(&msg.collector)?,
@@ -99,6 +106,11 @@ pub fn execute(
             asset.check(deps.api)?;
             remove_whitelisted_reward_asset(deps, info, asset)
         }
+        ExecuteMsg::UpdateConfig {
+            owner,
+            collector,
+            protocol_fee,
+        } => update_config(deps, info, owner, collector, protocol_fee),
     }
 }
 
@@ -123,6 +135,40 @@ pub fn receive_cw20(
     }
 }
 
+fn update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    owner: Option<String>,
+    collector: Option<String>,
+    protocol_fee: Option<Decimal>,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+
+    // can only be exeucted by owner
+    if info.sender != cfg.owner {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    if let Some(owner) = owner {
+        cfg.owner = deps.api.addr_validate(&owner)?;
+    }
+
+    if let Some(collector) = collector {
+        cfg.collector = deps.api.addr_validate(&collector)?;
+    }
+
+    if let Some(protocol_fee) = protocol_fee {
+        if protocol_fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
+            return Err(StdError::generic_err("invalid protocol fee"));
+        }
+        cfg.protocol_fee = protocol_fee;
+    }
+
+    CONFIG.save(deps.storage, &cfg)?;
+
+    Ok(Response::new().add_attribute("action", "update_config"))
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -143,6 +189,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let cfg = CONFIG.load(deps.storage)?;
 
     Ok(ConfigResponse {
+        owner: cfg.owner.to_string(),
         vault: cfg.vault.to_string(),
         gov: cfg.gov.to_string(),
         collector: cfg.collector.to_string(),

@@ -380,8 +380,8 @@ pub fn whitelist_reward_asset(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // can only be exeucted by gov
-    if info.sender.as_str() != cfg.gov.as_str() {
+    // can only be exeucted by owner
+    if info.sender != cfg.owner {
         return Err(StdError::generic_err("unauthorized"));
     }
 
@@ -407,8 +407,8 @@ pub fn remove_whitelisted_reward_asset(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // can only be exeucted by gov
-    if info.sender.as_str() != cfg.gov.as_str() {
+    // can only be exeucted by owner
+    if info.sender != cfg.owner {
         return Err(StdError::generic_err("unauthorized"));
     }
 

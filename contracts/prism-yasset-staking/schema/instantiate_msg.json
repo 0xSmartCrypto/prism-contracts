@@ -6,6 +6,7 @@
     "cluna_token",
     "collector",
     "gov",
+    "owner",
     "pluna_token",
     "prism_token",
     "protocol_fee",
@@ -21,6 +22,9 @@
       "type": "string"
     },
     "gov": {
+      "type": "string"
+    },
+    "owner": {
       "type": "string"
     },
     "pluna_token": {
