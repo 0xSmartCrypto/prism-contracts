@@ -1,8 +1,8 @@
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    from_binary, from_slice, to_binary, Addr, Coin, ContractResult, Decimal, FullDelegation,
-    OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, Validator,
-    WasmQuery,
+    from_binary, from_slice, to_binary, Addr, Binary, Coin, ContractResult, Decimal,
+    FullDelegation, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError, SystemResult,
+    Uint128, Validator, WasmQuery,
 };
 use cw20::TokenInfoResponse;
 use std::collections::HashMap;
@@ -60,6 +60,13 @@ pub(crate) fn _caps_to_map(caps: &[(&String, &Uint128)]) -> HashMap<String, Uint
         owner_map.insert(denom.to_string(), **cap);
     }
     owner_map
+}
+
+// PairConfig copied directly from prismswap factory state.rs
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct PairConfig {
+    pub pair_address: Addr,
+    pub fee_config: prismswap::factory::FeeConfig,
 }
 
 pub struct WasmMockQuerier {
@@ -258,6 +265,59 @@ impl WasmMockQuerier {
                             SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
                         }
                     }
+                }
+            }
+            QueryRequest::Wasm(WasmQuery::Raw { contract_addr, key }) => {
+                let (storage_namespace, storage_key) = parse_raw_query(key);
+
+                if contract_addr == "prismfactory0000" {
+                    match storage_namespace {
+                        "pair_config" => {
+                            match self.factory_querier.pairs.get(&storage_key.to_string()) {
+                                Some(..) => {
+                                    SystemResult::Ok(ContractResult::from(to_binary(&PairConfig {
+                                        pair_address: Addr::unchecked(storage_key),
+                                        fee_config: prismswap::factory::FeeConfig::default(),
+                                    })))
+                                }
+                                None => SystemResult::Err(SystemError::InvalidRequest {
+                                    error: "No pair info exists".to_string(),
+                                    request: key.clone(),
+                                }),
+                            }
+                        }
+                        _ => SystemResult::Err(SystemError::InvalidRequest {
+                            error: "Invalid query".to_string(),
+                            request: key.clone(),
+                        }),
+                    }
+                } else if contract_addr == "astrofactory0000" {
+                    match storage_namespace {
+                        "pair_info" => {
+                            match self
+                                .astro_factory_querier
+                                .pairs
+                                .get(&storage_key.to_string())
+                            {
+                                Some(..) => SystemResult::Ok(ContractResult::from(to_binary(
+                                    &Addr::unchecked(storage_key),
+                                ))),
+                                None => SystemResult::Err(SystemError::InvalidRequest {
+                                    error: "No pair info exists".to_string(),
+                                    request: key.clone(),
+                                }),
+                            }
+                        }
+                        _ => SystemResult::Err(SystemError::InvalidRequest {
+                            error: "Invalid query".to_string(),
+                            request: key.clone(),
+                        }),
+                    }
+                } else {
+                    SystemResult::Err(SystemError::InvalidRequest {
+                        error: "Invalid query".to_string(),
+                        request: key.clone(),
+                    })
                 }
             }
             _ => self.base.handle_query(request),
@@ -471,4 +531,17 @@ pub fn to_astroport_asset_infos(asset_infos: &[AssetInfo; 2]) -> [AstroAssetInfo
         to_astroport_asset_info(&asset_infos[0]),
         to_astroport_asset_info(&asset_infos[1]),
     ]
+}
+
+/// parse a raw query binary storage key into (namespace, key), does not
+/// currently work for nested namespaces.  
+/// Todo: is there an api for this?
+pub fn parse_raw_query(query: &Binary) -> (&str, &str) {
+    let query_bytes = query.as_slice();
+    let namespace_len = query_bytes[1] as u8;
+    let (namespace_bytes, key_bytes) = query_bytes[2..].split_at(namespace_len as usize);
+    (
+        std::str::from_utf8(namespace_bytes).unwrap(),
+        std::str::from_utf8(key_bytes).unwrap(),
+    )
 }

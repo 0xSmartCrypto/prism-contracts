@@ -8,6 +8,7 @@ use cosmwasm_std::{
 };
 
 use crate::error::ContractError;
+use crate::querier::{query_astroport_pair_raw, query_prismswap_pair_raw};
 use crate::state::{Config, CONFIG};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
@@ -16,7 +17,6 @@ use cw2::set_contract_version;
 use cw_asset::{Asset, AssetInfo};
 use prismswap::asset::{PrismSwapAsset, PrismSwapAssetInfo};
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
-use prismswap::querier::query_pair_info;
 use prismswap::router::{
     Cw20HookMsg as RouterCw20HookMsg, ExecuteMsg as RouterExecuteMsg, SwapOperation,
 };
@@ -338,16 +338,16 @@ pub fn get_swap_route(
 ) -> Option<SwapRoute> {
     // check for prismswap direct route
     let prismswap_direct_asset_infos = [offer_asset_info.clone(), dest_asset_info.clone()];
-    if let Some(pair_addr) = query_prismswap_pair(deps, cfg, &prismswap_direct_asset_infos) {
+    if let Some(pair_addr) = query_prismswap_pair_raw(deps, cfg, &prismswap_direct_asset_infos) {
         return Some(SwapRoute::PrismSwapDirect(pair_addr));
     } else {
         // check for prismswap 3-way router swap using prism as intermediate hop
         // e.g. offer -> prism, prism -> dest
         let prism_asset_info = AssetInfo::Cw20(cfg.prism_token.clone());
         let swap1_asset_infos = [offer_asset_info.clone(), prism_asset_info.clone()];
-        if let Some(pair1_addr) = query_prismswap_pair(deps, cfg, &swap1_asset_infos) {
+        if let Some(pair1_addr) = query_prismswap_pair_raw(deps, cfg, &swap1_asset_infos) {
             let swap2_asset_infos = [dest_asset_info.clone(), prism_asset_info];
-            if let Some(pair2_addr) = query_prismswap_pair(deps, cfg, &swap2_asset_infos) {
+            if let Some(pair2_addr) = query_prismswap_pair_raw(deps, cfg, &swap2_asset_infos) {
                 return Some(SwapRoute::PrismSwapRouter(pair1_addr, pair2_addr));
             }
         } else {
@@ -356,40 +356,13 @@ pub fn get_swap_route(
                 offer_asset_info.clone(),
                 AssetInfo::Native(cfg.base_denom.clone()),
             ];
-            let astro_pair = query_astroport_pair(deps, cfg, &astroport_direct_asset_infos);
+            let astro_pair = query_astroport_pair_raw(deps, cfg, &astroport_direct_asset_infos);
             if let Some(pair_addr) = astro_pair {
                 return Some(SwapRoute::AstroportToBase(pair_addr));
             }
         }
     }
     None
-}
-
-pub fn query_prismswap_pair(
-    deps: &DepsMut,
-    config: &Config,
-    asset_infos: &[AssetInfo; 2],
-) -> Option<Addr> {
-    query_pair_info(&deps.querier, &config.prismswap_factory, asset_infos)
-        .ok()
-        .map(|x| x.contract_addr)
-}
-
-pub fn query_astroport_pair(
-    deps: &DepsMut,
-    config: &Config,
-    asset_infos: &[AssetInfo; 2],
-) -> Option<Addr> {
-    let astro_asset_infos: [astroport::asset::AssetInfo; 2] =
-        [asset_infos[0].clone().into(), asset_infos[1].clone().into()];
-
-    astroport::querier::query_pair_info(
-        &deps.querier,
-        config.astroport_factory.clone(),
-        &astro_asset_infos,
-    )
-    .ok()
-    .map(|x| x.contract_addr)
 }
 
 pub fn get_prism_direct_swap_msg(
