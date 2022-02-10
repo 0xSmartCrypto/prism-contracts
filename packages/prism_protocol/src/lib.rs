@@ -6,10 +6,10 @@ pub mod gov;
 pub mod launch_pool;
 pub mod limit_order;
 pub mod lp_staking;
-pub mod vault;
-pub mod yasset_staking;
-pub mod xprism_boost;
 pub mod signed_decimal;
+pub mod vault;
+pub mod xprism_boost;
+pub mod yasset_staking;
 
 #[cfg(feature = "internal")]
 pub mod internal;

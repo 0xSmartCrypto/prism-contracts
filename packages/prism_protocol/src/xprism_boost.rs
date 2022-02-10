@@ -1,9 +1,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Uint128};
-use cw20::Cw20ReceiveMsg;
 use crate::signed_decimal::SignedDecimal;
+use cosmwasm_std::Uint128;
+use cw20::Cw20ReceiveMsg;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -29,7 +29,9 @@ pub enum ExecuteMsg {
     },
 
     // update boost of a user
-    UpdateBoost { user: String },
+    UpdateBoost {
+        user: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
