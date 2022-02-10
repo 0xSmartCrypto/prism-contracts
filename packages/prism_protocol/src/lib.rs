@@ -9,6 +9,7 @@ pub mod lp_staking;
 pub mod vault;
 pub mod yasset_staking;
 pub mod xprism_boost;
+pub mod signed_decimal;
 
 #[cfg(feature = "internal")]
 pub mod internal;
