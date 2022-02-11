@@ -182,7 +182,7 @@ pub fn convert_and_claim_rewards(
     // sender/claimer as receiver
     let (swap_dest_asset_info, swap_receiver) = if claim_token == cfg.xprism_token {
         (
-            AssetInfo::Cw20(Addr::unchecked(cfg.prism_token.clone())),
+            AssetInfo::Cw20(cfg.prism_token.clone()),
             env.contract.address.clone(),
         )
     } else {
@@ -299,7 +299,7 @@ pub fn mint_xprism_claim_hook(
     let cfg = CONFIG.load(deps.storage)?;
 
     // there's no reason for anyone else to call this
-    if info.sender.as_str() != env.contract.address {
+    if info.sender != env.contract.address {
         return Err(StdError::generic_err("unauthorized"));
     }
 
@@ -326,7 +326,7 @@ pub fn mint_xprism_claim_hook(
             funds: vec![],
         })])
         .add_attribute("action", "mint_xprism_claim_hook")
-        .add_attribute("mint_amount", mint_amount);
+        .add_attribute("prism_amount_to_mint_xprism", mint_amount);
     Ok(res)
 }
 
