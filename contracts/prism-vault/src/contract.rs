@@ -48,6 +48,8 @@ pub fn instantiate(
 
     let sender = info.sender.clone();
 
+    // Find Luna amount that was sent as part of this instantiate message. This
+    // amount will be immediately delegated to a validator.
     let payment_amt = must_pay(&info, &msg.underlying_coin_denom)
         .map_err(|error| StdError::generic_err(format!("{}", error)))?;
 
@@ -76,7 +78,6 @@ pub fn instantiate(
         total_bond_amount: payment_amt,
         ..Default::default()
     };
-
     STATE.save(deps.storage, &state)?;
 
     // instantiate parameters
@@ -87,7 +88,6 @@ pub fn instantiate(
         peg_recovery_fee: validate_rate(msg.peg_recovery_fee)?,
         er_threshold: validate_rate(msg.er_threshold)?,
     };
-
     PARAMETERS.save(deps.storage, &params)?;
 
     let batch = CurrentBatch {
@@ -231,13 +231,11 @@ pub fn receive_cw20(
     info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
 ) -> StdResult<Response> {
-    let contract_addr = info.sender;
-
     match from_binary(&cw20_msg.msg) {
         Ok(Cw20HookMsg::Unbond {}) => {
             // only token contract can execute this message
             let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
-            if contract_addr != conf.cluna_contract {
+            if info.sender != conf.cluna_contract {
                 return Err(StdError::generic_err("unauthorized"));
             }
             execute_unbond(deps, env, cw20_msg.amount, cw20_msg.sender)
@@ -498,6 +496,7 @@ fn query_params(deps: Deps) -> StdResult<Parameters> {
     PARAMETERS.load(deps.storage)
 }
 
+/// Returns total cLuna issued + min(total pLuna issued, total yLuna issued).
 pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
     let cfg = CONFIG.load(deps.storage)?;
 

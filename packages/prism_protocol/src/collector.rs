@@ -8,6 +8,7 @@ pub struct InstantiateMsg {
     pub distribution_contract: String, // collected rewards receiver
     pub astroport_factory: String,
     pub prismswap_factory: String,
+    pub prismswap_router: String,
     pub prism_token: String,
     pub base_denom: String,
 }
@@ -24,6 +25,7 @@ pub enum ExecuteMsg {
     ConvertAndSend {
         assets: Vec<Asset>,
         receiver: Option<String>,
+        dest_asset_info: AssetInfo,
     },
     /// Hook to swap base_denom for $PRISM,
     /// Called when there is not direct pair with requested asset_token
@@ -31,6 +33,7 @@ pub enum ExecuteMsg {
     BaseSwapHook {
         receiver: Addr,
         prev_base_balance: Uint128,
+        dest_asset_info: AssetInfo,
     },
 }
 
@@ -46,6 +49,7 @@ pub struct ConfigResponse {
     pub distribution_contract: String, // collected rewards receiver
     pub astroport_factory: String,
     pub prismswap_factory: String,
+    pub prismswap_router: String,
     pub prism_token: String,
     pub base_denom: String,
 }

@@ -19,6 +19,8 @@ pub fn execute_bond_split(
     let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     let (mint_amount_with_fee, mut sub_messages, payment_amt) =
         _execute_bond(deps, &env, &info, &validator)?;
+    // Pop last sub-message, which happens to be a TokenMsg::Mint for c-asset.
+    // Replace it with messages to mint p-asset and y-asset instead.
     sub_messages.pop();
 
     Ok(Response::new()
@@ -49,6 +51,7 @@ pub fn execute_bond_split(
         ]))
 }
 
+/// Returns (mint_amount_with_fee, sub_messages, payment_amt).
 pub fn _execute_bond(
     mut deps: DepsMut,
     env: &Env,
@@ -78,7 +81,7 @@ pub fn _execute_bond(
     let threshold = params.er_threshold;
     let recovery_fee = params.peg_recovery_fee;
 
-    // current batch requested fee is need for accurate exchange rate computation.
+    // current batch requested fee is needed for accurate exchange rate computation.
     let current_batch = CURRENT_BATCH.load(deps.storage)?;
     let requested_with_fee = current_batch.requested_with_fee;
 

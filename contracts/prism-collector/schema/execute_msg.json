@@ -36,7 +36,8 @@
         "convert_and_send": {
           "type": "object",
           "required": [
-            "assets"
+            "assets",
+            "dest_asset_info"
           ],
           "properties": {
             "assets": {
@@ -44,6 +45,9 @@
               "items": {
                 "$ref": "#/definitions/AssetBase_for_Addr"
               }
+            },
+            "dest_asset_info": {
+              "$ref": "#/definitions/AssetInfoBase_for_Addr"
             },
             "receiver": {
               "type": [
@@ -66,10 +70,14 @@
         "base_swap_hook": {
           "type": "object",
           "required": [
+            "dest_asset_info",
             "prev_base_balance",
             "receiver"
           ],
           "properties": {
+            "dest_asset_info": {
+              "$ref": "#/definitions/AssetInfoBase_for_Addr"
+            },
             "prev_base_balance": {
               "$ref": "#/definitions/Uint128"
             },

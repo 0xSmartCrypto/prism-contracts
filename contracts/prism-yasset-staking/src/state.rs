@@ -1,4 +1,3 @@
-use prism_protocol::yasset_staking::StakingMode;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +16,7 @@ pub const BOND_AMOUNTS: Map<&[u8], BondInfo> = Map::new("bond_amounts");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    pub owner: Addr,
     pub vault: Addr,
     pub gov: Addr,
     pub collector: Addr,
@@ -25,13 +25,12 @@ pub struct Config {
     pub yluna_token: Addr,
     pub pluna_token: Addr,
     pub prism_token: Addr,
-    pub withdraw_fee: Decimal,
+    pub xprism_token: Addr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct BondInfo {
     pub bond_amount: Uint128,
-    pub mode: Option<StakingMode>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]

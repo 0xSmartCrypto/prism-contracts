@@ -49,7 +49,7 @@ const DEFAULT_VALIDATOR3: &str = "default-validator3000";
 
 pub const MOCK_CONTRACT_ADDR: &str = "cosmos2contract";
 
-pub const INITIAL_DEPOSIT_AMOUNT: Uint128 = Uint128::new(1000000u128);
+pub const INITIAL_DEPOSIT_AMOUNT: Uint128 = Uint128::new(1_000_000u128);
 
 fn sample_validator(addr: String) -> Validator {
     Validator {
@@ -90,7 +90,10 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         manager: "manager0000".to_string(),
     };
 
-    let owner_info = mock_info(owner, &[coin(1000000, UNDERLYING_COIN_DENOM)]);
+    let owner_info = mock_info(
+        owner,
+        &[coin(INITIAL_DEPOSIT_AMOUNT.u128(), UNDERLYING_COIN_DENOM)],
+    );
     instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
 
     let reply_msg = Reply {
@@ -523,9 +526,9 @@ fn proper_register_validator() {
     );
 }
 
-/// Covers if delegate message is sent to the specified validator,
-/// mint message is sent to the token contract, state is changed based on new mint,
-/// and check unsuccessful calls, like unsupported validators, and invalid coin.
+/// Covers if delegate message is sent to the specified validator, mint message
+/// is sent to the cluna CW20 contract, state is changed based on new mint, and
+/// check unsuccessful calls, like unsupported validators, and invalid coin.
 #[test]
 fn proper_bond() {
     let mut deps = dependencies(&[]);
@@ -533,42 +536,38 @@ fn proper_bond() {
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
     set_validator_mock(&mut deps.querier);
 
-    let addr1 = "addr1000".to_string();
-    let bond_amount = Uint128::new(10000);
-
     init(
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
         validator.address.clone(),
     );
+    do_register_validator(deps.as_mut(), validator.clone());
 
-    let _info = mock_info(addr1.as_str(), &[]);
-
-    // set balance for vault contract
+    // Delegate some ulunas to a validator, and MOCK_CONTRACT_ADDR a
+    // matching amount of clunas. In other words, make it look like
+    // MOCK_CONTRACT_ADDR had previously called bond with some ulunas and
+    // gotten some clunas.
     set_delegation(
         &mut deps.querier,
         validator.clone(),
         INITIAL_DEPOSIT_AMOUNT.u128(),
         "uluna",
     );
-
     deps.querier.with_token_balances(&[(
         &"cluna".to_string(),
-        &[(
-            &mock_env().contract.address.to_string(),
-            &INITIAL_DEPOSIT_AMOUNT,
-        )],
+        &[(&MOCK_CONTRACT_ADDR.to_string(), &INITIAL_DEPOSIT_AMOUNT)],
     )]);
 
-    do_register_validator(deps.as_mut(), validator.clone());
+    // Now let's make a Bond call and confirm we get the right results.
+    let addr1 = "addr1000".to_string();
+    // bond_amount is the number of lunas that we will be passing to Bond.
+    let bond_amount = Uint128::new(10_000);
 
+    let info = mock_info(addr1.as_str(), &[coin(bond_amount.u128(), "uluna")]);
     let bond_msg = ExecuteMsg::Bond {
         validator: Some(validator.address),
     };
-
-    let info = mock_info(addr1.as_str(), &[coin(bond_amount.u128(), "uluna")]);
-
     let res = execute(deps.as_mut(), mock_env(), info, bond_msg).unwrap();
     assert_eq!(2, res.messages.len());
 
@@ -576,6 +575,7 @@ fn proper_bond() {
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &bond_amount)])]);
 
+    // bond_amount ulunas should have been delegated to the single validator.
     let delegate = &res.messages[0].msg;
     match delegate {
         CosmosMsg::Staking(StakingMsg::Delegate { validator, amount }) => {
@@ -585,6 +585,7 @@ fn proper_bond() {
         _ => panic!("Unexpected message: {:?}", delegate),
     }
 
+    // bond_amount clunas should have been minted and awarded to addr1.
     let mint = &res.messages[1].msg;
     match mint {
         CosmosMsg::Wasm(WasmMsg::Execute {
@@ -606,12 +607,11 @@ fn proper_bond() {
     }
 
     // get total bonded
-    let state = QueryMsg::State {};
     let query_state: StateResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), state).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::State {}).unwrap()).unwrap();
     assert_eq!(
         query_state.total_bond_amount,
-        bond_amount + INITIAL_DEPOSIT_AMOUNT
+        INITIAL_DEPOSIT_AMOUNT + bond_amount
     );
     assert_eq!(query_state.exchange_rate, Decimal::one());
 
@@ -1950,10 +1950,9 @@ pub fn proper_slashing() {
         validator.address.clone(),
     );
 
-    // register_validator
+    // The bond call won't accept a validator that isn't registered.
     do_register_validator(deps.as_mut(), validator.clone());
 
-    //bond
     do_bond(
         deps.as_mut(),
         addr1.clone(),
@@ -1978,7 +1977,7 @@ pub fn proper_slashing() {
         from_binary(&query(deps.as_ref(), mock_env(), ex_rate).unwrap()).unwrap();
     assert_eq!(query_exchange_rate.exchange_rate.to_string(), "0.9");
 
-    //bond again to see the update exchange rate
+    // bond again to see the update exchange rate
     let second_bond = ExecuteMsg::Bond {
         validator: Some(validator.address.clone()),
     };
@@ -2026,7 +2025,7 @@ pub fn proper_slashing() {
 
     set_delegation(&mut deps.querier, validator.clone(), 100900, "uluna");
 
-    //update user balance
+    // update user balance
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &Uint128::new(2111u128))])]);
 
@@ -2064,7 +2063,7 @@ pub fn proper_slashing() {
     assert_eq!(query_exchange_rate.exchange_rate, expected_er);
 
     env.block.time = env.block.time.plus_seconds(90);
-    //check withdrawUnbonded message
+    // check withdrawUnbonded message
     let withdraw_unbond_msg = ExecuteMsg::WithdrawUnbonded {};
     let wdraw_unbonded_res = execute(deps.as_mut(), env, info, withdraw_unbond_msg).unwrap();
     assert_eq!(wdraw_unbonded_res.messages.len(), 1);

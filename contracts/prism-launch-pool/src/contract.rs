@@ -209,7 +209,7 @@ pub fn bond(
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: cfg.yluna_staking.to_string(),
                 amount,
-                msg: to_binary(&StakingHookMsg::Bond { mode: None })?,
+                msg: to_binary(&StakingHookMsg::Bond {})?,
             })?,
             funds: vec![],
         })]),

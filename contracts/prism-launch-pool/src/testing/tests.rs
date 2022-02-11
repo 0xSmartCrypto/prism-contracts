@@ -329,7 +329,7 @@ fn bond() {
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: "ylunastaking0000".to_string(),
                 amount: Uint128::from(100u128),
-                msg: to_binary(&StakingHookMsg::Bond { mode: None }).unwrap(),
+                msg: to_binary(&StakingHookMsg::Bond {}).unwrap(),
             })
             .unwrap(),
             funds: vec![],

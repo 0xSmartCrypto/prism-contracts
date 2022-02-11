@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
@@ -8,12 +10,12 @@ use cosmwasm_std::{
 
 use prism_protocol::yasset_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardAssetWhitelistResponse,
+    RewardAssetWhitelistResponse, MAX_PROTOCOL_FEE,
 };
 
 use crate::rewards::{
-    claim_rewards, deposit_rewards, query_reward_info, remove_whitelisted_reward_asset,
-    whitelist_reward_asset,
+    claim_rewards, convert_and_claim_rewards, deposit_rewards, mint_xprism_claim_hook,
+    query_reward_info, remove_whitelisted_reward_asset, whitelist_reward_asset,
 };
 use crate::staking::{bond, unbond};
 use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
@@ -37,9 +39,12 @@ pub fn instantiate(
 ) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
+    validate_protocol_fee(msg.protocol_fee)?;
+
     CONFIG.save(
         deps.storage,
         &Config {
+            owner: deps.api.addr_validate(&msg.owner)?,
             vault: deps.api.addr_validate(&msg.vault)?,
             gov: deps.api.addr_validate(&msg.gov)?,
             collector: deps.api.addr_validate(&msg.collector)?,
@@ -48,7 +53,7 @@ pub fn instantiate(
             yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
             pluna_token: deps.api.addr_validate(&msg.pluna_token)?,
             prism_token: deps.api.addr_validate(&msg.prism_token)?,
-            withdraw_fee: validate_rate(msg.withdraw_fee)?,
+            xprism_token: deps.api.addr_validate(&msg.xprism_token)?,
         },
     )?;
 
@@ -74,6 +79,14 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
         ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, info),
+        ExecuteMsg::ConvertAndClaimRewards { claim_asset } => {
+            claim_asset.check(deps.api)?;
+            convert_and_claim_rewards(deps, env, info, claim_asset)
+        }
+        ExecuteMsg::MintXprismClaimHook {
+            receiver,
+            prev_balance,
+        } => mint_xprism_claim_hook(deps, info, env, receiver, prev_balance),
         ExecuteMsg::DepositRewards { assets } => {
             for asset in &assets {
                 asset.info.check(deps.api)?;
@@ -94,6 +107,11 @@ pub fn execute(
             asset.check(deps.api)?;
             remove_whitelisted_reward_asset(deps, info, asset)
         }
+        ExecuteMsg::UpdateConfig {
+            owner,
+            collector,
+            protocol_fee,
+        } => update_config(deps, info, owner, collector, protocol_fee),
     }
 }
 
@@ -105,7 +123,7 @@ pub fn receive_cw20(
     let msg = cw20_msg.msg;
 
     match from_binary(&msg)? {
-        Cw20HookMsg::Bond { mode } => {
+        Cw20HookMsg::Bond {} => {
             let cfg = CONFIG.load(deps.storage)?;
 
             // only yluna token contract can execute this message
@@ -113,9 +131,41 @@ pub fn receive_cw20(
                 return Err(StdError::generic_err("unauthorized"));
             }
 
-            bond(deps, cw20_msg.sender, cw20_msg.amount, mode)
+            bond(deps, cw20_msg.sender, cw20_msg.amount)
         }
     }
+}
+
+fn update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    owner: Option<String>,
+    collector: Option<String>,
+    protocol_fee: Option<Decimal>,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+
+    // can only be exeucted by owner
+    if info.sender != cfg.owner {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    if let Some(owner) = owner {
+        cfg.owner = deps.api.addr_validate(&owner)?;
+    }
+
+    if let Some(collector) = collector {
+        cfg.collector = deps.api.addr_validate(&collector)?;
+    }
+
+    if let Some(protocol_fee) = protocol_fee {
+        validate_protocol_fee(protocol_fee)?;
+        cfg.protocol_fee = protocol_fee;
+    }
+
+    CONFIG.save(deps.storage, &cfg)?;
+
+    Ok(Response::new().add_attribute("action", "update_config"))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -139,6 +189,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let cfg = CONFIG.load(deps.storage)?;
 
     Ok(ConfigResponse {
+        owner: cfg.owner.to_string(),
         vault: cfg.vault.to_string(),
         gov: cfg.gov.to_string(),
         collector: cfg.collector.to_string(),
@@ -147,7 +198,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         yluna_token: cfg.yluna_token.to_string(),
         pluna_token: cfg.pluna_token.to_string(),
         prism_token: cfg.prism_token.to_string(),
-        withdraw_fee: cfg.withdraw_fee,
+        xprism_token: cfg.xprism_token.to_string(),
     })
 }
 
@@ -166,13 +217,13 @@ pub fn query_bond_amount(deps: Deps) -> StdResult<Uint128> {
     Ok(bond_amount)
 }
 
-fn validate_rate(rate: Decimal) -> StdResult<Decimal> {
-    if rate > Decimal::one() {
+fn validate_protocol_fee(fee: Decimal) -> StdResult<Decimal> {
+    if fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
         return Err(StdError::generic_err(format!(
-            "Rate can not be bigger than one (given value: {})",
-            rate
+            "fee can not be bigger than {}",
+            MAX_PROTOCOL_FEE
         )));
     }
 
-    Ok(rate)
+    Ok(fee)
 }

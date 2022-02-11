@@ -3103,7 +3103,7 @@ fn mint_xprism() {
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: TEST_VOTER.to_string(),
         amount: Uint128::from(1000000u128),
-        msg: to_binary(&Cw20HookMsg::MintXprism {}).unwrap(),
+        msg: to_binary(&Cw20HookMsg::MintXprism { receiver: None }).unwrap(),
     });
 
     // attempt with wrong token
@@ -3167,6 +3167,58 @@ fn mint_xprism() {
             msg: to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: TEST_VOTER.to_string(),
                 amount: Uint128::from(999900u128),
+            })
+            .unwrap(),
+            funds: vec![],
+        }))]
+    );
+}
+
+#[test]
+fn mint_xprism_with_receiver() {
+    let mut deps = mock_dependencies(&[]);
+    mock_instantiate(deps.as_mut());
+    mock_reply(deps.as_mut());
+
+    // start with 1000000 prism to emulate the prism sent with the cw20 below
+    deps.querier.with_token_balances(&[
+        (
+            &VOTING_TOKEN.to_string(),
+            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::zero())],
+        ),
+        (
+            &PRISM_TOKEN.to_string(),
+            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000000u128))],
+        ),
+    ]);
+
+    let receiver = "addr0001".to_string();
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: TEST_VOTER.to_string(),
+        amount: Uint128::from(1000000u128),
+        msg: to_binary(&Cw20HookMsg::MintXprism {
+            receiver: Some(receiver.clone()),
+        })
+        .unwrap(),
+    });
+
+    // successful mint, receiver should be set appropriately
+    let info = mock_info(PRISM_TOKEN, &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "mint_xprism"),
+            attr("mint_amount", "1000000")
+        ]
+    );
+    assert_eq!(
+        res.messages,
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: VOTING_TOKEN.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Mint {
+                recipient: receiver,
+                amount: Uint128::from(1000000u128),
             })
             .unwrap(),
             funds: vec![],

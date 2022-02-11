@@ -15,7 +15,7 @@ pub struct Parameters {
     pub underlying_coin_denom: String,
     pub unbonding_period: u64,
     pub peg_recovery_fee: Decimal,
-    pub er_threshold: Decimal,
+    pub er_threshold: Decimal, // exchange rate threshold
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
