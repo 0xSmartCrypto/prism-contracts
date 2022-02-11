@@ -5,10 +5,10 @@ use cosmwasm_std::{
 use cw20::Cw20ExecuteMsg as TokenMsg;
 
 pub fn split(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Response> {
-    let config = CONFIG.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     let messages = vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.cluna_contract.unwrap(),
+            contract_addr: config.cluna_contract.to_string(),
             msg: to_binary(&TokenMsg::BurnFrom {
                 owner: info.sender.clone().into_string(),
                 amount,
@@ -16,7 +16,7 @@ pub fn split(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Res
             funds: vec![],
         }),
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.yluna_contract.unwrap(),
+            contract_addr: config.yluna_contract.to_string(),
             msg: to_binary(&TokenMsg::Mint {
                 recipient: info.sender.clone().into_string(),
                 amount,
@@ -24,7 +24,7 @@ pub fn split(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Res
             funds: vec![],
         }),
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.pluna_contract.unwrap(),
+            contract_addr: config.pluna_contract.to_string(),
             msg: to_binary(&TokenMsg::Mint {
                 recipient: info.sender.into_string(),
                 amount,
@@ -36,10 +36,10 @@ pub fn split(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Res
 }
 
 pub fn merge(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Response> {
-    let config = CONFIG.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     let messages = vec![
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.yluna_contract.unwrap(),
+            contract_addr: config.yluna_contract.to_string(),
             msg: to_binary(&TokenMsg::BurnFrom {
                 owner: info.sender.clone().into_string(),
                 amount,
@@ -47,7 +47,7 @@ pub fn merge(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Res
             funds: vec![],
         }),
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.pluna_contract.unwrap(),
+            contract_addr: config.pluna_contract.to_string(),
             msg: to_binary(&TokenMsg::BurnFrom {
                 owner: info.sender.clone().into_string(),
                 amount,
@@ -55,7 +55,7 @@ pub fn merge(deps: DepsMut, info: MessageInfo, amount: Uint128) -> StdResult<Res
             funds: vec![],
         }),
         CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.cluna_contract.unwrap(),
+            contract_addr: config.cluna_contract.to_string(),
             msg: to_binary(&TokenMsg::Mint {
                 recipient: info.sender.into_string(),
                 amount,

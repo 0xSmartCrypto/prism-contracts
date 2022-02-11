@@ -43,7 +43,10 @@ pub enum ExecuteMsg {
     /// 3) DepositMintedPylunaHook
     ProcessDelegatorRewards {},
     LunaToPylunaHook {},
-    DepositMintedPylunaHook {},
+    DepositMintedPylunaHook {
+        prev_pluna_balance: Uint128,
+        prev_yluna_balance: Uint128,
+    },
 
     /// Deposit rewards to yLuna stakers
     DepositRewards {
@@ -75,6 +78,7 @@ pub enum QueryMsg {
     PoolInfo { asset_token: String },
     RewardInfo { staker_addr: String },
     RewardAssetWhitelist {},
+    BondAmount {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

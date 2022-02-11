@@ -1,6 +1,7 @@
 use crate::state::CONFIG;
 use cosmwasm_std::{
-    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
+    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
+    WasmMsg,
 };
 use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
@@ -59,6 +60,12 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
 
     let luna_amt = query_balance(&deps.querier, &env.contract.address, reward_denom.clone())?;
 
+    // record the current balance to know how much was minted when the hook is executed right after
+    let prev_pluna_balance =
+        query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
+    let prev_yluna_balance =
+        query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
+
     Ok(Response::new()
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -71,20 +78,34 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: env.contract.address.to_string(),
-                msg: to_binary(&ExecuteMsg::DepositMintedPylunaHook {})?,
+                msg: to_binary(&ExecuteMsg::DepositMintedPylunaHook {
+                    prev_pluna_balance,
+                    prev_yluna_balance,
+                })?,
                 funds: vec![],
             }),
         ])
         .add_attributes(vec![attr("action", "luna_to_pyluna_hook")]))
 }
 
-pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn deposit_minted_pyluna_hook(
+    deps: DepsMut,
+    env: Env,
+    prev_pluna_balance: Uint128,
+    prev_yluna_balance: Uint128,
+) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // query yluna amount to know how much we received from vault
+    // query pluna amount to know how much we received from vault
     // received pluna amount should always be same as yluna amount
-    let yluna_amt = query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
-    let pluna_amt = query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
+    // we query both amounts to prevent manipulation by sending one of the tokens to the contract
+    let curr_pluna_balance =
+        query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
+    let curr_yluna_balance =
+        query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
+
+    let reward_pluna = curr_pluna_balance.checked_sub(prev_pluna_balance)?;
+    let reward_yluna = curr_yluna_balance.checked_sub(prev_yluna_balance)?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -93,11 +114,11 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
                 assets: vec![
                     Asset {
                         info: AssetInfo::Cw20(cfg.yluna_token),
-                        amount: yluna_amt,
+                        amount: reward_yluna,
                     },
                     Asset {
                         info: AssetInfo::Cw20(cfg.pluna_token),
-                        amount: pluna_amt,
+                        amount: reward_pluna,
                     },
                 ],
             })?,

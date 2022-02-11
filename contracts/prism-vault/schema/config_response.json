@@ -3,41 +3,35 @@
   "title": "ConfigResponse",
   "type": "object",
   "required": [
-    "owner"
+    "airdrop_registry_contract",
+    "cluna_contract",
+    "initialized",
+    "owner",
+    "pluna_contract",
+    "yluna_contract",
+    "yluna_staking"
   ],
   "properties": {
     "airdrop_registry_contract": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     },
     "cluna_contract": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
+    },
+    "initialized": {
+      "type": "boolean"
     },
     "owner": {
       "type": "string"
     },
     "pluna_contract": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     },
     "yluna_contract": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     },
     "yluna_staking": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     }
   }
 }

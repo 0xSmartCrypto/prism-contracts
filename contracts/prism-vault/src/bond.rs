@@ -4,8 +4,8 @@ use crate::state::{
     is_valid_validator, read_valid_validators, CONFIG, CURRENT_BATCH, PARAMETERS, STATE,
 };
 use cosmwasm_std::{
-    attr, to_binary, Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StakingMsg,
-    StdError, StdResult, SubMsg, Uint128, WasmMsg,
+    attr, to_binary, Addr, Coin, CosmosMsg, DepsMut, Env, MessageInfo, QuerierWrapper, Response,
+    StakingMsg, StdError, StdResult, SubMsg, Uint128, WasmMsg,
 };
 use cw0::must_pay;
 use cw20::Cw20ExecuteMsg as TokenMsg;
@@ -16,7 +16,7 @@ pub fn execute_bond_split(
     info: MessageInfo,
     validator: Option<String>,
 ) -> StdResult<Response> {
-    let config = CONFIG.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     let (mint_amount_with_fee, mut sub_messages, payment_amt) =
         _execute_bond(deps, &env, &info, &validator)?;
     sub_messages.pop();
@@ -25,7 +25,7 @@ pub fn execute_bond_split(
         .add_submessages(sub_messages)
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.yluna_contract.unwrap(),
+                contract_addr: config.yluna_contract.to_string(),
                 msg: to_binary(&TokenMsg::Mint {
                     recipient: info.sender.clone().into_string(),
                     amount: mint_amount_with_fee,
@@ -33,7 +33,7 @@ pub fn execute_bond_split(
                 funds: vec![],
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.pluna_contract.unwrap(),
+                contract_addr: config.pluna_contract.to_string(),
                 msg: to_binary(&TokenMsg::Mint {
                     recipient: info.sender.clone().into_string(),
                     amount: mint_amount_with_fee,
@@ -56,21 +56,23 @@ pub fn _execute_bond(
     validator: &Option<String>,
 ) -> StdResult<(Uint128, Vec<SubMsg>, Uint128)> {
     // validator must be whitelisted
+    let selected_validator = match validator {
+        Some(v) => {
+            let validator_addr = Addr::unchecked(v);
+            let is_valid = is_valid_validator(deps.storage, &validator_addr)?;
+            if !is_valid {
+                return Err(StdError::generic_err(
+                    "The chosen validator is currently not supported",
+                ));
+            }
 
-    let unwrapped_validator = match validator {
-        Some(v) => Addr::unchecked(v),
+            validator_addr
+        }
         None => {
             let validators = read_valid_validators(deps.storage)?;
-            let idx = env.block.time.nanos() as usize % validators.len();
-            validators[idx].clone()
+            pick_bond_validator(&deps.querier, &env.contract.address, validators)?
         }
     };
-    let is_valid = is_valid_validator(deps.storage, &unwrapped_validator)?;
-    if !is_valid {
-        return Err(StdError::generic_err(
-            "The chosen validator is currently not supported",
-        ));
-    }
 
     let params = PARAMETERS.load(deps.storage)?;
     let threshold = params.er_threshold;
@@ -111,23 +113,19 @@ pub fn _execute_bond(
     state.update_exchange_rate(total_supply, requested_with_fee);
     STATE.save(deps.storage, &state)?;
 
-    let config = CONFIG.load(deps.storage)?;
-    let token_address = config
-        .cluna_contract
-        .expect("the cluna contract must have been registered");
-
+    let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     Ok((
         mint_amount_with_fee,
         vec![
             SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
-                validator: unwrapped_validator.into_string(),
+                validator: selected_validator.to_string(),
                 amount: Coin {
                     denom: params.underlying_coin_denom,
                     amount: payment_amt,
                 },
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: token_address,
+                contract_addr: config.cluna_contract.to_string(),
                 msg: to_binary(&TokenMsg::Mint {
                     recipient: sender.to_string(),
                     amount: mint_amount_with_fee,
@@ -155,4 +153,36 @@ pub fn execute_bond(
             attr("bonded", payment_amt),
             attr("minted", mint_amount_with_fee),
         ]))
+}
+
+fn pick_bond_validator(
+    querier: &QuerierWrapper,
+    contract_addr: &Addr,
+    validators: Vec<Addr>,
+) -> StdResult<Addr> {
+    if validators.is_empty() {
+        return Err(StdError::generic_err(
+            "There are not validators to pick from",
+        ));
+    }
+
+    let mut delegations = vec![];
+    for val in validators {
+        if querier.query_validator(&val)?.is_none() {
+            continue;
+        }
+
+        let delegation = querier.query_delegation(contract_addr, &val)?;
+        if delegation.is_none() {
+            return Ok(val);
+        }
+
+        delegations.push((delegation.unwrap().amount.amount.u128(), val));
+    }
+
+    if delegations.is_empty() {
+        return Err(StdError::generic_err("All validators are jailed"));
+    }
+    delegations.sort();
+    Ok(delegations.first().unwrap().1.clone())
 }

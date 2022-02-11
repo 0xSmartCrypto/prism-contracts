@@ -1,7 +1,8 @@
 use cosmwasm_std::{
-    attr, coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, DepsMut,
-    DistributionMsg, Env, FullDelegation, MessageInfo, OwnedDeps, Querier, Response, StakingMsg,
-    StdError, StdResult, Storage, SubMsg, Uint128, Validator, WasmMsg,
+    attr, coin, from_binary, to_binary, Addr, Api, BankMsg, Coin, ContractResult, CosmosMsg,
+    Decimal, DepsMut, DistributionMsg, Env, FullDelegation, MessageInfo, OwnedDeps, Querier, Reply,
+    ReplyOn, Response, StakingMsg, StdError, StdResult, Storage, SubMsg, SubMsgExecutionResponse,
+    Uint128, Validator, WasmMsg,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,24 +11,25 @@ use cosmwasm_std::testing::{mock_env, mock_info};
 use cw_asset::{Asset, AssetInfo};
 
 use crate::config::MAX_VALIDATORS;
-use crate::contract::{execute, instantiate, query};
+use crate::contract::{execute, instantiate, query, reply};
 use crate::unbond::execute_unbond;
 use prism_protocol::vault::{
     AllHistoryResponse, ConfigResponse, CurrentBatchResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
-    StateResponse, UnbondHistory, UnbondRequestsResponse, WhitelistedValidatorsResponse,
+    StateResponse, UnbondRequestsResponse, WhitelistedValidatorsResponse,
     WithdrawableUnbondedResponse,
 };
 
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use cw20::{Cw20Coin, Cw20ExecuteMsg, Cw20ReceiveMsg, MinterResponse};
 use prism_protocol::vault::Cw20HookMsg::Unbond;
 use prism_protocol::vault::ExecuteMsg::{CheckSlashing, Receive, UpdateConfig, UpdateParams};
+use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
 
 use crate::math::decimal_division;
 use crate::state::{
     all_unbond_history, get_finished_amount, get_unbond_batches, get_unbond_requests,
     is_valid_validator, query_get_finished_amount, read_unbond_history, read_unbond_wait_list,
     read_validators, remove_unbond_wait_list, remove_white_validators, store_unbond_history,
-    store_unbond_wait_list, store_white_validators, Parameters, CONFIG,
+    store_unbond_wait_list, store_white_validators, Parameters, UnbondHistory, CONFIG,
 };
 use prism_common::testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use prism_protocol::airdrop_registry::ExecuteMsg::FabricateClaim;
@@ -74,9 +76,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut OwnedDeps<S, A, Q>,
     owner: &str,
     yluna_staking: &str,
-    cluna_contract: &str,
-    yluna_contract: &str,
-    pluna_contract: &str,
     validator: String,
 ) {
     let msg = InstantiateMsg {
@@ -86,18 +85,44 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         peg_recovery_fee: Decimal::zero(),
         er_threshold: Decimal::one(),
         validator,
+        token_admin: "admin0000".to_string(),
+        token_code_id: 6u64,
+        manager: "manager0000".to_string(),
     };
 
     let owner_info = mock_info(owner, &[coin(1000000, UNDERLYING_COIN_DENOM)]);
     instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
 
+    let reply_msg = Reply {
+        id: 0,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 5, 99, 108, 117, 110, 97].into()),
+        }),
+    };
+    reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+    let reply_msg = Reply {
+        id: 1,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 5, 112, 108, 117, 110, 97].into()),
+        }),
+    };
+    reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+    let reply_msg = Reply {
+        id: 2,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 5, 121, 108, 117, 110, 97].into()),
+        }),
+    };
+    reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+
     let register_msg = ExecuteMsg::UpdateConfig {
         owner: None,
         yluna_staking: Some(yluna_staking.to_string()),
-        yluna_contract: Some(yluna_contract.to_string()),
-        pluna_contract: Some(pluna_contract.to_string()),
-        cluna_contract: Some(cluna_contract.to_string()),
         airdrop_registry_contract: Some("airdrop_registry".to_string()),
+        manager: None,
     };
 
     let res = execute(deps.as_mut(), mock_env(), owner_info, register_msg).unwrap();
@@ -159,6 +184,9 @@ fn proper_initialization() {
         peg_recovery_fee: Decimal::zero(),
         er_threshold: Decimal::one(),
         validator: validator.address.clone(),
+        token_admin: "admin0000".to_string(),
+        token_code_id: 3u64,
+        manager: "manager0000".to_string(),
     };
 
     let init_amt = 1_000_000;
@@ -207,7 +235,7 @@ fn proper_initialization() {
     // we can just call .unwrap() to assert this was a success
     let owner_info = mock_info(OWNER, &[coin(1000000, "uluna")]);
     let res: Response = instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
-    assert_eq!(2, res.messages.len());
+    assert_eq!(3, res.messages.len());
 
     let register_validator = ExecuteMsg::RegisterValidator {
         validator: validator.address.clone(),
@@ -226,6 +254,120 @@ fn proper_initialization() {
     }));
 
     assert_eq!(&res.messages[1], &delegate_msg);
+
+    let first_instantiate_msg = SubMsg {
+        msg: WasmMsg::Instantiate {
+            code_id: 3u64,
+            msg: to_binary(&TokenInstantiateMsg {
+                name: "Prism cLuna Token".to_string(),
+                symbol: "cLuna".to_string(),
+                decimals: 6,
+                initial_balances: vec![Cw20Coin {
+                    address: MOCK_CONTRACT_ADDR.to_string(),
+                    amount: Uint128::from(1000000u128),
+                }],
+                mint: Some(MinterResponse {
+                    minter: MOCK_CONTRACT_ADDR.to_string(),
+                    cap: None,
+                }),
+            })
+            .unwrap(),
+            funds: vec![],
+            admin: Some("admin0000".to_string()),
+            label: "".to_string(),
+        }
+        .into(),
+        id: 0u64,
+        gas_limit: None,
+        reply_on: ReplyOn::Success,
+    };
+
+    assert_eq!(&res.messages[2], &first_instantiate_msg);
+
+    // first reply
+    let reply_msg = Reply {
+        id: 0,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 5, 99, 108, 117, 110, 97].into()),
+        }),
+    };
+    let res = reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+    assert_eq!(res.attributes, vec![attr("cluna_address", "cluna")]);
+    assert_eq!(
+        res.messages,
+        vec![SubMsg {
+            msg: WasmMsg::Instantiate {
+                code_id: 3u64,
+                msg: to_binary(&TokenInstantiateMsg {
+                    name: "Prism pLuna Token".to_string(),
+                    symbol: "pLuna".to_string(),
+                    decimals: 6,
+                    initial_balances: vec![],
+                    mint: Some(MinterResponse {
+                        minter: MOCK_CONTRACT_ADDR.to_string(),
+                        cap: None,
+                    }),
+                })
+                .unwrap(),
+                funds: vec![],
+                admin: Some("admin0000".to_string()),
+                label: "".to_string(),
+            }
+            .into(),
+            id: 1u64,
+            gas_limit: None,
+            reply_on: ReplyOn::Success,
+        }]
+    );
+
+    // second reply
+    let reply_msg = Reply {
+        id: 1,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 5, 112, 108, 117, 110, 97].into()),
+        }),
+    };
+    let res = reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+    assert_eq!(res.attributes, vec![attr("pluna_address", "pluna")]);
+    assert_eq!(
+        res.messages,
+        vec![SubMsg {
+            msg: WasmMsg::Instantiate {
+                code_id: 3u64,
+                msg: to_binary(&TokenInstantiateMsg {
+                    name: "Prism yLuna Token".to_string(),
+                    symbol: "yLuna".to_string(),
+                    decimals: 6,
+                    initial_balances: vec![],
+                    mint: Some(MinterResponse {
+                        minter: MOCK_CONTRACT_ADDR.to_string(),
+                        cap: None,
+                    }),
+                })
+                .unwrap(),
+                funds: vec![],
+                admin: Some("admin0000".to_string()),
+                label: "".to_string(),
+            }
+            .into(),
+            id: 2u64,
+            gas_limit: None,
+            reply_on: ReplyOn::Success,
+        }]
+    );
+
+    let reply_msg = Reply {
+        id: 2,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 5, 121, 108, 117, 110, 97].into()),
+        }),
+    };
+    let res = reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+    assert_eq!(res.attributes, vec![attr("yluna_address", "yluna")]);
+    assert_eq!(res.messages.len(), 0);
 
     // check parameters storage
     let params = QueryMsg::Parameters {};
@@ -258,11 +400,13 @@ fn proper_initialization() {
         from_binary(&query(deps.as_ref(), mock_env(), conf).unwrap()).unwrap();
     let expected_conf = ConfigResponse {
         owner: OWNER.to_string(),
-        yluna_staking: None,
-        yluna_contract: None,
-        pluna_contract: None,
-        cluna_contract: None,
-        airdrop_registry_contract: None,
+        yluna_staking: "".to_string(),
+        yluna_contract: "yluna".to_string(),
+        pluna_contract: "pluna".to_string(),
+        cluna_contract: "cluna".to_string(),
+        airdrop_registry_contract: "".to_string(),
+        initialized: false,
+        manager: "manager0000".to_string(),
     };
 
     assert_eq!(expected_conf, query_conf);
@@ -294,9 +438,6 @@ fn proper_register_validator() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -399,9 +540,6 @@ fn proper_bond() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -539,7 +677,7 @@ fn proper_bond() {
 }
 
 #[test]
-fn proper_bond_no_validator() {
+fn proper_pick_bond_validator() {
     let mut deps = dependencies(&[]);
 
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
@@ -547,15 +685,13 @@ fn proper_bond_no_validator() {
     set_validator_mock(&mut deps.querier);
 
     let addr1 = "addr1000".to_string();
-    let bond_amount = Uint128::new(10000);
+    let bond_amount = Uint128::new(20000);
+    let bond_amount_2 = Uint128::new(10000);
 
     init(
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -574,18 +710,14 @@ fn proper_bond_no_validator() {
 
     let bond_msg = ExecuteMsg::Bond { validator: None };
 
-    let mut env = mock_env();
-    // verify time is what we think it is to verify the logic to pick the validator
-    assert_eq!(env.block.time.nanos(), 1571797419879305533);
-
-    // bond, expect to bond with second validator (logic uses time.nanos % sorted validator list)
+    // first bond will go to the first validator it will be directly selected since it has the lowest delegation
     let info = mock_info(addr1.as_str(), &[coin(bond_amount.u128(), "uluna")]);
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), bond_msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg.clone()).unwrap();
     assert_eq!(
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
-                validator: validator2.address,
+                validator: validator.address.clone(),
                 amount: Coin {
                     denom: UNDERLYING_COIN_DENOM.to_string(),
                     amount: bond_amount,
@@ -607,30 +739,85 @@ fn proper_bond_no_validator() {
     deps.querier.with_token_balances(&[(
         &"cluna".to_string(),
         &[(
-            &mock_env().contract.address.to_string(),
+            &MOCK_CONTRACT_ADDR.to_string(),
             &(INITIAL_DEPOSIT_AMOUNT + bond_amount),
         )],
     )]);
 
-    // increment time, bond again, expect to bond with first validator
-    env.block.time = env.block.time.plus_nanos(1);
-    let info = mock_info(addr1.as_str(), &[coin(bond_amount.u128(), "uluna")]);
-    let res = execute(deps.as_mut(), env, info.clone(), bond_msg).unwrap();
+    deps.querier.update_staking(
+        "uluna",
+        &[validator.clone(), validator2.clone()],
+        &[sample_delegation(
+            validator.address.clone(),
+            coin(INITIAL_DEPOSIT_AMOUNT.u128() + bond_amount.u128(), "uluna"),
+        )],
+    );
+
+    // now second validator should be selected
+
+    let info = mock_info(addr1.as_str(), &[coin(bond_amount_2.u128(), "uluna")]);
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg.clone()).unwrap();
     assert_eq!(
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
-                validator: validator.address,
+                validator: validator2.address.clone(), // validator 2
                 amount: Coin {
                     denom: UNDERLYING_COIN_DENOM.to_string(),
-                    amount: bond_amount,
+                    amount: bond_amount_2,
                 },
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: CLUNA_CONTRACT.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Mint {
                     recipient: info.sender.to_string(),
-                    amount: bond_amount,
+                    amount: bond_amount_2,
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+        ]
+    );
+
+    // update token balances for proper exchange rate
+    deps.querier.with_token_balances(&[(
+        &"cluna".to_string(),
+        &[(
+            &mock_env().contract.address.to_string(),
+            &(INITIAL_DEPOSIT_AMOUNT + bond_amount + bond_amount_2),
+        )],
+    )]);
+
+    deps.querier.update_staking(
+        "uluna",
+        &[validator.clone(), validator2.clone()],
+        &[sample_delegation(
+            validator.address,
+            coin(
+                INITIAL_DEPOSIT_AMOUNT.u128() + bond_amount.u128() + bond_amount_2.u128(),
+                "uluna",
+            ),
+        )],
+    );
+
+    // now validator 2 should be selcteed again, because bond_amount_2 < bond_amount
+    let info = mock_info(addr1.as_str(), &[coin(bond_amount_2.u128(), "uluna")]);
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg).unwrap();
+    assert_eq!(
+        res.messages,
+        vec![
+            SubMsg::new(CosmosMsg::Staking(StakingMsg::Delegate {
+                validator: validator2.address, // validator 2
+                amount: Coin {
+                    denom: UNDERLYING_COIN_DENOM.to_string(),
+                    amount: bond_amount_2,
+                },
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: CLUNA_CONTRACT.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: info.sender.to_string(),
+                    amount: bond_amount_2,
                 })
                 .unwrap(),
                 funds: vec![],
@@ -653,9 +840,6 @@ fn proper_bond_split() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -726,15 +910,7 @@ fn proper_split() {
     let addr1 = "addr1000".to_string();
     let bond_amount = Uint128::new(10000);
 
-    init(
-        deps.borrow_mut(),
-        OWNER,
-        YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
-        validator.address,
-    );
+    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
 
     let split_msg = ExecuteMsg::Split {
         amount: bond_amount,
@@ -787,15 +963,7 @@ fn proper_merge() {
     let addr1 = "addr1000".to_string();
     let bond_amount = Uint128::new(10000);
 
-    init(
-        deps.borrow_mut(),
-        OWNER,
-        YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
-        validator.address,
-    );
+    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
 
     let split_msg = ExecuteMsg::Merge {
         amount: bond_amount,
@@ -853,9 +1021,6 @@ fn proper_deregister() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -868,6 +1033,7 @@ fn proper_deregister() {
     //must be able to deregister while there is no delegation
     let msg = ExecuteMsg::DeregisterValidator {
         validator: validator.address.clone(),
+        redel_validator: validator2.address.clone(),
     };
 
     let owner_info = mock_info(OWNER, &[]);
@@ -878,7 +1044,7 @@ fn proper_deregister() {
         vec![
             attr("action", "de_register_validator"),
             attr("validator", validator.address.clone()),
-            attr("new-validator", validator2.address.clone()),
+            attr("redel_validator", validator2.address.clone()),
         ]
     );
 
@@ -895,6 +1061,7 @@ fn proper_deregister() {
     // check invalid sender
     let msg = ExecuteMsg::DeregisterValidator {
         validator: validator.address.clone(),
+        redel_validator: validator2.address.clone(),
     };
 
     let invalid_info = mock_info("invalid", &[]);
@@ -903,6 +1070,7 @@ fn proper_deregister() {
 
     let msg = ExecuteMsg::DeregisterValidator {
         validator: validator.address.clone(),
+        redel_validator: validator2.address.clone(),
     };
 
     let owner_info = mock_info(OWNER, &[]);
@@ -950,7 +1118,8 @@ fn proper_deregister() {
 
     // fails if there is only one validator
     let msg = ExecuteMsg::DeregisterValidator {
-        validator: validator2.address,
+        validator: validator2.address.clone(),
+        redel_validator: validator2.address,
     };
 
     let owner_info = mock_info(OWNER, &[]);
@@ -975,9 +1144,6 @@ pub fn proper_update_global_index() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1064,9 +1230,6 @@ pub fn proper_update_global_index_two_validators() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1150,9 +1313,6 @@ pub fn proper_update_global_index_respect_one_registered_validator() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1220,9 +1380,6 @@ pub fn proper_receive() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1311,9 +1468,6 @@ pub fn proper_unbond() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1532,9 +1686,6 @@ pub fn proper_pick_validator() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1700,9 +1851,6 @@ pub fn proper_pick_validator_respect_distributed_delegation() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1799,9 +1947,6 @@ pub fn proper_slashing() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1887,28 +2032,15 @@ pub fn proper_slashing() {
 
     let info = mock_info(&addr1, &[]);
     let mut env = mock_env();
-    let _res = execute_unbond(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        Uint128::new(500),
-        addr1.clone(),
-    )
-    .unwrap();
+    let _res =
+        execute_unbond(deps.as_mut(), env.clone(), Uint128::new(500), addr1.clone()).unwrap();
 
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &Uint128::new(1611u128))])]);
 
     env.block.time = env.block.time.plus_seconds(31);
 
-    let res = execute_unbond(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        Uint128::new(500),
-        addr1.clone(),
-    )
-    .unwrap();
+    let res = execute_unbond(deps.as_mut(), env.clone(), Uint128::new(500), addr1.clone()).unwrap();
     let msgs: SubMsg = SubMsg::new(CosmosMsg::Staking(StakingMsg::Undelegate {
         validator: validator.address,
         amount: coin(900, "uluna"),
@@ -1967,9 +2099,6 @@ pub fn proper_withdraw_unbonded() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1987,7 +2116,7 @@ pub fn proper_withdraw_unbonded() {
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(100u128))])]);
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, bond_msg).unwrap();
     assert_eq!(2, res.messages.len());
 
     let delegate = &res.messages[0].msg;
@@ -2001,14 +2130,7 @@ pub fn proper_withdraw_unbonded() {
 
     set_delegation(&mut deps.querier, validator, 100, "uluna");
 
-    let res = execute_unbond(
-        deps.as_mut(),
-        mock_env(),
-        info,
-        Uint128::new(10),
-        bob.clone(),
-    )
-    .unwrap();
+    let res = execute_unbond(deps.as_mut(), mock_env(), Uint128::new(10), bob.clone()).unwrap();
     assert_eq!(1, res.messages.len());
 
     deps.querier
@@ -2042,14 +2164,7 @@ pub fn proper_withdraw_unbonded() {
         StdError::generic_err("No withdrawable uluna assets are available yet")
     );
 
-    let res = execute_unbond(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        Uint128::new(10),
-        bob.clone(),
-    )
-    .unwrap();
+    let res = execute_unbond(deps.as_mut(), env.clone(), Uint128::new(10), bob.clone()).unwrap();
     assert_eq!(res.messages.len(), 2);
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(80u128))])]);
@@ -2163,9 +2278,6 @@ pub fn proper_withdraw_unbonded_respect_slashing() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2183,7 +2295,7 @@ pub fn proper_withdraw_unbonded_respect_slashing() {
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &bond_amount)])]);
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, bond_msg).unwrap();
     assert_eq!(2, res.messages.len());
 
     let delegate = &res.messages[0].msg;
@@ -2197,7 +2309,7 @@ pub fn proper_withdraw_unbonded_respect_slashing() {
 
     set_delegation(&mut deps.querier, validator, bond_amount.u128(), "uluna");
 
-    let res = execute_unbond(deps.as_mut(), mock_env(), info, unbond_amount, bob.clone()).unwrap();
+    let res = execute_unbond(deps.as_mut(), mock_env(), unbond_amount, bob.clone()).unwrap();
     assert_eq!(1, res.messages.len());
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(9500))])]);
@@ -2230,14 +2342,7 @@ pub fn proper_withdraw_unbonded_respect_slashing() {
     );
 
     // trigger undelegation message
-    let res = execute_unbond(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        unbond_amount,
-        bob.clone(),
-    )
-    .unwrap();
+    let res = execute_unbond(deps.as_mut(), env.clone(), unbond_amount, bob.clone()).unwrap();
     assert_eq!(2, res.messages.len());
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(9000))])]);
@@ -2320,9 +2425,6 @@ pub fn proper_withdraw_unbonded_respect_inactivity_slashing() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2340,7 +2442,7 @@ pub fn proper_withdraw_unbonded_respect_inactivity_slashing() {
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &bond_amount)])]);
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, bond_msg).unwrap();
     assert_eq!(2, res.messages.len());
 
     let delegate = &res.messages[0].msg;
@@ -2354,7 +2456,7 @@ pub fn proper_withdraw_unbonded_respect_inactivity_slashing() {
 
     set_delegation(&mut deps.querier, validator, bond_amount.u128(), "uluna");
 
-    let res = execute_unbond(deps.as_mut(), mock_env(), info, unbond_amount, bob.clone()).unwrap();
+    let res = execute_unbond(deps.as_mut(), mock_env(), unbond_amount, bob.clone()).unwrap();
     assert_eq!(1, res.messages.len());
 
     deps.querier
@@ -2393,14 +2495,7 @@ pub fn proper_withdraw_unbonded_respect_inactivity_slashing() {
     );
 
     // trigger undelegation message
-    let res = execute_unbond(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        unbond_amount,
-        bob.clone(),
-    )
-    .unwrap();
+    let res = execute_unbond(deps.as_mut(), env.clone(), unbond_amount, bob.clone()).unwrap();
     assert_eq!(2, res.messages.len());
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(9000))])]);
@@ -2512,9 +2607,6 @@ pub fn proper_withdraw_unbond_with_dummies() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2532,7 +2624,7 @@ pub fn proper_withdraw_unbond_with_dummies() {
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &bond_amount)])]);
 
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, bond_msg).unwrap();
     assert_eq!(2, res.messages.len());
 
     set_delegation(
@@ -2542,7 +2634,7 @@ pub fn proper_withdraw_unbond_with_dummies() {
         "uluna",
     );
 
-    let res = execute_unbond(deps.as_mut(), mock_env(), info, unbond_amount, bob.clone()).unwrap();
+    let res = execute_unbond(deps.as_mut(), mock_env(), unbond_amount, bob.clone()).unwrap();
     assert_eq!(1, res.messages.len());
 
     deps.querier
@@ -2562,14 +2654,7 @@ pub fn proper_withdraw_unbond_with_dummies() {
 
     env.block.time = env.block.time.plus_seconds(31);
     // trigger undelegation message
-    let res = execute_unbond(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        unbond_amount,
-        bob.clone(),
-    )
-    .unwrap();
+    let res = execute_unbond(deps.as_mut(), env.clone(), unbond_amount, bob.clone()).unwrap();
     assert_eq!(2, res.messages.len());
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(9000))])]);
@@ -2582,14 +2667,7 @@ pub fn proper_withdraw_unbond_with_dummies() {
         "uluna",
     );
 
-    let res = execute_unbond(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        unbond_amount,
-        bob.clone(),
-    )
-    .unwrap();
+    let res = execute_unbond(deps.as_mut(), env.clone(), unbond_amount, bob.clone()).unwrap();
     assert_eq!(1, res.messages.len());
 
     deps.querier
@@ -2597,14 +2675,7 @@ pub fn proper_withdraw_unbond_with_dummies() {
 
     env.block.time = env.block.time.plus_seconds(31);
 
-    let res = execute_unbond(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        unbond_amount,
-        bob.clone(),
-    )
-    .unwrap();
+    let res = execute_unbond(deps.as_mut(), env.clone(), unbond_amount, bob.clone()).unwrap();
     assert_eq!(2, res.messages.len());
     deps.querier
         .with_token_balances(&[(&"cluna".to_string(), &[(&bob, &Uint128::new(8000))])]);
@@ -2676,15 +2747,7 @@ pub fn test_update_params() {
         er_threshold: None,
     };
 
-    init(
-        deps.borrow_mut(),
-        OWNER,
-        YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
-        validator.address,
-    );
+    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
 
     let invalid_info = mock_info("invalid", &[]);
     let res = execute(
@@ -2750,9 +2813,6 @@ pub fn proper_recovery_fee() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2967,6 +3027,9 @@ pub fn proper_update_config() {
         peg_recovery_fee: Decimal::zero(),
         er_threshold: Decimal::one(),
         validator: validator.address,
+        token_admin: "admin0000".to_string(),
+        token_code_id: 0u64,
+        manager: "manager0000".to_string(),
     };
 
     let owner_info = mock_info(OWNER, &[coin(1000000, "uluna")]);
@@ -2976,10 +3039,8 @@ pub fn proper_update_config() {
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
         yluna_staking: None,
-        yluna_contract: None,
-        pluna_contract: None,
-        cluna_contract: None,
         airdrop_registry_contract: None,
+        manager: None,
     };
     let info = mock_info(&invalid_owner, &[]);
     let res = execute(deps.as_mut(), mock_env(), info, update_config);
@@ -2989,17 +3050,15 @@ pub fn proper_update_config() {
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
         yluna_staking: None,
-        yluna_contract: None,
-        pluna_contract: None,
-        cluna_contract: None,
         airdrop_registry_contract: None,
+        manager: None,
     };
     let info = mock_info(OWNER, &[]);
     let res = execute(deps.as_mut(), mock_env(), info, update_config).unwrap();
     assert_eq!(res.messages.len(), 0);
 
     let config = CONFIG.load(&deps.storage).unwrap();
-    assert_eq!(new_owner, config.creator);
+    assert_eq!(new_owner, config.owner);
 
     // new owner can send the owner related messages
     let update_prams = UpdateParams {
@@ -3028,10 +3087,8 @@ pub fn proper_update_config() {
     let update_config = UpdateConfig {
         owner: None,
         yluna_staking: Some("new reward".to_string()),
-        yluna_contract: None,
-        pluna_contract: None,
-        cluna_contract: None,
         airdrop_registry_contract: None,
+        manager: None,
     };
     let new_owner_info = mock_info(&new_owner, &[]);
     let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_config).unwrap();
@@ -3047,45 +3104,15 @@ pub fn proper_update_config() {
     let config = QueryMsg::Config {};
     let config_query: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), config).unwrap()).unwrap();
-    assert_eq!(
-        config_query.yluna_staking.unwrap(),
-        "new reward".to_string()
-    );
+    assert_eq!(config_query.yluna_staking, "new reward".to_string());
+    // contract is not yet fully initialized
+    assert!(!config_query.initialized);
 
     let update_config = UpdateConfig {
         owner: None,
         yluna_staking: None,
-        yluna_contract: Some("new token".to_string()),
-        pluna_contract: None,
-        cluna_contract: None,
-        airdrop_registry_contract: None,
-    };
-    let new_owner_info = mock_info(&new_owner, &[]);
-    let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_config).unwrap();
-    assert_eq!(res.messages.len(), 0);
-
-    let config = QueryMsg::Config {};
-    let config_query: ConfigResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), config).unwrap()).unwrap();
-    assert_eq!(
-        config_query.yluna_contract.unwrap(),
-        "new token".to_string()
-    );
-
-    //make sure the other configs are still the same.
-    assert_eq!(
-        config_query.yluna_staking.unwrap(),
-        "new reward".to_string()
-    );
-    assert_eq!(config_query.owner, new_owner);
-
-    let update_config = UpdateConfig {
-        owner: None,
-        yluna_staking: None,
-        yluna_contract: None,
-        pluna_contract: None,
-        cluna_contract: None,
         airdrop_registry_contract: Some("new airdrop".to_string()),
+        manager: None,
     };
     let new_owner_info = mock_info(&new_owner, &[]);
     let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_config).unwrap();
@@ -3095,9 +3122,11 @@ pub fn proper_update_config() {
     let config_query: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), config).unwrap()).unwrap();
     assert_eq!(
-        config_query.airdrop_registry_contract.unwrap(),
+        config_query.airdrop_registry_contract,
         "new airdrop".to_string()
     );
+    // now the contract is initialized because yluna_staking and airdrop contract has been set
+    assert!(config_query.initialized);
 }
 
 #[test]
@@ -3107,15 +3136,7 @@ fn proper_claim_airdrop() {
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
     set_validator_mock(&mut deps.querier);
 
-    init(
-        deps.borrow_mut(),
-        OWNER,
-        YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
-        validator.address,
-    );
+    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
 
     let claim_msg = ExecuteMsg::ClaimAirdrop {
         airdrop_token_contract: "airdrop_token".to_string(),
@@ -3126,10 +3147,7 @@ fn proper_claim_airdrop() {
     //invalid sender
     let info = mock_info(OWNER, &[]);
     let res = execute(deps.as_mut(), mock_env(), info, claim_msg.clone()).unwrap_err();
-    assert_eq!(
-        res,
-        StdError::generic_err("Sender must be airdrop_registry")
-    );
+    assert_eq!(res, StdError::generic_err("unauthorized"));
 
     let valid_info = mock_info("airdrop_registry", &[]);
     let res = execute(deps.as_mut(), mock_env(), valid_info, claim_msg).unwrap();
@@ -3163,15 +3181,7 @@ fn proper_deposit_airdrop_reward() {
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
     set_validator_mock(&mut deps.querier);
 
-    init(
-        deps.borrow_mut(),
-        OWNER,
-        YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
-        validator.address,
-    );
+    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
 
     let swap_msg = ExecuteMsg::DepositAirdropReward {
         airdrop_token_contract: "airdrop_token".to_string(),
@@ -3228,9 +3238,6 @@ fn proper_update_global_index_with_airdrop() {
         deps.borrow_mut(),
         OWNER,
         YLUNA_STAKING,
-        CLUNA_CONTRACT,
-        YLUNA_CONTRACT,
-        PLUNA_CONTRACT,
         validator.address.clone(),
     );
 

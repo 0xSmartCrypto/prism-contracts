@@ -82,7 +82,10 @@ pub fn execute(
         }
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
-        ExecuteMsg::DepositMintedPylunaHook {} => deposit_minted_pyluna_hook(deps, env),
+        ExecuteMsg::DepositMintedPylunaHook {
+            prev_pluna_balance,
+            prev_yluna_balance,
+        } => deposit_minted_pyluna_hook(deps, env, prev_pluna_balance, prev_yluna_balance),
         ExecuteMsg::WhitelistRewardAsset { asset } => {
             asset.check(deps.api)?;
             whitelist_reward_asset(deps, info, asset)
@@ -122,6 +125,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::PoolInfo { asset_token } => to_binary(&query_pool_info(deps, asset_token)?),
         QueryMsg::RewardAssetWhitelist {} => to_binary(&query_whitelist(deps)?),
         QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
+        QueryMsg::BondAmount {} => to_binary(&query_bond_amount(deps)?),
     }
 }
 
@@ -154,6 +158,12 @@ pub fn query_pool_info(deps: Deps, asset_token: String) -> StdResult<PoolInfoRes
         asset_token,
         reward_index: pool_info.reward_index,
     })
+}
+
+pub fn query_bond_amount(deps: Deps) -> StdResult<Uint128> {
+    let bond_amount = TOTAL_BOND_AMOUNT.load(deps.storage)?;
+
+    Ok(bond_amount)
 }
 
 fn validate_rate(rate: Decimal) -> StdResult<Decimal> {

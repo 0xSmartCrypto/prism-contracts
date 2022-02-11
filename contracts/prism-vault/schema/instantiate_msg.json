@@ -6,6 +6,8 @@
     "epoch_period",
     "er_threshold",
     "peg_recovery_fee",
+    "token_admin",
+    "token_code_id",
     "unbonding_period",
     "underlying_coin_denom",
     "validator"
@@ -21,6 +23,14 @@
     },
     "peg_recovery_fee": {
       "$ref": "#/definitions/Decimal"
+    },
+    "token_admin": {
+      "type": "string"
+    },
+    "token_code_id": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "unbonding_period": {
       "type": "integer",
