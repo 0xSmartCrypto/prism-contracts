@@ -19,7 +19,7 @@ use prism_protocol::vault::{
     WithdrawableUnbondedResponse,
 };
 
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, MinterResponse};
+use cw20::{Cw20Coin, Cw20ExecuteMsg, Cw20ReceiveMsg, MinterResponse};
 use prism_protocol::vault::Cw20HookMsg::Unbond;
 use prism_protocol::vault::ExecuteMsg::{CheckSlashing, Receive, UpdateConfig, UpdateParams};
 use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
@@ -262,7 +262,10 @@ fn proper_initialization() {
                 name: "Prism cLuna Token".to_string(),
                 symbol: "cLuna".to_string(),
                 decimals: 6,
-                initial_balances: vec![],
+                initial_balances: vec![Cw20Coin {
+                    address: MOCK_CONTRACT_ADDR.to_string(),
+                    amount: Uint128::from(1000000u128),
+                }],
                 mint: Some(MinterResponse {
                     minter: MOCK_CONTRACT_ADDR.to_string(),
                     cap: None,

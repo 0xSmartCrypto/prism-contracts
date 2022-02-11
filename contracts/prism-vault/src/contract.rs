@@ -21,7 +21,9 @@ use crate::unbond::{execute_unbond, execute_withdraw_unbonded};
 use crate::bond::{execute_bond, execute_bond_split};
 use crate::refract::{merge, split};
 use cw0::must_pay;
-use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, MinterResponse, TokenInfoResponse};
+use cw20::{
+    Cw20Coin, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, MinterResponse, TokenInfoResponse,
+};
 use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::{
     AllHistoryResponse, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
@@ -123,7 +125,12 @@ pub fn instantiate(
                 name: "Prism cLuna Token".to_string(),
                 symbol: "cLuna".to_string(),
                 decimals: 6,
-                initial_balances: vec![],
+                initial_balances: vec![
+                    (Cw20Coin {
+                        address: env.contract.address.to_string(),
+                        amount: payment_amt,
+                    }),
+                ],
                 mint: Some(MinterResponse {
                     minter: env.contract.address.to_string(),
                     cap: None,
