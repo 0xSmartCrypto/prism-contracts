@@ -82,7 +82,10 @@ pub fn execute(
         }
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
-        ExecuteMsg::DepositMintedPylunaHook {} => deposit_minted_pyluna_hook(deps, env),
+        ExecuteMsg::DepositMintedPylunaHook {
+            prev_pluna_balance,
+            prev_yluna_balance,
+        } => deposit_minted_pyluna_hook(deps, env, prev_pluna_balance, prev_yluna_balance),
         ExecuteMsg::WhitelistRewardAsset { asset } => {
             asset.check(deps.api)?;
             whitelist_reward_asset(deps, info, asset)

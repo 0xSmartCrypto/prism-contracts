@@ -378,7 +378,11 @@ fn test_luna_to_cluna_hook() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
-                msg: to_binary(&ExecuteMsg::DepositMintedPylunaHook {}).unwrap(),
+                msg: to_binary(&ExecuteMsg::DepositMintedPylunaHook {
+                    prev_pluna_balance: Uint128::zero(),
+                    prev_yluna_balance: Uint128::zero(),
+                })
+                .unwrap(),
                 funds: vec![],
             })),
         ]
@@ -390,6 +394,12 @@ fn test_deposit_minted_pyluna_hook() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
 
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let msg = ExecuteMsg::DepositMintedPylunaHook {
+        prev_pluna_balance: Uint128::from(600000u128),
+        prev_yluna_balance: Uint128::from(700000u128),
+    };
+
     deps.querier.with_token_balances(&[
         (
             &"yluna0000".to_string(),
@@ -397,12 +407,9 @@ fn test_deposit_minted_pyluna_hook() {
         ),
         (
             &"pluna0000".to_string(),
-            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000000u128))],
+            &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(2000000u128))],
         ),
     ]);
-
-    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let msg = ExecuteMsg::DepositMintedPylunaHook {};
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
@@ -417,11 +424,11 @@ fn test_deposit_minted_pyluna_hook() {
                 assets: vec![
                     Asset {
                         info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
-                        amount: Uint128::from(1000000u128),
+                        amount: Uint128::from(300000u128), // 1000000 - 700000
                     },
                     Asset {
                         info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
-                        amount: Uint128::from(1000000u128),
+                        amount: Uint128::from(1400000u128), // 2000000 - 600000
                     },
                 ]
             })
