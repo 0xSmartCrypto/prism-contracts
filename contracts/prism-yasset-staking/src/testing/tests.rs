@@ -1218,7 +1218,7 @@ fn test_mint_xprism_claim_hook() {
         res.attributes,
         vec![
             attr("action", "mint_xprism_claim_hook"),
-            attr("mint_amount", "1000"),
+            attr("prism_amount_to_mint_xprism", "1000"),
         ]
     );
 
@@ -1249,7 +1249,7 @@ fn test_mint_xprism_claim_hook() {
         res.attributes,
         vec![
             attr("action", "mint_xprism_claim_hook"),
-            attr("mint_amount", "750"),
+            attr("prism_amount_to_mint_xprism", "750"),
         ]
     );
 }
