@@ -3536,3 +3536,260 @@ fn proper_validator_storage() -> StdResult<()> {
 
     Ok(())
 }
+
+// this test tries to simulate what would happen if any user burns cluna/yluna/pluna to intentionally alter the exchange ratio
+#[test]
+pub fn burn_token_scenario() {
+    let mut deps = dependencies(&[]);
+    let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
+    set_validator_mock(&mut deps.querier);
+
+    let addr1 = "addr1000".to_string();
+
+    init(
+        deps.borrow_mut(),
+        OWNER,
+        YLUNA_STAKING,
+        validator.address.clone(),
+    );
+
+    // The bond call won't accept a validator that isn't registered.
+    do_register_validator(deps.as_mut(), validator.clone());
+
+    do_bond(
+        deps.as_mut(),
+        addr1.clone(),
+        Uint128::new(1000),
+        validator.clone(),
+    );
+
+    //this will set the balance of the user in token contract
+    // we simulate the user burning the tokens by setting the total supply to 800 instead of 1000
+    deps.querier
+        .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &Uint128::new(800u128))])]);
+
+    // slashing
+    set_delegation(&mut deps.querier, validator.clone(), 1000, "uluna");
+
+    // executing check slashing will update the exchange ratio
+    let info = mock_info(&addr1, &[]);
+    let report_slashing = CheckSlashing {};
+    let res = execute(deps.as_mut(), mock_env(), info, report_slashing).unwrap();
+    assert_eq!(0, res.messages.len());
+
+    let ex_rate = QueryMsg::State {};
+    let query_exchange_rate: StateResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), ex_rate).unwrap()).unwrap();
+    assert_eq!(query_exchange_rate.exchange_rate.to_string(), "1.25"); // exchange ratio now is > 1.0 (1000 / 800)
+
+    // bond again to see the update exchange rate ------------------ 2
+    let second_bond = ExecuteMsg::Bond {
+        validator: Some(validator.address.clone()),
+    };
+
+    let info = mock_info(&addr1, &[coin(1000, "uluna")]);
+
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), second_bond).unwrap();
+    assert_eq!(2, res.messages.len());
+
+    let delegate = &res.messages[0].msg;
+    match delegate {
+        CosmosMsg::Staking(StakingMsg::Delegate { validator, amount }) => {
+            assert_eq!(validator.as_str(), DEFAULT_VALIDATOR.to_string());
+            assert_eq!(amount, &coin(1000, "uluna")); // everything is delegated
+        }
+        _ => panic!("Unexpected message: {:?}", delegate),
+    }
+
+    let message = &res.messages[1].msg;
+    match message {
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr,
+            msg,
+            funds: _,
+        }) => {
+            assert_eq!(contract_addr, CLUNA_CONTRACT);
+            assert_eq!(
+                msg,
+                &to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: info.sender.to_string(),
+                    amount: Uint128::new(800) // mint amount should be less, since the ER is higher (1000 / 1.25)
+                })
+                .unwrap()
+            );
+        }
+        _ => panic!("Unexpected message: {:?}", message),
+    }
+
+    set_delegation(&mut deps.querier, validator.clone(), 2000, "uluna");
+
+    // update user balance
+    deps.querier.with_token_balances(&[(
+        &"cluna".to_string(),
+        &[(&addr1, &Uint128::new(1000u128 + 800u128))],
+    )]);
+
+    // expected exchange rate does not change
+    let ex_rate = QueryMsg::State {};
+    let query_exchange_rate: StateResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), ex_rate).unwrap()).unwrap();
+    assert_eq!(query_exchange_rate.exchange_rate.to_string(), "1.25");
+
+    let mut env = mock_env();
+
+    // unbond
+    let _res = execute_unbond(
+        deps.as_mut(),
+        env.clone(),
+        Uint128::new(1000),
+        addr1.clone(),
+    )
+    .unwrap();
+
+    deps.querier
+        .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &Uint128::new(800u128))])]);
+
+    let ex_rate = QueryMsg::State {};
+    let query_exchange_rate: StateResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), ex_rate).unwrap()).unwrap();
+    assert_eq!(
+        query_exchange_rate.exchange_rate.to_string(),
+        "1.111111111111111111"
+    ); // it reduces exchange rate
+
+    // bond more ------------------ 2
+    let third_bond = ExecuteMsg::Bond {
+        validator: Some(validator.address.clone()),
+    };
+    let info = mock_info(&addr1, &[coin(1000, "uluna")]);
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), third_bond).unwrap();
+    assert_eq!(2, res.messages.len());
+
+    let delegate = &res.messages[0].msg;
+    match delegate {
+        CosmosMsg::Staking(StakingMsg::Delegate { validator, amount }) => {
+            assert_eq!(validator.as_str(), DEFAULT_VALIDATOR.to_string());
+            assert_eq!(amount, &coin(1000, "uluna")); // everything is delegated
+        }
+        _ => panic!("Unexpected message: {:?}", delegate),
+    }
+
+    let message = &res.messages[1].msg;
+    match message {
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr,
+            msg,
+            funds: _,
+        }) => {
+            assert_eq!(contract_addr, CLUNA_CONTRACT);
+            assert_eq!(
+                msg,
+                &to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: info.sender.to_string(),
+                    amount: Uint128::new(900) // mint amount should be less, since the ER is higher (1000 / 1.111111111111111111)
+                })
+                .unwrap()
+            );
+        }
+        _ => panic!("Unexpected message: {:?}", message),
+    }
+
+    deps.querier.with_token_balances(&[(
+        &"cluna".to_string(),
+        &[(&addr1, &Uint128::new(800u128 + 900u128))],
+    )]);
+    set_delegation(&mut deps.querier, validator.clone(), 3000, "uluna");
+
+    env.block.time = env.block.time.plus_seconds(31);
+
+    let res = execute_unbond(deps.as_mut(), env.clone(), Uint128::new(500), addr1.clone()).unwrap();
+    let msgs: SubMsg = SubMsg::new(CosmosMsg::Staking(StakingMsg::Undelegate {
+        validator: validator.address.to_string(),
+        amount: coin(1666, "uluna"), // (500 + 1000) * 1.111111111111111111
+    }));
+    assert_eq!(res.messages[0], msgs);
+
+    set_delegation(&mut deps.querier, validator.clone(), 1334, "uluna"); // 3000 - 1666
+
+    deps.querier
+        .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &Uint128::new(1200u128))])]);
+
+    deps.querier.with_native_balances(&[(
+        MOCK_CONTRACT_ADDR.to_string(),
+        Coin {
+            denom: "uluna".to_string(),
+            amount: Uint128::new(1666),
+        },
+    )]);
+
+    let ex_rate = QueryMsg::State {};
+    let query_exchange_rate: StateResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), ex_rate).unwrap()).unwrap();
+    assert_eq!(
+        query_exchange_rate.exchange_rate.to_string(),
+        "1.111111111111111111"
+    );
+
+    env.block.time = env.block.time.plus_seconds(90);
+    // check withdrawUnbonded message
+    let withdraw_unbond_msg = ExecuteMsg::WithdrawUnbonded {};
+    let wdraw_unbonded_res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        withdraw_unbond_msg,
+    )
+    .unwrap();
+    assert_eq!(wdraw_unbonded_res.messages.len(), 1);
+
+    let sent_message = &wdraw_unbonded_res.messages[0].msg;
+    match sent_message {
+        CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+            assert_eq!(to_address, &addr1);
+            assert_eq!(amount[0].amount, Uint128::new(1665)) // all the requested undelegated ()
+        }
+
+        _ => panic!("Unexpected message: {:?}", sent_message),
+    }
+
+    // unbond remainging in 2 messages
+    let res = execute_unbond(
+        deps.as_mut(),
+        env.clone(),
+        Uint128::new(1200),
+        addr1.clone(),
+    )
+    .unwrap();
+    let msgs: SubMsg = SubMsg::new(CosmosMsg::Staking(StakingMsg::Undelegate {
+        validator: validator.address.to_string(),
+        amount: coin(1333, "uluna"), // 1200 * 1.111111111111111111
+    }));
+    assert_eq!(res.messages[0], msgs);
+    deps.querier
+        .with_token_balances(&[(&"cluna".to_string(), &[(&addr1, &Uint128::new(0u128))])]);
+    set_delegation(&mut deps.querier, validator, 1, "uluna");
+
+    env.block.time = env.block.time.plus_seconds(90);
+    deps.querier.with_native_balances(&[(
+        MOCK_CONTRACT_ADDR.to_string(),
+        Coin {
+            denom: "uluna".to_string(),
+            amount: Uint128::new(1333),
+        },
+    )]);
+    // check withdrawUnbonded message
+    let withdraw_unbond_msg = ExecuteMsg::WithdrawUnbonded {};
+    let wdraw_unbonded_res =
+        execute(deps.as_mut(), env, info, withdraw_unbond_msg).unwrap();
+    assert_eq!(wdraw_unbonded_res.messages.len(), 1);
+
+    let sent_message = &wdraw_unbonded_res.messages[0].msg;
+    match sent_message {
+        CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+            assert_eq!(to_address, &addr1);
+            assert_eq!(amount[0].amount, Uint128::new(1330))
+        }
+
+        _ => panic!("Unexpected message: {:?}", sent_message),
+    }
+}
