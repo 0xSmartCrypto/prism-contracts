@@ -211,11 +211,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             airdrop_contract,
             claim_msg,
         ),
-        ExecuteMsg::Split { amount } => split(deps, info, amount),
+        ExecuteMsg::Split { amount } => split(deps, env, info, amount),
         ExecuteMsg::Merge { amount } => merge(deps, info, amount),
         ExecuteMsg::DepositAirdropReward {
             airdrop_token_contract,
-        } => deposit_airdrop_rewards(deps, env, airdrop_token_contract),
+        } => deposit_airdrop_rewards(deps, env, info, airdrop_token_contract),
         ExecuteMsg::Redelgate {
             source_val,
             target_val,
@@ -382,10 +382,23 @@ pub fn claim_airdrop(
 pub fn deposit_airdrop_rewards(
     deps: DepsMut,
     env: Env,
+    info: MessageInfo,
     airdrop_token_contract: String,
 ) -> StdResult<Response> {
     let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
     let airdrop_token_addr = deps.api.addr_validate(&airdrop_token_contract)?;
+
+    // only should be called by the own contract after claiming an airdrop
+    if info.sender != env.contract.address {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    // the token should never be cluna under any circumstance
+    if airdrop_token_addr == conf.cluna_contract {
+        return Err(StdError::generic_err(
+            "the airdrop_token_contract can not be cLuna",
+        ));
+    }
 
     let amount = query_token_balance(&deps.querier, &airdrop_token_addr, &env.contract.address)?;
 
@@ -509,22 +522,7 @@ pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
             msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
         }))?;
 
-    // query pLuna and yLuna supply and use the minimum of the two values
-    let pluna_token_info: TokenInfoResponse =
-        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: cfg.pluna_contract.to_string(),
-            msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
-        }))?;
-    let yluna_token_info: TokenInfoResponse =
-        deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: cfg.yluna_contract.to_string(),
-            msg: to_binary(&Cw20QueryMsg::TokenInfo {})?,
-        }))?;
-
-    Ok(cluna_token_info.total_supply
-        + pluna_token_info
-            .total_supply
-            .min(yluna_token_info.total_supply))
+    Ok(cluna_token_info.total_supply)
 }
 
 fn query_unbond_requests(

@@ -19,17 +19,25 @@ pub fn execute_bond_split(
     let config = CONFIG.load(deps.storage)?.assert_initialized()?;
     let (mint_amount_with_fee, mut sub_messages, payment_amt) =
         _execute_bond(deps, &env, &info, &validator)?;
-    // Pop last sub-message, which happens to be a TokenMsg::Mint for c-asset.
-    // Replace it with messages to mint p-asset and y-asset instead.
+    // Pop last sub-message, which is the message to mint c-asset and send to the sender
+    // Replace it with messages to mint c-asset for the contract, and mint p-asset and y-asset for the sender
     sub_messages.pop();
 
     Ok(Response::new()
         .add_submessages(sub_messages)
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: config.cluna_contract.to_string(),
+                msg: to_binary(&TokenMsg::Mint {
+                    recipient: env.contract.address.to_string(), // mint and lock
+                    amount: mint_amount_with_fee,
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: config.yluna_contract.to_string(),
                 msg: to_binary(&TokenMsg::Mint {
-                    recipient: info.sender.clone().into_string(),
+                    recipient: info.sender.to_string(),
                     amount: mint_amount_with_fee,
                 })?,
                 funds: vec![],
@@ -37,7 +45,7 @@ pub fn execute_bond_split(
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: config.pluna_contract.to_string(),
                 msg: to_binary(&TokenMsg::Mint {
-                    recipient: info.sender.clone().into_string(),
+                    recipient: info.sender.to_string(),
                     amount: mint_amount_with_fee,
                 })?,
                 funds: vec![],
