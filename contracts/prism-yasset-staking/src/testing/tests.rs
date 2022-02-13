@@ -5,6 +5,7 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
+use prismswap::asset::PrismSwapAssetInfo;
 use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
@@ -1332,4 +1333,15 @@ fn test_convert_and_claim_rewards_invalid_claim() {
     let info = mock_info("alice0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(err, StdError::generic_err("Claim asset not supported"));
+}
+
+#[test]
+fn test_asset_serialization() {
+    // verify that a cw20 asset info is serialized as the address of the token
+    let asset_info = AssetInfo::Cw20(Addr::unchecked("addr0000"));
+    let asset_token_addr = Addr::unchecked("addr0000");
+    let asset_token_string = "addr0000".to_string();
+
+    assert_eq!(asset_info.as_bytes(), asset_token_addr.as_bytes());
+    assert_eq!(asset_info.as_bytes(), asset_token_string.as_bytes());
 }
