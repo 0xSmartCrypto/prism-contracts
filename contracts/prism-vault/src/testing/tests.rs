@@ -879,6 +879,15 @@ fn proper_bond_split() {
                 },
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: CLUNA_CONTRACT.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                    recipient: MOCK_CONTRACT_ADDR.to_string(),
+                    amount: bond_amount,
+                })
+                .unwrap(),
+                funds: vec![],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: YLUNA_CONTRACT.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Mint {
                     recipient: info.sender.clone().into_string(),
@@ -924,8 +933,9 @@ fn proper_split() {
         vec![
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: CLUNA_CONTRACT.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
+                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
                     owner: info.sender.clone().into_string(),
+                    recipient: MOCK_CONTRACT_ADDR.to_string(),
                     amount: bond_amount,
                 })
                 .unwrap(),
@@ -995,7 +1005,7 @@ fn proper_merge() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: CLUNA_CONTRACT.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Mint {
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: info.sender.into_string(),
                     amount: bond_amount,
                 })
