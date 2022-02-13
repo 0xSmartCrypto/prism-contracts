@@ -13,14 +13,16 @@ pub const REWARD_DENOM: &str = "uluna";
 
 /// 1. Swap all native tokens to uluna
 /// 2. Use the uluna to mint pluna and yluna
-/// 4. Deposit pluna and yluna as reward to stakers
+/// 3. Deposit pluna and yluna as reward to stakers
+///
+/// This method should be called after native delegator rewards have already
+/// been deposited into this contract.
 pub fn process_delegator_rewards(
     deps: DepsMut,
     env: Env,
     _info: MessageInfo,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let contr_addr = env.contract.address.clone();
-    let balances = deps.querier.query_all_balances(contr_addr)?;
+    let balances = deps.querier.query_all_balances(&env.contract.address)?;
     let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
 
     let reward_denom = String::from(REWARD_DENOM);

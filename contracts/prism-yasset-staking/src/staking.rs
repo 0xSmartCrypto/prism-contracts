@@ -10,8 +10,8 @@ use terra_cosmwasm::TerraMsgWrapper;
 
 pub fn bond(
     deps: DepsMut,
-    staker_addr: String,
-    amount: Uint128,
+    staker_addr: String, // address of person sending their y-asset
+    amount: Uint128,     // amount of y-asset they are sending to be staked
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
     let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
@@ -42,7 +42,7 @@ pub fn bond(
 pub fn unbond(
     deps: DepsMut,
     info: MessageInfo,
-    amount: Option<Uint128>,
+    amount: Option<Uint128>, // If None, the user's entire stake will be unstaked.
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let staker_addr = info.sender.to_string();
     let cfg = CONFIG.load(deps.storage)?;
@@ -70,8 +70,16 @@ pub fn unbond(
 
             amount
         }
+        // Unbond everything if input amount is not specified.
         None => bond_info.bond_amount,
     };
+
+    if unbonded_amt > bond_total {
+        // Theoretically impossible unless we have a bug or someone tampers with BOND_AMOUNTS.
+        return Err(StdError::generic_err(
+            "can not unbond more than total bonded amount",
+        ));
+    }
 
     // update state, user bond amount and total
     bond_info.bond_amount -= unbonded_amt;

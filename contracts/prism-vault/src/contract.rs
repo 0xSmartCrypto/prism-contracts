@@ -233,7 +233,7 @@ pub fn receive_cw20(
 ) -> StdResult<Response> {
     match from_binary(&cw20_msg.msg) {
         Ok(Cw20HookMsg::Unbond {}) => {
-            // only token contract can execute this message
+            // only cLuna token contract can execute this message
             let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
             if info.sender != conf.cluna_contract {
                 return Err(StdError::generic_err("unauthorized"));
@@ -250,7 +250,8 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> StdResult<Response> {
     set_token_address(deps, env, msg)
 }
 
-/// Update general parameters
+/// Withdraws delegator rewards and instructs the yasset-staking contract to
+/// process those rewards.
 /// Permissionless
 pub fn execute_update_global(
     deps: DepsMut,
@@ -260,6 +261,7 @@ pub fn execute_update_global(
     let mut messages: Vec<SubMsg> = vec![];
     let config = CONFIG.load(deps.storage)?.assert_initialized()?;
 
+    // Forward airdrops to airdrop-registry contract.
     if let Some(hooks) = airdrop_hooks {
         for msg in hooks {
             messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -270,11 +272,12 @@ pub fn execute_update_global(
         }
     }
 
-    // Send withdraw message
+    // Send withdraw message(s).
     let mut withdraw_msgs = withdraw_all_rewards(&deps, env.contract.address.clone())?;
     messages.append(&mut withdraw_msgs);
 
-    // Swap to $UST, then into $PRISM
+    // Ask yasset-staking contract to process rewards. It should swap those rewards
+    // into yLuna and pLuna.
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.yluna_staking.to_string(),
         msg: to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap(),

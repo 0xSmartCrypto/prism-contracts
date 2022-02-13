@@ -11,11 +11,11 @@ use prism_protocol::{
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Parameters {
-    pub epoch_period: u64,
+    pub epoch_period: u64, // as a duration in seconds
     pub underlying_coin_denom: String,
-    pub unbonding_period: u64,
-    pub peg_recovery_fee: Decimal,
-    pub er_threshold: Decimal, // exchange rate threshold
+    pub unbonding_period: u64,     // as a duration in seconds
+    pub peg_recovery_fee: Decimal, // must be in [0, 1].
+    pub er_threshold: Decimal,     // exchange rate threshold. Must be in [0, 1].
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -131,7 +131,7 @@ pub const UNBOND_HISTORY: Map<U64Key, UnbondHistory> = Map::new("unbond_history"
 pub const VALIDATORS: Map<&Addr, bool> = Map::new("validators");
 
 /// Store undelegation wait list per each batch
-/// HashMap<user's address, <batch_id, requested_amount>
+/// HashMap<user's address + batch_id, requested_amount>
 pub fn store_unbond_wait_list(
     storage: &mut dyn Storage,
     batch_id: u64,

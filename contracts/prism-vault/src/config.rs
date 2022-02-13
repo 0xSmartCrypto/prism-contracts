@@ -181,7 +181,7 @@ pub fn execute_register_validator(
 ) -> StdResult<Response> {
     let config = CONFIG.load(deps.storage)?;
 
-    if config.owner != info.sender && env.contract.address != info.sender {
+    if info.sender != config.owner && info.sender != env.contract.address {
         return Err(StdError::generic_err("unauthorized"));
     }
 

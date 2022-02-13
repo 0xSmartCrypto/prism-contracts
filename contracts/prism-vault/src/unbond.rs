@@ -12,19 +12,15 @@ use cw20::Cw20ExecuteMsg;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use signed_integer::SignedInt;
 
-/// This message must be call by receive_cw20
-/// This message will undelegate coin and burn basset token
+/// This message must be called by receive_cw20
+/// This message will undelegate coin and burn c-asset token
 pub(crate) fn execute_unbond(
     mut deps: DepsMut,
     env: Env,
     amount: Uint128,
-    sender: String,
+    sender: String, // human who sent the cLuna to us
 ) -> StdResult<Response> {
-    // Read params
     let params = PARAMETERS.load(deps.storage)?;
-    let epoch_period = params.epoch_period;
-    let threshold = params.er_threshold;
-    let recovery_fee = params.peg_recovery_fee;
 
     let mut current_batch = CURRENT_BATCH.load(deps.storage)?;
 
@@ -36,8 +32,8 @@ pub(crate) fn execute_unbond(
 
     // Collect all the requests within a epoch period
     // Apply peg recovery fee
-    let amount_with_fee = if state.exchange_rate < threshold {
-        let max_peg_fee = amount * recovery_fee;
+    let amount_with_fee = if state.exchange_rate < params.er_threshold {
+        let max_peg_fee = amount * params.peg_recovery_fee;
         let required_peg_fee = ((total_supply + current_batch.requested_with_fee)
             .checked_sub(state.total_bond_amount))?;
         let peg_fee = Uint128::min(max_peg_fee, required_peg_fee);
@@ -62,7 +58,7 @@ pub(crate) fn execute_unbond(
     // Update exchange rate
     state.update_exchange_rate(total_supply, current_batch.requested_with_fee);
 
-    let passed_time = env
+    let passed_time_seconds = env
         .block
         .time
         .minus_seconds(state.last_unbonded_time)
@@ -71,7 +67,7 @@ pub(crate) fn execute_unbond(
     let mut messages: Vec<SubMsg> = vec![];
 
     // If the epoch period is passed, the undelegate message would be sent.
-    if passed_time > epoch_period {
+    if passed_time_seconds > params.epoch_period {
         // Apply the current exchange rate.
         let undelegation_amount = current_batch.requested_with_fee * state.exchange_rate;
 
@@ -84,15 +80,13 @@ pub(crate) fn execute_unbond(
 
         let delegator = env.contract.address;
 
-        let block_height = env.block.height;
-
         // Send undelegated requests to possibly more than one validators
         let mut undelegated_msgs = pick_unbond_validator(
             &deps.querier,
             params.underlying_coin_denom,
             undelegation_amount,
             delegator.to_string(),
-            block_height,
+            env.block.height,
         )?;
 
         messages.append(&mut undelegated_msgs);
@@ -150,14 +144,12 @@ pub fn execute_withdraw_unbonded(
     info: MessageInfo,
 ) -> StdResult<Response> {
     let sender_human = info.sender;
-    let contract_address = env.contract.address.clone();
 
     // read params
     let params = PARAMETERS.load(deps.storage)?;
-    let unbonding_period = params.unbonding_period;
     let coin_denom = params.underlying_coin_denom;
 
-    let historical_time = env.block.time.seconds() - unbonding_period;
+    let historical_time = env.block.time.seconds() - params.unbonding_period;
 
     // query vault balance for process withdraw rate.
     let vault_balance = deps
@@ -197,8 +189,8 @@ pub fn execute_withdraw_unbonded(
 
     Ok(Response::new()
         .add_attributes(vec![
-            attr("action", "finish_burn"),
-            attr("from", contract_address),
+            attr("action", "execute_withdraw_unbonded"),
+            attr("from", env.contract.address),
             attr("amount", withdraw_amount),
         ])
         .add_submessage(SubMsg::new(bank_msg)))
