@@ -53,3 +53,8 @@ pub struct ConfigResponse {
     pub prism_token: String,
     pub base_denom: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MigrateMsg {
+    pub prismswap_router: String,
+}

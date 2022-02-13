@@ -8,8 +8,9 @@ use cosmwasm_std::{
 };
 
 use crate::error::ContractError;
+use crate::migration::migrate_config;
 use crate::state::{Config, CONFIG};
-use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
 use astroport::pair::{Cw20HookMsg as AstroPairCw20HookMsg, ExecuteMsg as AstroPairExecuteMsg};
 use cw2::set_contract_version;
@@ -529,4 +530,12 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     config.as_res()
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    let router: Addr = deps.api.addr_validate(&msg.prismswap_router)?;
+    migrate_config(deps.storage, router)?;
+
+    Ok(Response::default())
 }
