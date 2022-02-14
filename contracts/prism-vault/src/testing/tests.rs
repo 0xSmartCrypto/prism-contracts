@@ -1040,6 +1040,22 @@ fn proper_deregister() {
     // register_validator2
     do_register_validator(deps.as_mut(), validator2.clone());
 
+    //failure - redel validator not registered
+    let msg = ExecuteMsg::DeregisterValidator {
+        validator: validator.address.to_string(),
+        redel_validator: DEFAULT_VALIDATOR3.to_string(),
+    };
+
+    let owner_info = mock_info(OWNER, &[]);
+    let err = execute(deps.as_mut(), mock_env(), owner_info, msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("The chosen validator to redelegate is currently not supported")
+    );
+
+    // need to add back validator due to storage removal in previous failed message
+    do_register_validator(deps.as_mut(), validator.clone());
+
     //must be able to deregister while there is no delegation
     let msg = ExecuteMsg::DeregisterValidator {
         validator: validator.address.clone(),
@@ -3192,11 +3208,11 @@ fn proper_deposit_airdrop_reward() {
 
     init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
 
-    let swap_msg = ExecuteMsg::DepositAirdropReward {
+    let airdrop_msg = ExecuteMsg::DepositAirdropReward {
         airdrop_token_contract: "airdrop_token".to_string(),
     };
 
-    // no balance for hub
+    // no balance for vault
     let contract_info = mock_info(MOCK_CONTRACT_ADDR, &[]);
 
     deps.querier.with_token_balances(&[(
@@ -3204,7 +3220,13 @@ fn proper_deposit_airdrop_reward() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::new(1000))],
     )]);
 
-    let res = execute(deps.as_mut(), mock_env(), contract_info, swap_msg).unwrap();
+    let res = execute(
+        deps.as_mut(),
+        mock_env(),
+        contract_info,
+        airdrop_msg.clone(),
+    )
+    .unwrap();
     assert_eq!(
         res.messages,
         vec![
@@ -3230,6 +3252,22 @@ fn proper_deposit_airdrop_reward() {
                 funds: vec![],
             })),
         ]
+    );
+
+    // error - unauthorized
+    let info = mock_info("alice0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, airdrop_msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized"));
+
+    // error - can not deposit cLuna as reward
+    let airdrop_msg = ExecuteMsg::DepositAirdropReward {
+        airdrop_token_contract: "cluna".to_string(),
+    };
+    let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, airdrop_msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("the airdrop_token_contract can not be cLuna")
     );
 }
 
@@ -3545,4 +3583,168 @@ fn proper_validator_storage() -> StdResult<()> {
     remove_white_validators(deps.as_mut().storage, &Addr::unchecked("fakevalidator"))?;
 
     Ok(())
+}
+
+#[test]
+fn test_redelegate() {
+    let mut deps = dependencies(&[]);
+
+    let source_validator = sample_validator(DEFAULT_VALIDATOR.to_string());
+    let target_validator = sample_validator(DEFAULT_VALIDATOR2.to_string());
+    let invalid_validator = sample_validator(DEFAULT_VALIDATOR3.to_string());
+
+    init(
+        deps.borrow_mut(),
+        OWNER,
+        YLUNA_STAKING,
+        source_validator.address.clone(),
+    );
+
+    set_validator_mock(&mut deps.querier);
+
+    // error - unauthorized
+    let msg = ExecuteMsg::Redelegate {
+        source_val: invalid_validator.address.clone(),
+        target_val: target_validator.address.clone(),
+        amount: Uint128::from(1000u128),
+    };
+
+    let info = mock_info("alice0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized"));
+
+    // error - invalid source validator
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::Redelegate {
+        source_val: invalid_validator.address,
+        target_val: target_validator.address.clone(),
+        amount: Uint128::from(1000u128),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("Invalid validators"));
+
+    // add source validator
+    store_white_validators(
+        deps.as_mut().storage,
+        &Addr::unchecked(source_validator.address.clone()),
+    )
+    .unwrap();
+
+    // error - invalid target validator
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::Redelegate {
+        source_val: source_validator.address.clone(),
+        target_val: target_validator.address.clone(),
+        amount: Uint128::from(1000u128),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, StdError::generic_err("Invalid validators"));
+
+    // add target validator
+    store_white_validators(
+        deps.as_mut().storage,
+        &Addr::unchecked(target_validator.address.clone()),
+    )
+    .unwrap();
+
+    assert!(is_valid_validator(
+        &deps.storage,
+        &Addr::unchecked(source_validator.address.clone())
+    )
+    .unwrap());
+    assert!(is_valid_validator(
+        &deps.storage,
+        &Addr::unchecked(target_validator.address.clone())
+    )
+    .unwrap());
+
+    // error - nothing delegated yet
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::Redelegate {
+        source_val: source_validator.address.clone(),
+        target_val: target_validator.address.clone(),
+        amount: INITIAL_DEPOSIT_AMOUNT + Uint128::from(1u128),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("The source validator delegation is not available")
+    );
+
+    // add INITIAL_DEPOSIT_AMOUNT to source delegator
+    set_delegation(
+        &mut deps.querier,
+        source_validator.clone(),
+        INITIAL_DEPOSIT_AMOUNT.u128(),
+        "uluna",
+    );
+
+    // error - invalid amount
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::Redelegate {
+        source_val: source_validator.address.clone(),
+        target_val: target_validator.address.clone(),
+        amount: INITIAL_DEPOSIT_AMOUNT + Uint128::from(1u128),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err(
+            "The delegation of the source validator is less than the requested amount"
+        )
+    );
+
+    // success, reledate 750/1000
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::Redelegate {
+        source_val: source_validator.address.clone(),
+        target_val: target_validator.address.clone(),
+        amount: Uint128::from(750u128),
+    };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(res.messages.len(), 2);
+    assert_eq!(
+        res.messages[0],
+        SubMsg::new(CosmosMsg::Staking(StakingMsg::Redelegate {
+            src_validator: source_validator.address.clone(),
+            dst_validator: target_validator.address.clone(),
+            amount: Coin::new(750u128, "uluna"),
+        })),
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: mock_env().contract.address.to_string(),
+            msg: to_binary(&ExecuteMsg::UpdateGlobalIndex {
+                airdrop_hooks: None,
+            })
+            .unwrap(),
+            funds: vec![],
+        })),
+    );
+
+    // can redelegate drops to 250
+    let full_delegation = FullDelegation {
+        validator: source_validator.address.clone(),
+        delegator: Addr::unchecked(MOCK_CONTRACT_ADDR),
+        amount: Coin::new(INITIAL_DEPOSIT_AMOUNT.u128(), "uluna"),
+        can_redelegate: Coin::new(250, "uluna"),
+        accumulated_rewards: vec![],
+    };
+
+    deps.querier
+        .update_staking("uluna", &[source_validator.clone()], &[full_delegation]);
+
+    // error - redelegation in progress
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::Redelegate {
+        source_val: source_validator.address,
+        target_val: target_validator.address,
+        amount: INITIAL_DEPOSIT_AMOUNT,
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(
+        err,
+        StdError::generic_err("There is a redelegation in progress")
+    );
 }

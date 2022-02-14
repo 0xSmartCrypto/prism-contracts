@@ -53,7 +53,7 @@ pub enum ExecuteMsg {
     ////////////////////
 
     /// Redelgates from source validator to target validator
-    Redelgate {
+    Redelegate {
         source_val: String,
         target_val: String,
         amount: Uint128,

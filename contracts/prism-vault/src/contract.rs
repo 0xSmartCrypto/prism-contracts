@@ -216,7 +216,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::DepositAirdropReward {
             airdrop_token_contract,
         } => deposit_airdrop_rewards(deps, env, info, airdrop_token_contract),
-        ExecuteMsg::Redelgate {
+        ExecuteMsg::Redelegate {
             source_val,
             target_val,
             amount,
