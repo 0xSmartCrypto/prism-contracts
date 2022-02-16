@@ -111,7 +111,7 @@ pub fn execute(
                     if info.sender != env.contract.address {
                         return Err(StdError::generic_err("unauthorized"));
                     }
-                    mint_xprism_claim_hook(deps, env, &cfg, receiver, prev_balance)
+                    mint_xprism_claim_hook(deps, env, cfg, receiver, prev_balance)
                 }
                 ExecuteMsg::WhitelistRewardAsset { asset } => {
                     asset.check(deps.api)?;
@@ -140,7 +140,7 @@ pub fn execute(
                     deposit_minted_pyluna_hook(
                         deps,
                         env,
-                        &cfg,
+                        cfg,
                         prev_pluna_balance,
                         prev_yluna_balance,
                     )
@@ -149,7 +149,14 @@ pub fn execute(
                     owner,
                     collector,
                     protocol_fee,
-                } => update_config(deps, info, owner, collector, protocol_fee),
+                } => {
+                    // can only be exeucted by owner
+                    if info.sender != cfg.owner {
+                        return Err(StdError::generic_err("unauthorized"));
+                    }
+
+                    update_config(deps, cfg, owner, collector, protocol_fee)
+                }
                 _ => Err(StdError::generic_err("not implemented")),
             }
         }
@@ -171,18 +178,11 @@ pub fn receive_cw20(
 
 fn update_config(
     deps: DepsMut,
-    info: MessageInfo,
+    mut cfg: Config,
     owner: Option<String>,
     collector: Option<String>,
     protocol_fee: Option<Decimal>,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let mut cfg = CONFIG.load(deps.storage)?;
-
-    // can only be exeucted by owner
-    if info.sender != cfg.owner {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
     if let Some(owner) = owner {
         cfg.owner = deps.api.addr_validate(&owner)?;
     }

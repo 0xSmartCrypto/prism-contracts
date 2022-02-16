@@ -292,7 +292,7 @@ pub fn convert_and_claim_rewards(
 pub fn mint_xprism_claim_hook(
     deps: DepsMut,
     env: Env,
-    cfg: &Config,
+    cfg: Config,
     receiver: Addr,
     prev_balance: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {

@@ -94,7 +94,7 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
 pub fn deposit_minted_pyluna_hook(
     deps: DepsMut,
     env: Env,
-    cfg: &Config,
+    cfg: Config,
     prev_pluna_balance: Uint128,
     prev_yluna_balance: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
@@ -115,11 +115,11 @@ pub fn deposit_minted_pyluna_hook(
             msg: to_binary(&ExecuteMsg::DepositRewards {
                 assets: vec![
                     Asset {
-                        info: AssetInfo::Cw20(cfg.yluna_token.clone()),
+                        info: AssetInfo::Cw20(cfg.yluna_token),
                         amount: reward_yluna,
                     },
                     Asset {
-                        info: AssetInfo::Cw20(cfg.pluna_token.clone()),
+                        info: AssetInfo::Cw20(cfg.pluna_token),
                         amount: reward_pluna,
                     },
                 ],
