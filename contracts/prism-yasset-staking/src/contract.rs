@@ -98,7 +98,7 @@ pub fn execute(
         ExecuteMsg::DepositMintedPylunaHook {
             prev_pluna_balance,
             prev_yluna_balance,
-        } => deposit_minted_pyluna_hook(deps, env, prev_pluna_balance, prev_yluna_balance),
+        } => deposit_minted_pyluna_hook(deps, info, env, prev_pluna_balance, prev_yluna_balance),
         ExecuteMsg::WhitelistRewardAsset { asset } => {
             asset.check(deps.api)?;
             whitelist_reward_asset(deps, info, asset)

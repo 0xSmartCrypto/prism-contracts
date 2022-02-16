@@ -1,7 +1,7 @@
 use crate::state::CONFIG;
 use cosmwasm_std::{
-    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
-    WasmMsg,
+    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    Uint128, WasmMsg,
 };
 use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
@@ -92,11 +92,16 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
 
 pub fn deposit_minted_pyluna_hook(
     deps: DepsMut,
+    info: MessageInfo,
     env: Env,
     prev_pluna_balance: Uint128,
     prev_yluna_balance: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
+
+    if info.sender != env.contract.address {
+        return Err(StdError::generic_err("unauthorized"));
+    }
 
     // query pluna amount to know how much we received from vault
     // received pluna amount should always be same as yluna amount
