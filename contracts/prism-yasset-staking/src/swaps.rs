@@ -1,6 +1,6 @@
-use crate::state::CONFIG;
+use crate::state::{Config, CONFIG};
 use cosmwasm_std::{
-    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult,
     Uint128, WasmMsg,
 };
 use cw_asset::{Asset, AssetInfo};
@@ -93,17 +93,11 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
 
 pub fn deposit_minted_pyluna_hook(
     deps: DepsMut,
-    info: MessageInfo,
     env: Env,
+    cfg: &Config,
     prev_pluna_balance: Uint128,
     prev_yluna_balance: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-
-    if info.sender != env.contract.address {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
     // query pluna amount to know how much we received from vault
     // received pluna amount should always be same as yluna amount
     // we query both amounts to prevent manipulation by sending one of the tokens to the contract
@@ -121,11 +115,11 @@ pub fn deposit_minted_pyluna_hook(
             msg: to_binary(&ExecuteMsg::DepositRewards {
                 assets: vec![
                     Asset {
-                        info: AssetInfo::Cw20(cfg.yluna_token),
+                        info: AssetInfo::Cw20(cfg.yluna_token.clone()),
                         amount: reward_yluna,
                     },
                     Asset {
-                        info: AssetInfo::Cw20(cfg.pluna_token),
+                        info: AssetInfo::Cw20(cfg.pluna_token.clone()),
                         amount: reward_pluna,
                     },
                 ],

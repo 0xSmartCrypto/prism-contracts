@@ -368,16 +368,8 @@ pub fn compute_all_rewards(
 
 pub fn whitelist_reward_asset(
     deps: DepsMut,
-    info: MessageInfo,
     asset: AssetInfo,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-
-    // can only be executed by owner
-    if info.sender != cfg.owner {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
     if asset.is_native_token() {
         return Err(StdError::generic_err(
             "only token assets can be whitelisted",
@@ -397,16 +389,8 @@ pub fn whitelist_reward_asset(
 
 pub fn remove_whitelisted_reward_asset(
     deps: DepsMut,
-    info: MessageInfo,
     asset: AssetInfo,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-
-    // can only be executed by owner
-    if info.sender != cfg.owner {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
     let mut whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
 
     match whitelist.iter().position(|item| item.eq(&asset)) {

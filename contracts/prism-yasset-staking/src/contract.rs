@@ -98,7 +98,7 @@ pub fn execute(
             match msg {
                 ExecuteMsg::Receive(msg) => {  // Bond
                     // only yluna cw20 contract can send money in.
-                    if cfg.yluna_token != info.sender {
+                    if info.sender != cfg.yluna_token {
                         return Err(StdError::generic_err("unauthorized"));
                     }
                     receive_cw20(deps, msg)
@@ -115,22 +115,36 @@ pub fn execute(
                 }
                 ExecuteMsg::WhitelistRewardAsset { asset } => {
                     asset.check(deps.api)?;
-                    whitelist_reward_asset(deps, info, asset)
+                    // can only be executed by owner
+                    if info.sender != cfg.owner {
+                        return Err(StdError::generic_err("unauthorized"));
+                    }
+                    whitelist_reward_asset(deps, asset)
                 }
                 ExecuteMsg::RemoveRewardAsset { asset } => {
                     asset.check(deps.api)?;
-                    remove_whitelisted_reward_asset(deps, info, asset)
+                    // can only be exeucted by owner
+                    if info.sender != cfg.owner {
+                        return Err(StdError::generic_err("unauthorized"));
+                    }
+
+                    remove_whitelisted_reward_asset(deps, asset)
                 }
                 ExecuteMsg::DepositMintedPylunaHook {
                     prev_pluna_balance,
                     prev_yluna_balance,
-                } => deposit_minted_pyluna_hook(
-                    deps,
-                    info,
-                    env,
-                    prev_pluna_balance,
-                    prev_yluna_balance,
-                ),
+                } => {
+                    if info.sender != env.contract.address {
+                        return Err(StdError::generic_err("unauthorized"));
+                    }
+                    deposit_minted_pyluna_hook(
+                        deps,
+                        env,
+                        &cfg,
+                        prev_pluna_balance,
+                        prev_yluna_balance,
+                    )
+                }
                 ExecuteMsg::UpdateConfig {
                     owner,
                     collector,
