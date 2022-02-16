@@ -79,15 +79,15 @@ pub fn execute(
         // Public endpoints (wide open to the entire internet).
         ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, info),
+        ExecuteMsg::ConvertAndClaimRewards { claim_asset } => {
+            claim_asset.check(deps.api)?;
+            convert_and_claim_rewards(deps, env, info, claim_asset)
+        }
         ExecuteMsg::DepositRewards { assets } => {
             for asset in &assets {
                 asset.info.check(deps.api)?;
             }
             deposit_rewards(deps, env, info, assets)
-        }
-        ExecuteMsg::ConvertAndClaimRewards { claim_asset } => {
-            claim_asset.check(deps.api)?;
-            convert_and_claim_rewards(deps, env, info, claim_asset)
         }
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
@@ -106,16 +106,6 @@ pub fn execute(
                     check_sender(&info, &env.contract.address)?; // There's no reason for anyone else to call this
                     mint_xprism_claim_hook(deps, env, cfg, receiver, prev_balance)
                 }
-                ExecuteMsg::WhitelistRewardAsset { asset } => {
-                    asset.check(deps.api)?;
-                    check_sender(&info, &cfg.owner)?;
-                    whitelist_reward_asset(deps, asset)
-                }
-                ExecuteMsg::RemoveRewardAsset { asset } => {
-                    asset.check(deps.api)?;
-                    check_sender(&info, &cfg.owner)?;
-                    remove_whitelisted_reward_asset(deps, asset)
-                }
                 ExecuteMsg::DepositMintedPylunaHook {
                     prev_pluna_balance,
                     prev_yluna_balance,
@@ -128,6 +118,16 @@ pub fn execute(
                         prev_pluna_balance,
                         prev_yluna_balance,
                     )
+                }
+                ExecuteMsg::WhitelistRewardAsset { asset } => {
+                    asset.check(deps.api)?;
+                    check_sender(&info, &cfg.owner)?;
+                    whitelist_reward_asset(deps, asset)
+                }
+                ExecuteMsg::RemoveRewardAsset { asset } => {
+                    asset.check(deps.api)?;
+                    check_sender(&info, &cfg.owner)?;
+                    remove_whitelisted_reward_asset(deps, asset)
                 }
                 ExecuteMsg::UpdateConfig {
                     owner,
