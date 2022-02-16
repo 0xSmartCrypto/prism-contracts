@@ -5,7 +5,7 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo, Response,
-    StdError, StdResult, Uint128,
+    StdError, StdResult, Uint128, Addr,
 };
 
 use prism_protocol::yasset_staking::{
@@ -94,49 +94,33 @@ pub fn execute(
         _ => {
             // Private endpoints (open to specific callers only).
             let cfg = CONFIG.load(deps.storage)?;
-
             match msg {
-                ExecuteMsg::Receive(msg) => {  // Bond
-                    // only yluna cw20 contract can send money in.
-                    if info.sender != cfg.yluna_token {
-                        return Err(StdError::generic_err("unauthorized"));
-                    }
+                ExecuteMsg::Receive(msg) => { // Bond
+                    check_sender(&info, &cfg.yluna_token)?; // Only yluna cw20 contract can send money in.
                     receive_cw20(deps, msg)
                 }
                 ExecuteMsg::MintXprismClaimHook {
                     receiver,
                     prev_balance,
                 } => {
-                    // there's no reason for anyone else to call this
-                    if info.sender != env.contract.address {
-                        return Err(StdError::generic_err("unauthorized"));
-                    }
+                    check_sender(&info, &env.contract.address)?; // There's no reason for anyone else to call this
                     mint_xprism_claim_hook(deps, env, cfg, receiver, prev_balance)
                 }
                 ExecuteMsg::WhitelistRewardAsset { asset } => {
                     asset.check(deps.api)?;
-                    // can only be executed by owner
-                    if info.sender != cfg.owner {
-                        return Err(StdError::generic_err("unauthorized"));
-                    }
+                    check_sender(&info, &cfg.owner)?;
                     whitelist_reward_asset(deps, asset)
                 }
                 ExecuteMsg::RemoveRewardAsset { asset } => {
                     asset.check(deps.api)?;
-                    // can only be exeucted by owner
-                    if info.sender != cfg.owner {
-                        return Err(StdError::generic_err("unauthorized"));
-                    }
-
+                    check_sender(&info, &cfg.owner)?;
                     remove_whitelisted_reward_asset(deps, asset)
                 }
                 ExecuteMsg::DepositMintedPylunaHook {
                     prev_pluna_balance,
                     prev_yluna_balance,
                 } => {
-                    if info.sender != env.contract.address {
-                        return Err(StdError::generic_err("unauthorized"));
-                    }
+                    check_sender(&info, &env.contract.address)?;
                     deposit_minted_pyluna_hook(
                         deps,
                         env,
@@ -145,16 +129,8 @@ pub fn execute(
                         prev_yluna_balance,
                     )
                 }
-                ExecuteMsg::UpdateConfig {
-                    owner,
-                    collector,
-                    protocol_fee,
-                } => {
-                    // can only be exeucted by owner
-                    if info.sender != cfg.owner {
-                        return Err(StdError::generic_err("unauthorized"));
-                    }
-
+                ExecuteMsg::UpdateConfig {owner, collector, protocol_fee} => {
+                    check_sender(&info, &cfg.owner)?;
                     update_config(deps, cfg, owner, collector, protocol_fee)
                 }
                 _ => Err(StdError::generic_err("not implemented")),
