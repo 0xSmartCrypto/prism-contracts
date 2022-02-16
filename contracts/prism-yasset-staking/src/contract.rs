@@ -76,42 +76,49 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     match msg {
-        ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg), // Bond
+        // Public endpoints (wide open to the entire internet).
         ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, info),
-        ExecuteMsg::ConvertAndClaimRewards { claim_asset } => {
-            claim_asset.check(deps.api)?;
-            convert_and_claim_rewards(deps, env, info, claim_asset)
-        }
-        ExecuteMsg::MintXprismClaimHook {
-            receiver,
-            prev_balance,
-        } => mint_xprism_claim_hook(deps, info, env, receiver, prev_balance),
         ExecuteMsg::DepositRewards { assets } => {
             for asset in &assets {
                 asset.info.check(deps.api)?;
             }
             deposit_rewards(deps, env, info, assets)
         }
+        ExecuteMsg::ConvertAndClaimRewards { claim_asset } => {
+            claim_asset.check(deps.api)?;
+            convert_and_claim_rewards(deps, env, info, claim_asset)
+        }
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
-        ExecuteMsg::DepositMintedPylunaHook {
-            prev_pluna_balance,
-            prev_yluna_balance,
-        } => deposit_minted_pyluna_hook(deps, info, env, prev_pluna_balance, prev_yluna_balance),
-        ExecuteMsg::WhitelistRewardAsset { asset } => {
-            asset.check(deps.api)?;
-            whitelist_reward_asset(deps, info, asset)
-        }
-        ExecuteMsg::RemoveRewardAsset { asset } => {
-            asset.check(deps.api)?;
-            remove_whitelisted_reward_asset(deps, info, asset)
-        }
-        ExecuteMsg::UpdateConfig {
-            owner,
-            collector,
-            protocol_fee,
-        } => update_config(deps, info, owner, collector, protocol_fee),
+        _ => {
+            // Private endpoints (open to specific callers only).
+            match msg {
+                ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg), // Bond
+                ExecuteMsg::MintXprismClaimHook {
+                    receiver,
+                    prev_balance,
+                } => mint_xprism_claim_hook(deps, info, env, receiver, prev_balance),
+                ExecuteMsg::WhitelistRewardAsset { asset } => {
+                    asset.check(deps.api)?;
+                    whitelist_reward_asset(deps, info, asset)
+                }
+                ExecuteMsg::RemoveRewardAsset { asset } => {
+                    asset.check(deps.api)?;
+                    remove_whitelisted_reward_asset(deps, info, asset)
+                }
+                ExecuteMsg::DepositMintedPylunaHook {
+                    prev_pluna_balance,
+                    prev_yluna_balance,
+                } => deposit_minted_pyluna_hook(deps, info, env, prev_pluna_balance, prev_yluna_balance),
+                ExecuteMsg::UpdateConfig {
+                    owner,
+                    collector,
+                    protocol_fee,
+                } => update_config(deps, info, owner, collector, protocol_fee),
+                _ => Err(StdError::generic_err("not implemented")),
+            }
+        },
     }
 }
 
