@@ -106,7 +106,13 @@ pub fn execute(
                 ExecuteMsg::MintXprismClaimHook {
                     receiver,
                     prev_balance,
-                } => mint_xprism_claim_hook(deps, info, env, receiver, prev_balance),
+                } => {
+                    // there's no reason for anyone else to call this
+                    if info.sender != env.contract.address {
+                        return Err(StdError::generic_err("unauthorized"));
+                    }
+                    mint_xprism_claim_hook(deps, env, &cfg, receiver, prev_balance)
+                }
                 ExecuteMsg::WhitelistRewardAsset { asset } => {
                     asset.check(deps.api)?;
                     whitelist_reward_asset(deps, info, asset)

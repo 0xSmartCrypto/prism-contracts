@@ -291,18 +291,11 @@ pub fn convert_and_claim_rewards(
 
 pub fn mint_xprism_claim_hook(
     deps: DepsMut,
-    info: MessageInfo,
     env: Env,
+    cfg: &Config,
     receiver: Addr,
     prev_balance: Uint128,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-
-    // there's no reason for anyone else to call this
-    if info.sender != env.contract.address {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
     // query our prism balance
     let prism_balance =
         query_token_balance(&deps.querier, &cfg.prism_token, &env.contract.address)?;
