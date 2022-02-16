@@ -4,8 +4,8 @@ use std::str::FromStr;
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo, Response,
-    StdError, StdResult, Uint128, Addr,
+    from_binary, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo,
+    Response, StdError, StdResult, Uint128,
 };
 
 use prism_protocol::yasset_staking::{
@@ -129,7 +129,11 @@ pub fn execute(
                         prev_yluna_balance,
                     )
                 }
-                ExecuteMsg::UpdateConfig {owner, collector, protocol_fee} => {
+                ExecuteMsg::UpdateConfig {
+                    owner,
+                    collector,
+                    protocol_fee,
+                } => {
                     check_sender(&info, &cfg.owner)?;
                     update_config(deps, cfg, owner, collector, protocol_fee)
                 }

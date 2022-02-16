@@ -1,7 +1,7 @@
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Addr, Coin, CosmosMsg, Decimal, MemoryStorage, OwnedDeps,
-    StdError, SubMsg, Uint128, WasmMsg, MessageInfo,
+    attr, from_binary, to_binary, Addr, Coin, CosmosMsg, Decimal, MemoryStorage, MessageInfo,
+    OwnedDeps, StdError, SubMsg, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
@@ -1416,14 +1416,22 @@ fn test_asset_serialization() {
     assert_eq!(asset_info.as_bytes(), asset_token_string.as_bytes());
 }
 
-
 #[test]
 fn test_check_sender() {
-    let info = MessageInfo{sender: Addr::unchecked("monkey"), funds: vec![]};
+    let info = MessageInfo {
+        sender: Addr::unchecked("monkey"),
+        funds: vec![],
+    };
     let sender = Addr::unchecked("monkey");
     assert_eq!(check_sender(&info, &sender), Ok(()));
 
-    let info = MessageInfo{sender: Addr::unchecked("monkey"), funds: vec![]};
+    let info = MessageInfo {
+        sender: Addr::unchecked("monkey"),
+        funds: vec![],
+    };
     let sender = Addr::unchecked("gorilla");
-    assert_eq!(check_sender(&info, &sender), Err(StdError::generic_err("unauthorized")));
+    assert_eq!(
+        check_sender(&info, &sender),
+        Err(StdError::generic_err("unauthorized"))
+    );
 }

@@ -1,7 +1,7 @@
 use crate::state::{Config, CONFIG};
 use cosmwasm_std::{
-    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult,
-    Uint128, WasmMsg,
+    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
+    WasmMsg,
 };
 use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
