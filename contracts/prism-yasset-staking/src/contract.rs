@@ -4,8 +4,8 @@ use std::str::FromStr;
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult, Uint128,
+    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo, Response,
+    StdError, StdResult, Uint128,
 };
 
 use prism_protocol::yasset_staking::{
@@ -226,4 +226,9 @@ fn validate_protocol_fee(fee: Decimal) -> StdResult<Decimal> {
     }
 
     Ok(fee)
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: Empty) -> StdResult<Response> {
+    Ok(Response::default())
 }
