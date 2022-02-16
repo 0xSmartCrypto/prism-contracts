@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::decimal::Decimal;
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Addr, Uint128};
 use cw20::Cw20ReceiveMsg;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -18,8 +18,8 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
 
     UpdateConfig {
-        owner: Option<String>,
-        xprism_token: Option<String>,
+        owner: Option<Addr>,
+        xprism_token: Option<Addr>,
         boost_interval: Option<Decimal>,
     },
 
@@ -42,13 +42,13 @@ pub enum QueryMsg {
     Config {},
 
     // updates user's boost lazily whenever requested
-    GetBoost { user: String },
+    GetBoost { user: Addr },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    pub owner: String,
-    pub xprism_token: String,
+    pub owner: Addr,
+    pub xprism_token: Addr,
     pub boost_interval: Decimal,
 }
 
