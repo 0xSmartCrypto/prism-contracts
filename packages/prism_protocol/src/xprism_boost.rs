@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::signed_decimal::SignedDecimal;
+use crate::decimal::Decimal;
 use cosmwasm_std::Uint128;
 use cw20::Cw20ReceiveMsg;
 
@@ -9,7 +9,7 @@ use cw20::Cw20ReceiveMsg;
 pub struct InstantiateMsg {
     pub owner: String,
     pub xprism_token: String,
-    pub boost_interval: SignedDecimal,
+    pub boost_interval: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -20,17 +20,12 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<String>,
         xprism_token: Option<String>,
-        boost_interval: Option<SignedDecimal>,
+        boost_interval: Option<Decimal>,
     },
 
     // remove xprism
     Unbond {
         amount: Option<Uint128>,
-    },
-
-    // update boost of a user
-    UpdateBoost {
-        user: String,
     },
 }
 
@@ -45,6 +40,8 @@ pub enum Cw20HookMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
+
+    // updates user's boost lazily whenever requested
     GetBoost { user: String },
 }
 
@@ -52,12 +49,12 @@ pub enum QueryMsg {
 pub struct Config {
     pub owner: String,
     pub xprism_token: String,
-    pub boost_interval: SignedDecimal,
+    pub boost_interval: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, JsonSchema)]
 pub struct UserInfo {
     pub amt_bonded: Uint128,
-    pub total_boost: SignedDecimal,
+    pub total_boost: Decimal,
     pub last_updated: u64,
 }

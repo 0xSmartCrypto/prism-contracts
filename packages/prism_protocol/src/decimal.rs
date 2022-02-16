@@ -1,9 +1,11 @@
 //
-// SignedDecimal by alwin-peng
+// base Decimal by alwin-peng
 //
 
 use core::ops;
-use cosmwasm_std::{Decimal, Decimal256, Fraction, StdError, StdResult, Uint256, Uint512};
+use cosmwasm_std::{
+    Decimal as StdDecimal, Decimal256, Fraction, StdError, StdResult, Uint256, Uint512,
+};
 use schemars::JsonSchema;
 use serde::{de, ser, Deserialize, Deserializer, Serialize};
 use std::convert::{TryFrom, TryInto};
@@ -12,19 +14,19 @@ use std::ops::{Add, Div, Mul, Sub};
 use std::str::FromStr;
 
 #[derive(Copy, Clone, Debug, Eq, PartialOrd, Ord, JsonSchema)]
-pub struct SignedDecimal {
+pub struct Decimal {
     pub positive: bool,
     pub decimal: Decimal256,
 }
 
-impl SignedDecimal {
+impl Decimal {
     pub const DECIMAL_FRACTIONAL: Uint256 = // 1*10**18
         Uint256::from_be_bytes([
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 224, 182,
             179, 167, 100, 0, 0,
         ]);
 
-    pub const MAX: Self = SignedDecimal {
+    pub const MAX: Self = Decimal {
         decimal: Decimal256::MAX,
         positive: true,
     };
@@ -44,7 +46,7 @@ impl SignedDecimal {
     }
 
     pub fn floor(&self) -> Self {
-        SignedDecimal {
+        Decimal {
             decimal: Decimal256::from_ratio(self.u256(), Uint256::from(1u8)),
             positive: self.positive,
         }
@@ -55,7 +57,7 @@ impl SignedDecimal {
             return *self;
         }
 
-        SignedDecimal {
+        Decimal {
             decimal: Decimal256::from_ratio(self.u256() + Uint256::from(1u8), Uint256::from(1u8)),
             positive: self.positive,
         }
@@ -84,7 +86,7 @@ impl SignedDecimal {
         self.assert_int()
     }
 
-    pub fn abs(&self) -> SignedDecimal {
+    pub fn abs(&self) -> Decimal {
         Self {
             decimal: self.decimal,
             positive: true,
@@ -92,14 +94,14 @@ impl SignedDecimal {
     }
 
     pub fn u256(&self) -> Uint256 {
-        self.decimal.numerator() / SignedDecimal::DECIMAL_FRACTIONAL
+        self.decimal.numerator() / Decimal::DECIMAL_FRACTIONAL
     }
 
     pub fn u128(&self) -> u128 {
         if !self.positive {
             panic!("attempting to convert negative decimal to u128")
         }
-        let val = self.decimal.numerator() / SignedDecimal::DECIMAL_FRACTIONAL;
+        let val = self.decimal.numerator() / Decimal::DECIMAL_FRACTIONAL;
         let as_be = val.to_be_bytes();
         u128::from_be_bytes(as_be[16..32].try_into().unwrap())
     }
@@ -110,7 +112,7 @@ impl SignedDecimal {
 
     /// Convert x% into Decimal
     pub fn percent(x: u64) -> Self {
-        SignedDecimal {
+        Decimal {
             decimal: Decimal256::percent(x),
             positive: true,
         }
@@ -118,7 +120,7 @@ impl SignedDecimal {
 
     /// Convert permille (x/1000) into Decimal
     pub fn permille(x: u64) -> Self {
-        SignedDecimal {
+        Decimal {
             decimal: Decimal256::permille(x),
             positive: true,
         }
@@ -128,7 +130,7 @@ impl SignedDecimal {
         if self.is_zero() {
             None
         } else {
-            Some(SignedDecimal {
+            Some(Decimal {
                 decimal: self.decimal.inv().unwrap(),
                 positive: self.positive,
             })
@@ -136,7 +138,7 @@ impl SignedDecimal {
     }
 
     pub fn pow(&self, exp: i64) -> Self {
-        let mut res = SignedDecimal::one();
+        let mut res = Decimal::one();
         let mut current = *self;
 
         let mut bin = exp.abs() as u64;
@@ -154,16 +156,16 @@ impl SignedDecimal {
         res
     }
 
-    pub fn log(&self, base: SignedDecimal) -> i64 {
+    pub fn log(&self, base: Decimal) -> i64 {
         if !self.positive || !base.positive {
             panic!("taking logarithm of negative number or negative base is not supported")
         }
 
-        if *self == SignedDecimal::one() {
+        if *self == Decimal::one() {
             return 0;
         }
 
-        if *self < SignedDecimal::one() {
+        if *self < Decimal::one() {
             return -self.inv().unwrap().log(base);
         }
 
@@ -172,7 +174,7 @@ impl SignedDecimal {
             values.push(*values.last().unwrap() * *values.last().unwrap())
         }
 
-        let mut current = SignedDecimal::one();
+        let mut current = Decimal::one();
         let mut out = 0i64;
 
         for i in (0..values.len()).rev() {
@@ -205,7 +207,7 @@ impl SignedDecimal {
         }
     }
 
-    pub fn from_decimal(decimal: Decimal) -> Self {
+    pub fn from_decimal(decimal: StdDecimal) -> Self {
         Self::from_str(decimal.to_string().as_str()).unwrap()
     }
 
@@ -226,13 +228,13 @@ impl SignedDecimal {
     }
 }
 
-impl Default for SignedDecimal {
+impl Default for Decimal {
     fn default() -> Self {
-        SignedDecimal::zero()
+        Decimal::zero()
     }
 }
 
-impl FromStr for SignedDecimal {
+impl FromStr for Decimal {
     type Err = StdError;
 
     /// Converts the decimal string to a Decimal
@@ -256,7 +258,7 @@ impl FromStr for SignedDecimal {
     }
 }
 
-impl fmt::Display for SignedDecimal {
+impl fmt::Display for Decimal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if !self.positive {
             write!(f, "-")?
@@ -265,7 +267,7 @@ impl fmt::Display for SignedDecimal {
     }
 }
 
-impl PartialEq for SignedDecimal {
+impl PartialEq for Decimal {
     fn eq(&self, other: &Self) -> bool {
         if self.is_zero() && other.is_zero() {
             return true;
@@ -274,23 +276,23 @@ impl PartialEq for SignedDecimal {
     }
 }
 
-impl ops::Neg for SignedDecimal {
+impl ops::Neg for Decimal {
     type Output = Self;
 
     fn neg(self) -> Self {
-        SignedDecimal {
+        Decimal {
             decimal: self.decimal,
             positive: !self.positive,
         }
     }
 }
 
-impl ops::Add for SignedDecimal {
+impl ops::Add for Decimal {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
         if self.positive == other.positive {
-            SignedDecimal {
+            Decimal {
                 decimal: self.decimal + other.decimal,
                 positive: self.positive,
             }
@@ -305,7 +307,7 @@ impl ops::Add for SignedDecimal {
             } else {
                 other
             };
-            SignedDecimal {
+            Decimal {
                 decimal: bigger.decimal - smaller.decimal,
                 positive: bigger.positive,
             }
@@ -313,13 +315,13 @@ impl ops::Add for SignedDecimal {
     }
 }
 
-impl ops::AddAssign for SignedDecimal {
+impl ops::AddAssign for Decimal {
     fn add_assign(&mut self, other: Self) {
         *self = self.add(other)
     }
 }
 
-impl ops::Sub for SignedDecimal {
+impl ops::Sub for Decimal {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -327,57 +329,57 @@ impl ops::Sub for SignedDecimal {
     }
 }
 
-impl ops::SubAssign for SignedDecimal {
+impl ops::SubAssign for Decimal {
     fn sub_assign(&mut self, other: Self) {
         *self = self.sub(other)
     }
 }
 
-impl ops::Mul for SignedDecimal {
-    type Output = SignedDecimal;
+impl ops::Mul for Decimal {
+    type Output = Decimal;
 
-    fn mul(self, rhs: SignedDecimal) -> Self::Output {
+    fn mul(self, rhs: Decimal) -> Self::Output {
         let result = Uint512::from(self.decimal.numerator())
             * Uint512::from(rhs.decimal.numerator())
-            / Uint512::from(SignedDecimal::DECIMAL_FRACTIONAL);
+            / Uint512::from(Decimal::DECIMAL_FRACTIONAL);
         let dec_internal = Uint256::try_from(result).unwrap();
 
-        SignedDecimal {
-            decimal: Decimal256::from_ratio(dec_internal, SignedDecimal::DECIMAL_FRACTIONAL),
+        Decimal {
+            decimal: Decimal256::from_ratio(dec_internal, Decimal::DECIMAL_FRACTIONAL),
             positive: self.positive == rhs.positive,
         }
     }
 }
 
-impl ops::MulAssign for SignedDecimal {
+impl ops::MulAssign for Decimal {
     fn mul_assign(&mut self, other: Self) {
         *self = self.mul(other)
     }
 }
 
-impl ops::Div for SignedDecimal {
+impl ops::Div for Decimal {
     type Output = Self;
 
-    fn div(self, rhs: SignedDecimal) -> Self::Output {
+    fn div(self, rhs: Decimal) -> Self::Output {
         let result = Uint512::from(self.decimal.numerator())
-            * Uint512::from(SignedDecimal::DECIMAL_FRACTIONAL)
+            * Uint512::from(Decimal::DECIMAL_FRACTIONAL)
             / Uint512::from(rhs.decimal.numerator());
         let dec_internal = Uint256::try_from(result).unwrap();
-        SignedDecimal {
-            decimal: Decimal256::from_ratio(dec_internal, SignedDecimal::DECIMAL_FRACTIONAL),
+        Decimal {
+            decimal: Decimal256::from_ratio(dec_internal, Decimal::DECIMAL_FRACTIONAL),
             positive: self.positive == rhs.positive,
         }
     }
 }
 
-impl ops::DivAssign for SignedDecimal {
+impl ops::DivAssign for Decimal {
     fn div_assign(&mut self, other: Self) {
         *self = self.div(other)
     }
 }
 
 /// Serializes as a decimal string
-impl Serialize for SignedDecimal {
+impl Serialize for Decimal {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: ser::Serializer,
@@ -387,19 +389,19 @@ impl Serialize for SignedDecimal {
 }
 
 /// Deserializes as a base64 string
-impl<'de> Deserialize<'de> for SignedDecimal {
+impl<'de> Deserialize<'de> for Decimal {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_str(SignedDecimalVisitor)
+        deserializer.deserialize_str(DecimalVisitor)
     }
 }
 
-struct SignedDecimalVisitor;
+struct DecimalVisitor;
 
-impl<'de> de::Visitor<'de> for SignedDecimalVisitor {
-    type Value = SignedDecimal;
+impl<'de> de::Visitor<'de> for DecimalVisitor {
+    type Value = Decimal;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("string-encoded decimal")
@@ -409,7 +411,7 @@ impl<'de> de::Visitor<'de> for SignedDecimalVisitor {
     where
         E: de::Error,
     {
-        match SignedDecimal::from_str(v) {
+        match Decimal::from_str(v) {
             Ok(d) => Ok(d),
             Err(e) => Err(E::custom(format!("Error parsing decimal '{}': {}", v, e))),
         }
