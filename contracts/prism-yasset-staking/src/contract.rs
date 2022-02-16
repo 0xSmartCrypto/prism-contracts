@@ -93,8 +93,16 @@ pub fn execute(
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
         _ => {
             // Private endpoints (open to specific callers only).
+            let cfg = CONFIG.load(deps.storage)?;
+
             match msg {
-                ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg), // Bond
+                ExecuteMsg::Receive(msg) => {  // Bond
+                    // only yluna cw20 contract can send money in.
+                    if cfg.yluna_token != info.sender {
+                        return Err(StdError::generic_err("unauthorized"));
+                    }
+                    receive_cw20(deps, msg)
+                }
                 ExecuteMsg::MintXprismClaimHook {
                     receiver,
                     prev_balance,
@@ -110,7 +118,13 @@ pub fn execute(
                 ExecuteMsg::DepositMintedPylunaHook {
                     prev_pluna_balance,
                     prev_yluna_balance,
-                } => deposit_minted_pyluna_hook(deps, info, env, prev_pluna_balance, prev_yluna_balance),
+                } => deposit_minted_pyluna_hook(
+                    deps,
+                    info,
+                    env,
+                    prev_pluna_balance,
+                    prev_yluna_balance,
+                ),
                 ExecuteMsg::UpdateConfig {
                     owner,
                     collector,
@@ -118,7 +132,7 @@ pub fn execute(
                 } => update_config(deps, info, owner, collector, protocol_fee),
                 _ => Err(StdError::generic_err("not implemented")),
             }
-        },
+        }
     }
 }
 
@@ -126,22 +140,12 @@ pub fn execute(
 /// accruing rewards in return.
 pub fn receive_cw20(
     deps: DepsMut,
-    info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let msg = cw20_msg.msg;
 
     match from_binary(&msg)? {
-        Cw20HookMsg::Bond {} => {
-            let cfg = CONFIG.load(deps.storage)?;
-
-            // only yluna token contract can execute this message
-            if cfg.yluna_token != info.sender {
-                return Err(StdError::generic_err("unauthorized"));
-            }
-
-            bond(deps, cw20_msg.sender, cw20_msg.amount)
-        }
+        Cw20HookMsg::Bond {} => bond(deps, cw20_msg.sender, cw20_msg.amount),
     }
 }
 
