@@ -11,6 +11,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
+use prism_common::permissions::check_sender;
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, VestingStatusResponse,
 };
@@ -18,7 +19,6 @@ use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
     RewardAssetWhitelistResponse,
 };
-use prism_common::permissions::check_sender;
 
 use std::cmp::min;
 use std::convert::TryInto;
@@ -68,7 +68,7 @@ pub fn execute(
             let cfg = CONFIG.load(deps.storage)?;
             match msg {
                 ExecuteMsg::Receive(msg) => {
-                     // Only yluna contract can send money in.
+                    // Only yluna contract can send money in.
                     check_sender(&info, &cfg.yluna_token)?;
                     receive_cw20(deps, env, msg) // Bond
                 }
@@ -81,7 +81,7 @@ pub fn execute(
                     check_sender(&info, &env.contract.address)?;
                     admin_send_withdrawn_rewards(deps, env, cfg, &original_balances)
                 }
-                _ =>  return Err(ContractError::NotImplemented {})
+                _ => return Err(ContractError::NotImplemented {}),
             }
         }
     }
@@ -95,9 +95,7 @@ pub fn receive_cw20(
     let msg = cw20_msg.msg;
 
     match from_binary(&msg)? {
-        Cw20HookMsg::Bond {} => {
-            bond(deps, env, &cw20_msg.sender, cw20_msg.amount)
-        }
+        Cw20HookMsg::Bond {} => bond(deps, env, &cw20_msg.sender, cw20_msg.amount),
     }
 }
 

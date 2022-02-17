@@ -5,8 +5,7 @@ use crate::{
 use cosmwasm_std::{
     from_binary,
     testing::{mock_env, mock_info},
-    to_binary, Addr, CosmosMsg, Decimal, SubMsg, Timestamp, Uint128, WasmMsg,
-    StdError,
+    to_binary, Addr, CosmosMsg, Decimal, StdError, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
@@ -318,7 +317,10 @@ fn bond() {
     // wrong token
     let info = mock_info("lp00001", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, ContractError::from(StdError::generic_err("unauthorized")));
+    assert_eq!(
+        err,
+        ContractError::from(StdError::generic_err("unauthorized"))
+    );
 
     // correct token
     let info = mock_info("ylunatoken0000", &[]);
@@ -693,7 +695,10 @@ fn admin_withdraw_rewards() {
     // wrong adddress attempt
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, ContractError::from(StdError::generic_err("unauthorized")));
+    assert_eq!(
+        err,
+        ContractError::from(StdError::generic_err("unauthorized"))
+    );
 
     deps.querier.with_token_balances(&[
         (
@@ -770,7 +775,10 @@ fn admin_withdraw_rewards() {
     // wrong adddress attempt
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, ContractError::from(StdError::generic_err("unauthorized")));
+    assert_eq!(
+        err,
+        ContractError::from(StdError::generic_err("unauthorized"))
+    );
 
     // correct address
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
