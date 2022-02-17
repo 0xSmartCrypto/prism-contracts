@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const DISTRIBUTION_STATUS: Item<DistributionStatus> = Item::new("distribution_status");
-pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
+pub const BOND_AMOUNTS: Map<&Addr, Uint128> = Map::new("bond_amounts");
 
-pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");
+pub const REWARD_INFO: Map<&Addr, RewardInfo> = Map::new("reward_info");
 
-pub const SCHEDULED_VEST: Map<(&[u8], &[u8]), Uint128> = Map::new("scheduled_vest");
-pub const PENDING_WITHDRAW: Map<&[u8], Uint128> = Map::new("pending_withdraw");
+pub const SCHEDULED_VEST: Map<(&Addr, &[u8]), Uint128> = Map::new("scheduled_vest");
+pub const PENDING_WITHDRAW: Map<&Addr, Uint128> = Map::new("pending_withdraw");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct DistributionStatus {
