@@ -6,7 +6,7 @@ use crate::state::{
 use crate::vest::{claim_withdrawn_rewards, withdraw_rewards};
 use cosmwasm_std::{
     entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg, WasmQuery, StdError,
+    MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
@@ -63,17 +63,23 @@ pub fn execute(
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::WithdrawRewards {} => withdraw_rewards(deps, env, info),
         ExecuteMsg::ClaimWithdrawnRewards {} => claim_withdrawn_rewards(deps, env, info),
-        ExecuteMsg::AdminWithdrawRewards {} => admin_withdraw_rewards(deps, env, info),
-        ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
-            admin_send_withdrawn_rewards(deps, env, info, &original_balances)
-        }
         _ => {
             // Private endpoints (open to specific callers only).
             let cfg = CONFIG.load(deps.storage)?;
             match msg {
                 ExecuteMsg::Receive(msg) => {
+                     // Only yluna contract can send money in.
                     check_sender(&info, &cfg.yluna_token)?;
-                    receive_cw20(deps, env, info, msg) // Bond
+                    receive_cw20(deps, env, msg) // Bond
+                }
+                ExecuteMsg::AdminWithdrawRewards {} => {
+                    check_sender(&info, &cfg.owner)?;
+                    admin_withdraw_rewards(deps, env, cfg)
+                }
+                ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
+                    // Self-call as part of AdminWithdrawRewards.
+                    check_sender(&info, &env.contract.address)?;
+                    admin_send_withdrawn_rewards(deps, env, cfg, &original_balances)
                 }
                 _ =>  return Err(ContractError::NotImplemented {})
             }
@@ -84,7 +90,6 @@ pub fn execute(
 pub fn receive_cw20(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
 ) -> Result<Response, ContractError> {
     let msg = cw20_msg.msg;
@@ -128,13 +133,8 @@ pub fn to_asset_balance(
 pub fn admin_withdraw_rewards(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    cfg: Config,
 ) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?;
-    if info.sender.as_str() != cfg.owner.as_str() {
-        return Err(ContractError::Unauthorized {});
-    }
-
     let whitelist_res: RewardAssetWhitelistResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
             contract_addr: cfg.yluna_staking.to_string(),
@@ -165,14 +165,9 @@ pub fn admin_withdraw_rewards(
 pub fn admin_send_withdrawn_rewards(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    cfg: Config,
     original_balances: &[Asset],
 ) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?;
-    if info.sender.as_str() != env.contract.address.as_str() {
-        return Err(ContractError::Unauthorized {});
-    }
-
     let mut messages = vec![];
     for prev in original_balances {
         let current = to_asset_balance(&deps, &env.contract.address, &prev.info)?;
