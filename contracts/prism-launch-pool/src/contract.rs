@@ -6,7 +6,7 @@ use crate::state::{
 use crate::vest::{claim_withdrawn_rewards, withdraw_rewards};
 use cosmwasm_std::{
     entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
+    MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg, WasmQuery, StdError,
 };
 use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
@@ -57,6 +57,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        // Public endpoints (wide open to entire internet).
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg), // Bond
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::WithdrawRewards {} => withdraw_rewards(deps, env, info),
@@ -64,6 +65,13 @@ pub fn execute(
         ExecuteMsg::AdminWithdrawRewards {} => admin_withdraw_rewards(deps, env, info),
         ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
             admin_send_withdrawn_rewards(deps, env, info, &original_balances)
+        }
+        _ => {
+            // Private endpoints (open to specific callers only).
+            let cfg = CONFIG.load(deps.storage)?;
+            match msg {
+                _ =>  return Err(ContractError::NotImplemented {})
+            }
         }
     }
 }

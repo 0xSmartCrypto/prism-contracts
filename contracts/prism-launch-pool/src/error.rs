@@ -17,4 +17,7 @@ pub enum ContractError {
 
     #[error("Invalid claim withdrawn rewards: {reason}")]
     InvalidClaimWithdrawnRewards { reason: String },
+
+    #[error("Not implemented")]
+    NotImplemented {},
 }
