@@ -4,9 +4,19 @@
 ## Checklist
 *(For both PR authors and reviewers)*
 
-For any endpoint you are adding or modifying:
-- Should the endpoint be public?
-  - [ ] Add a comment in the method explaining why should anyone on the public internet be able to call it.
-- Should the endpoint be private?
-  - [ ] Write a unit test that makes sures `unauthorized` errors are being returned for unauthorized callers.
-  - [ ] Remove any comments mentioning that the endpoint is public (perhaps it used to be public before your PR).
+**Fund transfer/allocation**:
+- [ ] Does this change involve any interaction with stored vault balances, fund transfers, or reward allocations?
+- [ ] If so, have you verified that you're not inadvertently transferring/allocating stored vault balances?  See [contract_balances.md][1] to verify contract existing balance storage and allocations.
+
+**Endpoint permissions**:
+- [ ] Have you verified permissions for all endpoints applicable to this change? Permissions should be as restrictive as possible and only allow what's truly needed.
+- [ ] Are there any endpoints that used to be public and now should be made private? This applies to this contract as well as other contracts (for example, you stopped calling an endpoint in a different contract, so that endpoint can now be locked down).
+
+**Testing**:
+- [ ] Have you written test coverage for all code paths (excluding logic error code paths) and verified coverage using tarpaulin?
+
+**Documentation**:
+- [ ] Have you updated documentation (contract's README.md, [contract_balances.md][1], and inlined rust comments)?
+
+
+[1]: https://github.com/prism-finance/prism-contracts/blob/readme_balances/contract_balances.md
