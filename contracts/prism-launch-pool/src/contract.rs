@@ -81,7 +81,7 @@ pub fn execute(
                     check_sender(&info, &env.contract.address)?;
                     admin_send_withdrawn_rewards(deps, env, cfg, &original_balances)
                 }
-                _ => return Err(ContractError::NotImplemented {}),
+                _ => Err(ContractError::NotImplemented {}),
             }
         }
     }
