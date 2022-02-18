@@ -15,6 +15,7 @@ use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, Migr
 use astroport::pair::{Cw20HookMsg as AstroPairCw20HookMsg, ExecuteMsg as AstroPairExecuteMsg};
 use cw2::set_contract_version;
 use cw_asset::{Asset, AssetInfo};
+use prism_common::permissions::check_sender;
 use prismswap::asset::{PrismSwapAsset, PrismSwapAssetInfo};
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 use prismswap::querier::query_pair_info;
@@ -58,6 +59,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        // Public endpoints (wide open to the entire internet).
         ExecuteMsg::ConvertAndSend {
             assets,
             receiver,
@@ -75,18 +77,28 @@ pub fn execute(
             }
             distribute(deps, env, asset_infos)
         }
-        ExecuteMsg::BaseSwapHook {
-            receiver,
-            prev_base_balance,
-            dest_asset_info,
-        } => base_swap_hook(
-            deps,
-            env,
-            info,
-            &receiver,
-            prev_base_balance,
-            dest_asset_info,
-        ),
+        _ => {
+            // Private endpoints (open to specific callers only).
+            match msg {
+                ExecuteMsg::BaseSwapHook {
+                    receiver,
+                    prev_base_balance,
+                    dest_asset_info,
+                } => {
+                    // Can only be self-called as a hook from this contract.
+                    check_sender(&info, &env.contract.address)?;
+                    base_swap_hook(
+                        deps,
+                        env,
+                        info,
+                        &receiver,
+                        prev_base_balance,
+                        dest_asset_info,
+                    )
+                }
+                _ => Err(ContractError::NotImplemented {}),
+            }
+        }
     }
 }
 
@@ -124,7 +136,7 @@ pub fn convert_and_send(
         }
     }
 
-    // validate reciever or set to sender if unset
+    // Validate receiver or set to sender if unset
     let receiver = match receiver {
         Some(addr_str) => deps.api.addr_validate(&addr_str)?,
         None => info.sender,
@@ -223,12 +235,6 @@ pub fn base_swap_hook(
     dest_asset_info: AssetInfo,
 ) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
-
-    // can only be called as a hook from this contract
-    if info.sender != env.contract.address {
-        return Err(ContractError::Unauthorized {});
-    }
-
     // query contract balance for the base denom (uusd), exit if balance is zero
     let base_asset_info = AssetInfo::Native(config.base_denom.clone());
     let base_balance =

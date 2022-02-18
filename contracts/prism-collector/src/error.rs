@@ -22,4 +22,7 @@ pub enum ContractError {
 
     #[error("LogicError: {msg}")]
     LogicError { msg: String },
+
+    #[error("Not implemented")]
+    NotImplemented {},
 }

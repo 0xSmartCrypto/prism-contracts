@@ -1256,7 +1256,10 @@ fn test_base_swap_hook_to_prism() {
     // unauthorized attempt
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, ContractError::Unauthorized {});
+    assert_eq!(
+        err,
+        ContractError::from(StdError::generic_err("unauthorized"))
+    );
 
     // no balance - successful return but no messages generated
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
