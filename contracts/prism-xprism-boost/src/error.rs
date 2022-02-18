@@ -6,7 +6,7 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
-    #[error("{0}")]
+    #[error("Overflow")]
     OverflowError(#[from] OverflowError),
 
     #[error("Unauthorized")]

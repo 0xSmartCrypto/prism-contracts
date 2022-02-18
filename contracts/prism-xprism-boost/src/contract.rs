@@ -130,7 +130,7 @@ pub fn unbond(
 ) -> Result<Response, ContractError> {
     let mut user_info = USER_INFO.load(deps.storage, &info.sender)?;
     let amt = amount.unwrap_or(user_info.amt_bonded);
-    user_info.amt_bonded.checked_sub(amt)?;
+    user_info.amt_bonded = user_info.amt_bonded.checked_sub(amt)?;
     user_info.total_boost = Uint128::zero();
 
     if user_info.amt_bonded.is_zero() {
