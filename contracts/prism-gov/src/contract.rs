@@ -94,7 +94,6 @@ pub fn instantiate(
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         // Public endpoints (wide open to the entire internet).
-        ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::WithdrawVotingTokens { amount } => withdraw_voting_tokens(deps, info, amount),
         ExecuteMsg::CastVote {
             poll_id,
@@ -110,6 +109,18 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             let config: Config = config_read(deps.storage).load()?;
 
             match msg {
+                ExecuteMsg::Receive(msg) => {
+                    // Only PRISM or xPRISM cw20 contracts can call this.
+                    let sender_raw = deps.api.addr_canonicalize(info.sender.as_str())?;
+                    if sender_raw != config.xprism_token.unwrap()
+                        && sender_raw != config.prism_token
+                    {
+                        return Err(StdError::generic_err("unauthorized"));
+                    }
+
+                    receive_cw20(deps, env, info, msg)
+                }
+
                 ExecuteMsg::UpdateConfig {
                     owner,
                     quorum,
