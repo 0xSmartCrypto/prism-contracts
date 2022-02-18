@@ -19,4 +19,4 @@
 - [ ] Have you updated documentation (contract's README.md, [contract_balances.md][1], and inlined rust comments)?
 
 
-[1]: https://github.com/prism-finance/prism-contracts/blob/readme_balances/contract_balances.md
+[1]: https://github.com/prism-finance/prism-contracts/blob/main/contract_balances.md
