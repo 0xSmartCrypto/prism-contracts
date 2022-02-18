@@ -19,7 +19,6 @@ use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
     RewardAssetWhitelistResponse,
 };
-
 use std::cmp::min;
 use std::convert::TryInto;
 
