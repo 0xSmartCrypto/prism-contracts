@@ -117,7 +117,6 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                     {
                         return Err(StdError::generic_err("unauthorized"));
                     }
-
                     receive_cw20(deps, env, info, msg)
                 }
 
