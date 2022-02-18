@@ -126,7 +126,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                     }
                     update_config(
                         deps,
-                        info,
+                        config,
                         owner,
                         quorum,
                         threshold,
@@ -226,7 +226,7 @@ pub fn set_xprism_token(deps: DepsMut, msg: Reply) -> StdResult<Response> {
 #[allow(clippy::too_many_arguments)]
 pub fn update_config(
     deps: DepsMut,
-    info: MessageInfo,
+    mut config: Config,
     owner: Option<String>,
     quorum: Option<Decimal>,
     threshold: Option<Decimal>,
@@ -237,53 +237,46 @@ pub fn update_config(
     redemption_time: Option<u64>,
     poll_gas_limit: Option<u64>,
 ) -> StdResult<Response> {
-    let api = deps.api;
-    config_store(deps.storage).update(|mut config| {
-        if config.owner != api.addr_canonicalize(info.sender.as_str())? {
-            return Err(StdError::generic_err("unauthorized"));
-        }
+    if let Some(owner) = owner {
+        config.owner = deps.api.addr_canonicalize(&owner)?;
+    }
 
-        if let Some(owner) = owner {
-            config.owner = api.addr_canonicalize(&owner)?;
-        }
+    if let Some(quorum) = quorum {
+        validate_quorum(quorum)?;
+        config.quorum = quorum;
+    }
 
-        if let Some(quorum) = quorum {
-            validate_quorum(quorum)?;
-            config.quorum = quorum;
-        }
+    if let Some(threshold) = threshold {
+        validate_threshold(threshold)?;
+        config.threshold = threshold;
+    }
 
-        if let Some(threshold) = threshold {
-            validate_threshold(threshold)?;
-            config.threshold = threshold;
-        }
+    if let Some(voting_period) = voting_period {
+        config.voting_period = voting_period;
+    }
 
-        if let Some(voting_period) = voting_period {
-            config.voting_period = voting_period;
-        }
+    if let Some(effective_delay) = effective_delay {
+        config.effective_delay = effective_delay;
+    }
 
-        if let Some(effective_delay) = effective_delay {
-            config.effective_delay = effective_delay;
-        }
+    if let Some(proposal_deposit) = proposal_deposit {
+        config.proposal_deposit = proposal_deposit;
+    }
 
-        if let Some(proposal_deposit) = proposal_deposit {
-            config.proposal_deposit = proposal_deposit;
-        }
+    if let Some(snapshot_period) = snapshot_period {
+        config.snapshot_period = snapshot_period;
+    }
 
-        if let Some(snapshot_period) = snapshot_period {
-            config.snapshot_period = snapshot_period;
-        }
+    if let Some(redemption_time) = redemption_time {
+        config.redemption_time = redemption_time;
+    }
 
-        if let Some(redemption_time) = redemption_time {
-            config.redemption_time = redemption_time;
-        }
+    if let Some(poll_gas_limit) = poll_gas_limit {
+        validate_poll_gas_limit(poll_gas_limit)?;
+        config.poll_gas_limit = poll_gas_limit;
+    }
 
-        if let Some(poll_gas_limit) = poll_gas_limit {
-            validate_poll_gas_limit(poll_gas_limit)?;
-            config.poll_gas_limit = poll_gas_limit;
-        }
-
-        Ok(config)
-    })?;
+    config_store(deps.storage).save(&config)?;
     Ok(Response::default())
 }
 
