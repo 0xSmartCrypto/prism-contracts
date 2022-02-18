@@ -87,13 +87,7 @@ pub fn execute(
                 } => {
                     // Can only be self-called as a hook from this contract.
                     check_sender(&info, &env.contract.address)?;
-                    base_swap_hook(
-                        deps,
-                        env,
-                        &receiver,
-                        prev_base_balance,
-                        dest_asset_info,
-                    )
+                    base_swap_hook(deps, env, &receiver, prev_base_balance, dest_asset_info)
                 }
                 _ => Err(ContractError::NotImplemented {}),
             }
