@@ -18,6 +18,8 @@ use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
     RewardAssetWhitelistResponse,
 };
+use prism_common::permissions::check_sender;
+
 use std::cmp::min;
 use std::convert::TryInto;
 
@@ -58,7 +60,6 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         // Public endpoints (wide open to entire internet).
-        ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg), // Bond
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::WithdrawRewards {} => withdraw_rewards(deps, env, info),
         ExecuteMsg::ClaimWithdrawnRewards {} => claim_withdrawn_rewards(deps, env, info),
@@ -70,6 +71,10 @@ pub fn execute(
             // Private endpoints (open to specific callers only).
             let cfg = CONFIG.load(deps.storage)?;
             match msg {
+                ExecuteMsg::Receive(msg) => {
+                    check_sender(&info, &cfg.yluna_token)?;
+                    receive_cw20(deps, env, info, msg) // Bond
+                }
                 _ =>  return Err(ContractError::NotImplemented {})
             }
         }
@@ -86,13 +91,6 @@ pub fn receive_cw20(
 
     match from_binary(&msg)? {
         Cw20HookMsg::Bond {} => {
-            let cfg = CONFIG.load(deps.storage)?;
-
-            // only yluna token contract can execute this message
-            if cfg.yluna_token != info.sender {
-                return Err(ContractError::Unauthorized {});
-            }
-
             bond(deps, env, &cw20_msg.sender, cw20_msg.amount)
         }
     }

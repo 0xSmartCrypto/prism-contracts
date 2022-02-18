@@ -6,6 +6,7 @@ use cosmwasm_std::{
     from_binary,
     testing::{mock_env, mock_info},
     to_binary, Addr, CosmosMsg, Decimal, SubMsg, Timestamp, Uint128, WasmMsg,
+    StdError,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
@@ -112,7 +113,7 @@ fn withdraw_rewards() {
         .unwrap(),
         VestingStatusResponse {
             scheduled_vests: vec![
-                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2 
+                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2
             ],
             withdrawable: Uint128::zero(),
         }
@@ -317,7 +318,7 @@ fn bond() {
     // wrong token
     let info = mock_info("lp00001", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, ContractError::Unauthorized {});
+    assert_eq!(err, ContractError::from(StdError::generic_err("unauthorized")));
 
     // correct token
     let info = mock_info("ylunatoken0000", &[]);
@@ -608,7 +609,7 @@ fn claim_withdrawn_rewards() {
         .unwrap(),
         VestingStatusResponse {
             scheduled_vests: vec![
-                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2 
+                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2
             ],
             withdrawable: Uint128::zero(),
         }
@@ -631,7 +632,7 @@ fn claim_withdrawn_rewards() {
         .unwrap(),
         VestingStatusResponse {
             scheduled_vests: vec![
-                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2 
+                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2
             ],
             withdrawable: Uint128::from(500000u128),
         }
@@ -692,7 +693,7 @@ fn admin_withdraw_rewards() {
     // wrong adddress attempt
     let info = mock_info("addr0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(err, ContractError::Unauthorized {});
+    assert_eq!(err, ContractError::from(StdError::generic_err("unauthorized")));
 
     deps.querier.with_token_balances(&[
         (
