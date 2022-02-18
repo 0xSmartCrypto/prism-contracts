@@ -151,7 +151,8 @@ pub fn _accumulate_boost(
 ) -> StdResult<UserInfo> {
     if !info.amt_bonded.is_zero() && env.block.time.seconds() > info.last_updated {
         let cfg = CONFIG.load(storage)?;
-        let new_boost = Decimal::from_ratio(info.amt_bonded, 1u128) * cfg.boost_interval
+        let new_boost = Decimal::from_ratio(info.amt_bonded, 1u128)
+            * cfg.boost_interval
             * Decimal::from_ratio(
                 (env.block.time.seconds() - info.last_updated) as u128,
                 3600u128,
