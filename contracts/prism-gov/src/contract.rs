@@ -93,6 +93,7 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
+        // Public endpoints (wide open to the entire internet).
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::UpdateConfig {
             owner,
@@ -127,6 +128,12 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::ExecutePoll { poll_id } => execute_poll(deps, env, poll_id),
         ExecuteMsg::SnapshotPoll { poll_id } => snapshot_poll(deps, env, poll_id),
         ExecuteMsg::ClaimRedeemedXprism {} => claim_redeemed_prism(deps, env, info),
+        _ => {
+            // Private endpoints (open to specific callers only).
+            match msg {
+                _ => Err(StdError::generic_err("Not implemented")),
+            }
+        }
     }
 }
 
