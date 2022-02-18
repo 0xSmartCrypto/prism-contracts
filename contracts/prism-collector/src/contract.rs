@@ -90,7 +90,6 @@ pub fn execute(
                     base_swap_hook(
                         deps,
                         env,
-                        info,
                         &receiver,
                         prev_base_balance,
                         dest_asset_info,
@@ -229,7 +228,6 @@ pub fn distribute(
 pub fn base_swap_hook(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
     receiver: &Addr,
     prev_base_balance: Uint128,
     dest_asset_info: AssetInfo,
