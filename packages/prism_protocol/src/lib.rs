@@ -1,7 +1,6 @@
 pub mod airdrop_registry;
 pub mod collector;
 pub mod common;
-pub mod decimal;
 pub mod fair_launch;
 pub mod gov;
 pub mod launch_pool;
