@@ -95,29 +95,6 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     match msg {
         // Public endpoints (wide open to the entire internet).
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
-        ExecuteMsg::UpdateConfig {
-            owner,
-            quorum,
-            threshold,
-            voting_period,
-            effective_delay,
-            proposal_deposit,
-            snapshot_period,
-            redemption_time,
-            poll_gas_limit,
-        } => update_config(
-            deps,
-            info,
-            owner,
-            quorum,
-            threshold,
-            voting_period,
-            effective_delay,
-            proposal_deposit,
-            snapshot_period,
-            redemption_time,
-            poll_gas_limit,
-        ),
         ExecuteMsg::WithdrawVotingTokens { amount } => withdraw_voting_tokens(deps, info, amount),
         ExecuteMsg::CastVote {
             poll_id,
@@ -130,7 +107,37 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::ClaimRedeemedXprism {} => claim_redeemed_prism(deps, env, info),
         _ => {
             // Private endpoints (open to specific callers only).
+            let config: Config = config_read(deps.storage).load()?;
+
             match msg {
+                ExecuteMsg::UpdateConfig {
+                    owner,
+                    quorum,
+                    threshold,
+                    voting_period,
+                    effective_delay,
+                    proposal_deposit,
+                    snapshot_period,
+                    redemption_time,
+                    poll_gas_limit,
+                } => {
+                    if config.owner != deps.api.addr_canonicalize(info.sender.as_str())? {
+                        return Err(StdError::generic_err("unauthorized"));
+                    }
+                    update_config(
+                        deps,
+                        info,
+                        owner,
+                        quorum,
+                        threshold,
+                        voting_period,
+                        effective_delay,
+                        proposal_deposit,
+                        snapshot_period,
+                        redemption_time,
+                        poll_gas_limit,
+                    )
+                }
                 _ => Err(StdError::generic_err("Not implemented")),
             }
         }
