@@ -48,7 +48,7 @@ pub fn execute(
             xprism_token,
             boost_interval,
         } => update_config(deps, info, owner, xprism_token, boost_interval),
-        ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
+        ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
     }
 }
 
@@ -125,6 +125,7 @@ pub fn bond(
 
 pub fn unbond(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
@@ -136,6 +137,7 @@ pub fn unbond(
     if user_info.amt_bonded.is_zero() {
         USER_INFO.remove(deps.storage, &info.sender);
     } else {
+        user_info.last_updated = env.block.time.seconds();
         USER_INFO.save(deps.storage, &info.sender, &user_info)?;
     }
 
@@ -149,7 +151,7 @@ pub fn _accumulate_boost(
 ) -> StdResult<UserInfo> {
     if !info.amt_bonded.is_zero() && env.block.time.seconds() > info.last_updated {
         let cfg = CONFIG.load(storage)?;
-        let new_boost = cfg.boost_interval
+        let new_boost = Decimal::from_ratio(info.amt_bonded, 1u128) * cfg.boost_interval
             * Decimal::from_ratio(
                 (env.block.time.seconds() - info.last_updated) as u128,
                 3600u128,
