@@ -1,8 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::decimal::Decimal;
-use cosmwasm_std::{Addr, Uint128};
+use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -55,6 +54,6 @@ pub struct Config {
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, JsonSchema)]
 pub struct UserInfo {
     pub amt_bonded: Uint128,
-    pub total_boost: Decimal,
+    pub total_boost: Uint128, // 6 decimal places
     pub last_updated: u64,
 }

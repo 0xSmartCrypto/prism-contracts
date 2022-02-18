@@ -1,12 +1,11 @@
 use crate::error::ContractError;
 use crate::state::{CONFIG, USER_INFO};
 use cosmwasm_std::{
-    attr, entry_point, from_binary, to_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, Storage, Uint128,
+    attr, entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut,
+    Env, MessageInfo, Response, StdResult, Storage, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
-use cw20::Cw20ReceiveMsg;
-use prism_protocol::decimal::Decimal;
+use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use prism_protocol::xprism_boost::{
     Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, UserInfo,
 };
@@ -113,7 +112,7 @@ pub fn bond(
     let addr = deps.api.addr_validate(sender)?;
     let info = USER_INFO.load(deps.storage, &addr).unwrap_or(UserInfo {
         amt_bonded: Uint128::zero(),
-        total_boost: Decimal::zero(),
+        total_boost: Uint128::zero(),
         last_updated: env.block.time.seconds(),
     });
 
@@ -132,7 +131,7 @@ pub fn unbond(
     let mut user_info = USER_INFO.load(deps.storage, &info.sender)?;
     let amt = amount.unwrap_or(user_info.amt_bonded);
     user_info.amt_bonded.checked_sub(amt)?;
-    user_info.total_boost = Decimal::zero();
+    user_info.total_boost = Uint128::zero();
 
     if user_info.amt_bonded.is_zero() {
         USER_INFO.remove(deps.storage, &info.sender);
@@ -141,7 +140,19 @@ pub fn unbond(
         USER_INFO.save(deps.storage, &info.sender, &user_info)?;
     }
 
-    Ok(Response::new().add_attributes(vec![attr("user", info.sender), attr("unbond", amt)]))
+    let cfg = CONFIG.load(deps.storage)?;
+    let messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: cfg.xprism_token.to_string(),
+        msg: to_binary(&Cw20ExecuteMsg::Transfer {
+            recipient: info.sender.to_string(),
+            amount: amt,
+        })?,
+        funds: vec![],
+    })];
+
+    Ok(Response::new()
+        .add_messages(messages)
+        .add_attributes(vec![attr("user", info.sender), attr("unbond", amt)]))
 }
 
 pub fn _accumulate_boost(
@@ -151,13 +162,13 @@ pub fn _accumulate_boost(
 ) -> StdResult<UserInfo> {
     if !info.amt_bonded.is_zero() && env.block.time.seconds() > info.last_updated {
         let cfg = CONFIG.load(storage)?;
-        let new_boost = Decimal::from_ratio(info.amt_bonded, 1u128)
+        let new_boost = info.amt_bonded
             * cfg.boost_interval
             * Decimal::from_ratio(
                 (env.block.time.seconds() - info.last_updated) as u128,
                 3600u128,
             );
-        let max_boost = Decimal::from_ratio(info.amt_bonded * Uint128::from(100u128), 1u128);
+        let max_boost = info.amt_bonded * Uint128::from(100u128);
         info.total_boost = min(new_boost, max_boost);
         info.last_updated = env.block.time.seconds();
     }
