@@ -153,10 +153,10 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
         .add_attributes(attributes))
 }
 
-// convert all rewards into claim_asset_info and then claim those rewards.
-// this method uses the collector's ConvertAndSend logic to perform the
-// swaps.  if the claim asset is xprism, then we convert to prism and issue
-// a MintXprismClaimHook which mints the prism obtained from the CollectAndSend.
+/// convert all rewards into claim_asset_info and then claim those rewards. this
+/// method uses the collector's ConvertAndSend logic to perform the swaps.  if
+/// the claim asset is xprism, then we convert to prism and issue a
+/// MintXprismClaimHook which mints the prism obtained from the CollectAndSend.
 pub fn convert_and_claim_rewards(
     deps: DepsMut,
     env: Env,
@@ -380,13 +380,15 @@ pub fn whitelist_reward_asset(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // can only be exeucted by owner
+    // can only be executed by owner
     if info.sender != cfg.owner {
         return Err(StdError::generic_err("unauthorized"));
     }
 
     if asset.is_native_token() {
-        return Err(StdError::generic_err("only token assets can be registered"));
+        return Err(StdError::generic_err(
+            "only token assets can be whitelisted",
+        ));
     }
 
     let mut whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
@@ -407,7 +409,7 @@ pub fn remove_whitelisted_reward_asset(
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // can only be exeucted by owner
+    // can only be executed by owner
     if info.sender != cfg.owner {
         return Err(StdError::generic_err("unauthorized"));
     }

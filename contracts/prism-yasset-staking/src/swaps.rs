@@ -22,22 +22,22 @@ pub fn process_delegator_rewards(
     env: Env,
     _info: MessageInfo,
 ) -> StdResult<Response<TerraMsgWrapper>> {
+    // Find all native denoms for which we have a balance.
     let balances = deps.querier.query_all_balances(&env.contract.address)?;
-    let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
-
-    let reward_denom = String::from(REWARD_DENOM);
-
     let denoms: Vec<String> = balances.iter().map(|item| item.denom.clone()).collect();
 
+    let reward_denom = String::from(REWARD_DENOM);
     let exchange_rates = query_exchange_rates(&deps, reward_denom.clone(), denoms)?;
 
+    let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
     for coin in balances {
-        if coin.denom == reward_denom.clone()
+        if coin.denom == reward_denom
             || !exchange_rates
                 .exchange_rates
                 .iter()
                 .any(|x| x.quote_denom == coin.denom)
         {
+            // ignore luna and any other denom that's not convertible to luna.
             continue;
         }
 
@@ -62,7 +62,8 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
 
     let luna_amt = query_balance(&deps.querier, &env.contract.address, reward_denom.clone())?;
 
-    // record the current balance to know how much was minted when the hook is executed right after
+    // Record the current balance to know how much was minted when
+    // DepositMintedPylunaHook is executed right after.
     let prev_pluna_balance =
         query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
     let prev_yluna_balance =

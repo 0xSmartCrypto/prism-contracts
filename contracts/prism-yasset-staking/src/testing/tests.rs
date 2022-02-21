@@ -407,7 +407,7 @@ fn test_whitelist() {
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(
         err,
-        StdError::generic_err("only token assets can be registered")
+        StdError::generic_err("only token assets can be whitelisted")
     );
 
     // remove whiteslited asset

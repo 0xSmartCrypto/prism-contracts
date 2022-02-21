@@ -126,7 +126,6 @@ pub fn execute_update_config(
 ) -> StdResult<Response> {
     // only owner must be able to send this message.
     let mut config = CONFIG.load(deps.storage)?;
-
     if info.sender != config.owner {
         return Err(StdError::generic_err("unauthorized"));
     }
@@ -140,7 +139,7 @@ pub fn execute_update_config(
     if let Some(yluna_staking) = yluna_staking {
         config.yluna_staking = deps.api.addr_validate(&yluna_staking)?;
 
-        // register the reward contract for automate reward withdrawal.
+        // register the reward contract for automated reward withdrawal.
         messages.push(SubMsg::new(CosmosMsg::Distribution(
             DistributionMsg::SetWithdrawAddress {
                 address: yluna_staking,
@@ -299,7 +298,7 @@ pub fn execute_redelegate(
     let source_val_addr = Addr::unchecked(&source_val);
     let target_val_addr = Addr::unchecked(&target_val);
 
-    if config.owner != info.sender && config.manager != info.sender {
+    if info.sender != config.owner && info.sender != config.manager {
         return Err(StdError::generic_err("unauthorized"));
     }
 

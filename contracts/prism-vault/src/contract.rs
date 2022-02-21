@@ -157,9 +157,11 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
-        ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
-        ExecuteMsg::Bond { validator } => execute_bond(deps, env, info, validator),
-        ExecuteMsg::BondSplit { validator } => execute_bond_split(deps, env, info, validator),
+        ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg), // Start unbonding c-luna to luna
+        ExecuteMsg::Bond { validator } => execute_bond(deps, env, info, validator), // Bond luna to c-luna
+        ExecuteMsg::BondSplit { validator } => execute_bond_split(deps, env, info, validator), // Bond luna to p-luna/y-luna
+        ExecuteMsg::Split { amount } => split(deps, env, info, amount), // Split c-luna to p-luna/y-luna
+        ExecuteMsg::Merge { amount } => merge(deps, info, amount), // Merge p-luna/y-luna to c-luna
         ExecuteMsg::UpdateGlobalIndex { airdrop_hooks } => {
             execute_update_global(deps, env, airdrop_hooks)
         }
@@ -211,8 +213,6 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             airdrop_contract,
             claim_msg,
         ),
-        ExecuteMsg::Split { amount } => split(deps, env, info, amount),
-        ExecuteMsg::Merge { amount } => merge(deps, info, amount),
         ExecuteMsg::DepositAirdropReward {
             airdrop_token_contract,
         } => deposit_airdrop_rewards(deps, env, info, airdrop_token_contract),
@@ -512,7 +512,7 @@ fn query_params(deps: Deps) -> StdResult<Parameters> {
     PARAMETERS.load(deps.storage)
 }
 
-/// Returns total cLuna issued + min(total pLuna issued, total yLuna issued).
+/// Returns total c-luna issued.
 pub(crate) fn query_total_issued(deps: Deps) -> StdResult<Uint128> {
     let cfg = CONFIG.load(deps.storage)?;
 

@@ -18,13 +18,12 @@ pub(crate) fn execute_unbond(
     mut deps: DepsMut,
     env: Env,
     amount: Uint128,
-    sender: String, // human who sent the cLuna to us
+    sender: String, // human who sent the c-luna to us
 ) -> StdResult<Response> {
-    let params = PARAMETERS.load(deps.storage)?;
-
     let mut current_batch = CURRENT_BATCH.load(deps.storage)?;
 
     // Check slashing, update state, and calculate the new exchange rate.
+    let params = PARAMETERS.load(deps.storage)?;
     let mut state = STATE.load(deps.storage)?;
     slashing(&mut deps, env.clone(), &mut state, &params)?;
 
@@ -121,10 +120,9 @@ pub(crate) fn execute_unbond(
     // Send Burn message to cluna contract
     let config = CONFIG.load(deps.storage)?.assert_initialized()?;
 
-    let burn_msg = Cw20ExecuteMsg::Burn { amount };
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.cluna_contract.to_string(),
-        msg: to_binary(&burn_msg)?,
+        msg: to_binary(&Cw20ExecuteMsg::Burn { amount })?,
         funds: vec![],
     })));
 

@@ -23,7 +23,7 @@ pub enum ExecuteMsg {
     /// Owner's operations
     ////////////////////
 
-    /// Set the owener
+    /// Update Vault global config.
     UpdateConfig {
         owner: Option<String>,
         yluna_staking: Option<String>,

@@ -76,7 +76,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     match msg {
-        ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg),
+        ExecuteMsg::Receive(msg) => receive_cw20(deps, info, msg), // Bond
         ExecuteMsg::Unbond { amount } => unbond(deps, info, amount),
         ExecuteMsg::ClaimRewards {} => claim_rewards(deps, info),
         ExecuteMsg::ConvertAndClaimRewards { claim_asset } => {
@@ -115,6 +115,8 @@ pub fn execute(
     }
 }
 
+/// Accept yluna from the user and bond it in this contract. The user starts
+/// accruing rewards in return.
 pub fn receive_cw20(
     deps: DepsMut,
     info: MessageInfo,

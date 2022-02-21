@@ -60,12 +60,28 @@ impl State {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    // owner is the address of the owner of the Vault. It is used to
+    // authenticate owner-only endpoints (an error will be returned if this
+    // field doesn't match the caller's address).
     pub owner: Addr,
+    // yluna_staking is the address of the yasset-staking contract. If set,
+    // delegation rewards are deposited directly there (via SetWithdrawAddress).
+    // Example: Alice calls Bond on the Vault with 1 Luna. The Vault delegates
+    // that Luna to a validator. Rewards from that delegation go straight to the
+    // yasset-staking contract, bypassing the Vault completely.
     pub yluna_staking: Addr,
+    // cluna_contract, yluna_contract and pluna_contract are the addresses of
+    // the corresponding CW20 contracts. They are needed to mint, burn and
+    // transfer these tokens.
     pub cluna_contract: Addr,
     pub yluna_contract: Addr,
     pub pluna_contract: Addr,
     pub airdrop_registry_contract: Addr,
+    // initialized indicates whether the Vault is fully initialized and ready to
+    // be used. It is needed to break a cyclical dependency during contract
+    // initialization (Vault needs yasset-staking's address, but yasset-staking
+    // needs Vault's address, so we break the cycle by instantiating Vault first
+    // with initialized=false).
     pub initialized: bool,
     pub token_admin: Addr,
     pub token_code_id: u64,
