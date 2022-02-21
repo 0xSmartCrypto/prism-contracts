@@ -11,11 +11,11 @@ use crate::error::ContractError;
 use crate::migration::migrate_config;
 use crate::state::{Config, CONFIG};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use prism_protocol::internal::permissions::check_sender;
 
 use astroport::pair::{Cw20HookMsg as AstroPairCw20HookMsg, ExecuteMsg as AstroPairExecuteMsg};
 use cw2::set_contract_version;
 use cw_asset::{Asset, AssetInfo};
-use prism_common::permissions::check_sender;
 use prismswap::asset::{PrismSwapAsset, PrismSwapAssetInfo};
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 use prismswap::querier::query_pair_info;
