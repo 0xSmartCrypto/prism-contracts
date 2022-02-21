@@ -6,9 +6,11 @@ use cosmwasm_std::{
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
 use prismswap::asset::PrismSwapAssetInfo;
+use std::str::FromStr;
 use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
+use crate::state::CONFIG;
 use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
@@ -1333,6 +1335,74 @@ fn test_convert_and_claim_rewards_invalid_claim() {
     let info = mock_info("alice0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(err, StdError::generic_err("Claim asset not supported"));
+}
+
+#[test]
+fn test_update_config() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    // Unauthorized user is unable to update anything.
+    {
+        let msg = ExecuteMsg::UpdateConfig {
+            owner: Some(String::from("mallory666")),
+            collector: Some(String::from("mallory666")),
+            protocol_fee: Some(Decimal::from_ratio(1u128, 2u128)),
+        };
+        let info = mock_info("mallory666", &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert_eq!(err, StdError::generic_err("unauthorized"));
+        let config = CONFIG.load(&deps.storage).unwrap();
+        assert_eq!(config.owner, "owner0000");
+        assert_eq!(config.collector, "collector0000");
+        assert_eq!(config.protocol_fee, Decimal::from_ratio(1u128, 10u128));
+    }
+
+    // Authorized user with blank input updates nothing.
+    {
+        let blank_msg = ExecuteMsg::UpdateConfig {
+            owner: None,
+            collector: None,
+            protocol_fee: None,
+        };
+        let info = mock_info("owner0000", &[]);
+        execute(deps.as_mut(), mock_env(), info, blank_msg).unwrap();
+        let config = CONFIG.load(&deps.storage).unwrap();
+        assert_eq!(config.owner, "owner0000");
+        assert_eq!(config.collector, "collector0000");
+        assert_eq!(config.protocol_fee, Decimal::from_ratio(1u128, 10u128));
+    }
+
+    // Setting protocol fee too high causes error (even when valid owner).
+    {
+        let msg = ExecuteMsg::UpdateConfig {
+            owner: None,
+            collector: None,
+            protocol_fee: Some(Decimal::from_str("0.500000000000000001").unwrap()),
+        };
+        let info = mock_info("owner0000", &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert_eq!(
+            err,
+            StdError::generic_err("fee can not be greater than 0.5")
+        );
+    }
+
+    // Authorized user is able to update everything.
+    {
+        let full_msg = ExecuteMsg::UpdateConfig {
+            owner: Some(String::from("new-owner")),
+            collector: Some(String::from("new-collector")),
+            protocol_fee: Some(Decimal::from_ratio(1u128, 2u128)),
+        };
+        let info = mock_info("owner0000", &[]);
+        let res = execute(deps.as_mut(), mock_env(), info, full_msg).unwrap();
+        let config = CONFIG.load(&deps.storage).unwrap();
+        assert_eq!(config.owner, "new-owner");
+        assert_eq!(config.collector, "new-collector");
+        assert_eq!(config.protocol_fee, Decimal::from_ratio(1u128, 2u128));
+        assert_eq!(res.attributes, vec![attr("action", "update_config")]);
+    }
 }
 
 #[test]

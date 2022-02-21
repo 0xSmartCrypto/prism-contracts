@@ -220,7 +220,7 @@ pub fn query_bond_amount(deps: Deps) -> StdResult<Uint128> {
 fn validate_protocol_fee(fee: Decimal) -> StdResult<Decimal> {
     if fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
         return Err(StdError::generic_err(format!(
-            "fee can not be bigger than {}",
+            "fee can not be greater than {}",
             MAX_PROTOCOL_FEE
         )));
     }
