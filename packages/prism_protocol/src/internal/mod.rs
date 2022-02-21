@@ -6,3 +6,4 @@ pub use parse_reply::{
 };
 
 pub mod de;
+pub mod permissions;
