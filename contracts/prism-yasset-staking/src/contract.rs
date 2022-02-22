@@ -4,7 +4,7 @@ use std::str::FromStr;
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo,
+    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo,
     Response, StdError, StdResult, Uint128,
 };
 
