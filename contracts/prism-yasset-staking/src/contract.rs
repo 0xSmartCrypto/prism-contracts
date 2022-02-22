@@ -8,11 +8,11 @@ use cosmwasm_std::{
     Response, StdError, StdResult, Uint128,
 };
 
+use prism_protocol::internal::permissions::check_sender;
 use prism_protocol::yasset_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
     RewardAssetWhitelistResponse, MAX_PROTOCOL_FEE,
 };
-use prism_protocol::internal::permissions::check_sender;
 
 use crate::rewards::{
     claim_rewards, convert_and_claim_rewards, deposit_rewards, mint_xprism_claim_hook,
@@ -96,7 +96,8 @@ pub fn execute(
             // Private endpoints (open to specific callers only).
             let cfg = CONFIG.load(deps.storage)?;
             match msg {
-                ExecuteMsg::Receive(msg) => { // Bond
+                ExecuteMsg::Receive(msg) => {
+                    // Bond
                     check_sender(&info, &cfg.yluna_token)?; // Only yluna cw20 contract can send money in.
                     receive_cw20(deps, msg)
                 }
