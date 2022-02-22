@@ -14,11 +14,11 @@ use prismswap::pair::{
 };
 use std::str::FromStr;
 
-use prism_testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::limit_order::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, LastOrderIdResponse, OrderBy, OrderResponse,
     OrdersResponse, QueryMsg,
 };
+use prism_testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 
 const OWNER_ADDR: &str = "owner_0001";
 const USER1_ADDR: &str = "user_0001";

@@ -11,13 +11,13 @@ use cosmwasm_std::{
     Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, MinterResponse};
-use prism_testing::mock_querier::mock_dependencies;
 use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PollExecuteMsg, PollResponse,
     PollStatus, PollsResponse, PrismWithdrawOrdersResponse, QueryMsg, VoteOption, VoterInfo,
     VotersResponse, VotersResponseItem, VotingTokensResponse, XprismStateResponse,
 };
+use prism_testing::mock_querier::mock_dependencies;
 use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
 
 const VOTING_TOKEN: &str = "xprism0000";

@@ -9,7 +9,6 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
-use prism_testing::mock_querier::{mock_dependencies, MOCK_CONTRACT_ADDR};
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, DistributionStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
     RewardInfoResponse, VestingStatusResponse,
@@ -17,6 +16,7 @@ use prism_protocol::launch_pool::{
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg,
 };
+use prism_testing::mock_querier::{mock_dependencies, MOCK_CONTRACT_ADDR};
 
 #[test]
 fn proper_initialization() {

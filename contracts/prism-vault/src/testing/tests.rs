@@ -31,10 +31,10 @@ use crate::state::{
     read_validators, remove_unbond_wait_list, remove_white_validators, store_unbond_history,
     store_unbond_wait_list, store_white_validators, Parameters, UnbondHistory, CONFIG,
 };
-use prism_testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use prism_protocol::airdrop_registry::ExecuteMsg::FabricateClaim;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
+use prism_testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use std::borrow::BorrowMut;
 
 const OWNER: &str = "owner";

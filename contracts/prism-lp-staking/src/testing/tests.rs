@@ -7,11 +7,11 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
-use prism_testing::mock_querier::{mock_dependencies, WasmMockQuerier, MOCK_CONTRACT_ADDR};
 use prism_protocol::lp_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
     RewardInfoResponseItem, StakerInfoResponse, StakersInfoResponse, UnbondOrdersResponse,
 };
+use prism_testing::mock_querier::{mock_dependencies, WasmMockQuerier, MOCK_CONTRACT_ADDR};
 
 // helper to successfully init with reasonable defaults
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
