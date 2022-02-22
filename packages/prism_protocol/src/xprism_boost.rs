@@ -9,6 +9,7 @@ pub struct InstantiateMsg {
     pub owner: String,
     pub xprism_token: String,
     pub boost_interval: Decimal,
+    pub max_boost_per_xprism: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -17,9 +18,9 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
 
     UpdateConfig {
-        owner: Option<Addr>,
-        xprism_token: Option<Addr>,
+        owner: Option<String>,
         boost_interval: Option<Decimal>,
+        max_boost_per_xprism: Option<Uint128>,
     },
 
     // remove xprism
@@ -48,7 +49,10 @@ pub enum QueryMsg {
 pub struct Config {
     pub owner: Addr,
     pub xprism_token: Addr,
+    // boost_interval represents the amount of amps a user will accumulate per xprism
+    // per hour
     pub boost_interval: Decimal,
+    pub max_boost_per_xprism: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, JsonSchema)]

@@ -2,9 +2,8 @@ use std::env::current_dir;
 use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
-use prism_protocol::launch_pool::{
-    ConfigResponse, Cw20HookMsg, DistributionStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
-    RewardInfoResponse, VestingStatusResponse,
+use prism_protocol::xprism_boost::{
+    Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, UserInfo,
 };
 
 fn main() {
@@ -17,8 +16,6 @@ fn main() {
     export_schema(&schema_for!(ExecuteMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(Cw20HookMsg), &out_dir);
-    export_schema(&schema_for!(ConfigResponse), &out_dir);
-    export_schema(&schema_for!(DistributionStatusResponse), &out_dir);
-    export_schema(&schema_for!(RewardInfoResponse), &out_dir);
-    export_schema(&schema_for!(VestingStatusResponse), &out_dir);
+    export_schema(&schema_for!(UserInfo), &out_dir);
+    export_schema(&schema_for!(Config), &out_dir);
 }

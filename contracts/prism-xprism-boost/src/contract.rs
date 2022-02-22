@@ -1,8 +1,8 @@
 use crate::error::ContractError;
 use crate::state::{CONFIG, USER_INFO};
 use cosmwasm_std::{
-    attr, entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut,
-    Env, MessageInfo, Response, StdResult, Storage, Uint128, WasmMsg,
+    attr, entry_point, from_binary, to_binary, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    MessageInfo, Response, StdResult, Storage, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
@@ -27,6 +27,7 @@ pub fn instantiate(
         owner: deps.api.addr_validate(&msg.owner)?,
         xprism_token: deps.api.addr_validate(&msg.xprism_token)?,
         boost_interval: msg.boost_interval,
+        max_boost_per_xprism: msg.max_boost_per_xprism,
     };
 
     CONFIG.save(deps.storage, &cfg)?;
@@ -44,9 +45,9 @@ pub fn execute(
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::UpdateConfig {
             owner,
-            xprism_token,
             boost_interval,
-        } => update_config(deps, info, owner, xprism_token, boost_interval),
+            max_boost_per_xprism,
+        } => update_config(deps, info, owner, boost_interval, max_boost_per_xprism),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
     }
 }
@@ -86,18 +87,37 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
-    owner: Option<Addr>,
-    xprism_token: Option<Addr>,
+    owner: Option<String>,
     boost_interval: Option<Decimal>,
+    max_boost_per_xprism: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let mut cfg = CONFIG.load(deps.storage)?;
     if cfg.owner != info.sender {
         return Err(ContractError::Unauthorized {});
     }
 
-    cfg.owner = owner.unwrap_or(cfg.owner);
-    cfg.xprism_token = xprism_token.unwrap_or(cfg.xprism_token);
+    // owner update
+    if owner != None {
+        cfg.owner = deps.api.addr_validate(&owner.unwrap())?;
+    }
+
+    // boost interval update
     cfg.boost_interval = boost_interval.unwrap_or(cfg.boost_interval);
+    // sanity check
+    if cfg.boost_interval < Decimal::zero() {
+        return Err(ContractError::InvalidBoostInterval {});
+    }
+
+    // max xprism update
+    if max_boost_per_xprism != None {
+        let new_max = max_boost_per_xprism.unwrap();
+        // only allow increases
+        if new_max <= cfg.max_boost_per_xprism {
+            return Err(ContractError::InvalidMaxBoost {});
+        }
+        cfg.max_boost_per_xprism = new_max;
+    }
+
     CONFIG.save(deps.storage, &cfg)?;
 
     Ok(Response::new())
@@ -130,6 +150,11 @@ pub fn unbond(
 ) -> Result<Response, ContractError> {
     let mut user_info = USER_INFO.load(deps.storage, &info.sender)?;
     let amt = amount.unwrap_or(user_info.amt_bonded);
+
+    if amt > user_info.amt_bonded {
+        return Err(ContractError::InvalidUnbond {});
+    }
+
     user_info.amt_bonded = user_info.amt_bonded.checked_sub(amt)?;
     user_info.total_boost = Uint128::zero();
 
@@ -168,8 +193,8 @@ pub fn _accumulate_boost(
                 (env.block.time.seconds() - info.last_updated) as u128,
                 3600u128,
             );
-        let max_boost = info.amt_bonded * Uint128::from(100u128);
-        info.total_boost = min(new_boost, max_boost);
+        let max_boost = info.amt_bonded * cfg.max_boost_per_xprism;
+        info.total_boost = min(info.total_boost + new_boost, max_boost);
         info.last_updated = env.block.time.seconds();
     }
     Ok(info)

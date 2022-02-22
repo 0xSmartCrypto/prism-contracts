@@ -26,6 +26,7 @@ fn config_updates() {
         owner: "owner".to_string(),
         xprism_token: "xprism".to_string(),
         boost_interval: Decimal::from_ratio(10u128, 1u128),
+        max_boost_per_xprism: Uint128::from(100u128),
     };
 
     let info = mock_info("addr", &[]);
@@ -39,15 +40,16 @@ fn config_updates() {
             owner: Addr::unchecked("owner"),
             xprism_token: Addr::unchecked("xprism"),
             boost_interval: Decimal::from_ratio(10u128, 1u128),
+            max_boost_per_xprism: Uint128::from(100u128),
         }
     );
 
     // try updating config by a malicious user
     let evil = mock_info("evil", &[]);
     let msg = ExecuteMsg::UpdateConfig {
-        owner: Some(Addr::unchecked("me")),
-        xprism_token: Some(Addr::unchecked("test2")),
+        owner: Some("me".to_string()),
         boost_interval: Some(Decimal::from_ratio(10000u128, 1u128)),
+        max_boost_per_xprism: Some(Uint128::from(100u128)),
     };
 
     let err = execute(deps.as_mut(), mock_env(), evil, msg).unwrap_err();
@@ -56,9 +58,9 @@ fn config_updates() {
     // try updating config with real user
     let good = mock_info("owner", &[]);
     let msg = ExecuteMsg::UpdateConfig {
-        owner: Some(Addr::unchecked("new_owner")),
-        xprism_token: Some(Addr::unchecked("new_xprism")),
+        owner: Some("new_owner".to_string()),
         boost_interval: Some(Decimal::from_ratio(10000u128, 1u128)),
+        max_boost_per_xprism: Some(Uint128::from(101u128)),
     };
 
     execute(deps.as_mut(), mock_env(), good, msg).unwrap();
@@ -68,8 +70,9 @@ fn config_updates() {
         cfg,
         Config {
             owner: Addr::unchecked("new_owner"),
-            xprism_token: Addr::unchecked("new_xprism"),
+            xprism_token: Addr::unchecked("xprism"),
             boost_interval: Decimal::from_ratio(10000u128, 1u128),
+            max_boost_per_xprism: Uint128::from(101u128),
         }
     );
 }
@@ -87,6 +90,7 @@ fn basic_bonding() {
         owner: "owner".to_string(),
         xprism_token: "xprism".to_string(),
         boost_interval: Decimal::from_ratio(10u128, 1u128),
+        max_boost_per_xprism: Uint128::from(100u128),
     };
 
     let info = mock_info("addr", &[]);
@@ -139,14 +143,7 @@ fn basic_bonding() {
         amount: Some(Uint128::from(101u128)),
     };
     let err = execute(deps.as_mut(), env.clone(), user_info.clone(), msg).unwrap_err();
-    assert_eq!(
-        err,
-        ContractError::OverflowError(cosmwasm_std::OverflowError {
-            operation: cosmwasm_std::OverflowOperation::Sub,
-            operand1: "100".to_string(),
-            operand2: "101".to_string()
-        })
-    );
+    assert_eq!(err, ContractError::InvalidUnbond {});
 
     // unbond some, make sure its still there
     let msg = ExecuteMsg::Unbond {
@@ -202,6 +199,7 @@ fn amp_updates() {
         owner: "owner".to_string(),
         xprism_token: "xprism".to_string(),
         boost_interval: Decimal::from_ratio(100u128, 1u128),
+        max_boost_per_xprism: Uint128::from(100u128),
     };
 
     let info = mock_info("addr", &[]);

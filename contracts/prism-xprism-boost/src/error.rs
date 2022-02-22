@@ -12,12 +12,12 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
-    #[error("Invalid distribution schedule")]
-    InvalidDistributionSchedule {},
+    #[error("Invalid Unbond")]
+    InvalidUnbond {},
 
-    #[error("Invalid unbond amount: {reason}")]
-    InvalidUnbond { reason: String },
+    #[error("Invalid boost interval")]
+    InvalidBoostInterval {},
 
-    #[error("Invalid claim withdrawn rewards: {reason}")]
-    InvalidClaimWithdrawnRewards { reason: String },
+    #[error("Invalid max boost")]
+    InvalidMaxBoost {},
 }
