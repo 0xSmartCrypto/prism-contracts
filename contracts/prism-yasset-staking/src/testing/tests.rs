@@ -1415,23 +1415,3 @@ fn test_asset_serialization() {
     assert_eq!(asset_info.as_bytes(), asset_token_addr.as_bytes());
     assert_eq!(asset_info.as_bytes(), asset_token_string.as_bytes());
 }
-
-#[test]
-fn test_check_sender() {
-    let info = MessageInfo {
-        sender: Addr::unchecked("monkey"),
-        funds: vec![],
-    };
-    let sender = Addr::unchecked("monkey");
-    assert_eq!(check_sender(&info, &sender), Ok(()));
-
-    let info = MessageInfo {
-        sender: Addr::unchecked("monkey"),
-        funds: vec![],
-    };
-    let sender = Addr::unchecked("gorilla");
-    assert_eq!(
-        check_sender(&info, &sender),
-        Err(StdError::generic_err("unauthorized"))
-    );
-}

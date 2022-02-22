@@ -12,6 +12,7 @@ use prism_protocol::yasset_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
     RewardAssetWhitelistResponse, MAX_PROTOCOL_FEE,
 };
+use prism_protocol::internal::permissions::check_sender;
 
 use crate::rewards::{
     claim_rewards, convert_and_claim_rewards, deposit_rewards, mint_xprism_claim_hook,
