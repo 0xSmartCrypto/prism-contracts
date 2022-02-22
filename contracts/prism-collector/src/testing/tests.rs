@@ -8,7 +8,7 @@ use cosmwasm_std::{
 };
 use cw20::Cw20ExecuteMsg;
 use cw_asset::{Asset, AssetInfo};
-use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
+use prism_testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 use prismswap::pair::{Cw20HookMsg as PairCw20HookMsg, ExecuteMsg as PairExecuteMsg};
 use prismswap::router::{

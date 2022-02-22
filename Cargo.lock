@@ -959,29 +959,13 @@ dependencies = [
  "cw0 0.8.1",
  "cw2",
  "cw20 0.8.1",
- "prism-common",
  "prism-protocol",
+ "prism-testing",
  "prismswap",
  "schemars",
  "serde",
  "terra-cosmwasm",
  "thiserror",
-]
-
-[[package]]
-name = "prism-common"
-version = "1.0.0"
-dependencies = [
- "astroport 1.0.1",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-asset",
- "cw20 0.8.1",
- "prism-protocol",
- "prismswap",
- "schemars",
- "serde",
- "terra-cosmwasm",
 ]
 
 [[package]]
@@ -995,8 +979,8 @@ dependencies = [
  "cw2",
  "cw20 0.8.1",
  "hex",
- "prism-common",
  "prism-protocol",
+ "prism-testing",
  "prismswap",
  "schemars",
  "serde",
@@ -1013,8 +997,8 @@ dependencies = [
  "cw2",
  "cw20 0.8.1",
  "hex",
- "prism-common",
  "prism-protocol",
+ "prism-testing",
  "schemars",
  "serde",
  "serde_json",
@@ -1031,8 +1015,8 @@ dependencies = [
  "cw-storage-plus",
  "cw2",
  "cw20 0.8.1",
- "prism-common",
  "prism-protocol",
+ "prism-testing",
  "prismswap",
  "schemars",
  "serde",
@@ -1049,8 +1033,8 @@ dependencies = [
  "cw-storage-plus",
  "cw2",
  "cw20 0.8.1",
- "prism-common",
  "prism-protocol",
+ "prism-testing",
  "prismswap",
  "schemars",
  "serde",
@@ -1072,6 +1056,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-testing"
+version = "1.0.0"
+dependencies = [
+ "astroport 1.0.1",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-asset",
+ "cw20 0.8.1",
+ "prism-protocol",
+ "prismswap",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+]
+
+[[package]]
 name = "prism-vault"
 version = "1.1.0"
 dependencies = [
@@ -1083,8 +1083,8 @@ dependencies = [
  "cw0 0.8.1",
  "cw2",
  "cw20 0.8.1",
- "prism-common",
  "prism-protocol",
+ "prism-testing",
  "prismswap",
  "rand 0.5.6",
  "schemars",
@@ -1103,8 +1103,8 @@ dependencies = [
  "cw-storage-plus",
  "cw2",
  "cw20 0.8.1",
- "prism-common",
  "prism-protocol",
+ "prism-testing",
  "prismswap",
  "schemars",
  "serde",

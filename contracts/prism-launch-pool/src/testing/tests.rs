@@ -9,7 +9,7 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
-use prism_common::testing::mock_querier::{mock_dependencies, MOCK_CONTRACT_ADDR};
+use prism_testing::mock_querier::{mock_dependencies, MOCK_CONTRACT_ADDR};
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, DistributionStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
     RewardInfoResponse, VestingStatusResponse,
@@ -112,7 +112,7 @@ fn withdraw_rewards() {
         .unwrap(),
         VestingStatusResponse {
             scheduled_vests: vec![
-                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2 
+                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2
             ],
             withdrawable: Uint128::zero(),
         }
@@ -608,7 +608,7 @@ fn claim_withdrawn_rewards() {
         .unwrap(),
         VestingStatusResponse {
             scheduled_vests: vec![
-                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2 
+                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2
             ],
             withdrawable: Uint128::zero(),
         }
@@ -631,7 +631,7 @@ fn claim_withdrawn_rewards() {
         .unwrap(),
         VestingStatusResponse {
             scheduled_vests: vec![
-                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2 
+                (1814400u64, Uint128::from(500000u128)) // 1000000 / 2
             ],
             withdrawable: Uint128::from(500000u128),
         }

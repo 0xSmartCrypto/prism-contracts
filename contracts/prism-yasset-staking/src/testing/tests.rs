@@ -11,7 +11,7 @@ use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
 use crate::state::CONFIG;
-use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
+use prism_testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;

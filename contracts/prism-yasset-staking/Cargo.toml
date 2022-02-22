@@ -36,7 +36,7 @@ backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
 cw2 = "0.8.0"
-cw20 = { version = "0.8.0" } 
+cw20 = { version = "0.8.0" }
 cw-asset = { version = "0.3.4", features = ["legacy"] }
 prismswap = { path = "../../packages/prismswap", version = "1.0.0"}
 terra-cosmwasm = { version = "2.0.0" }
@@ -48,4 +48,5 @@ serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 cosmwasm-schema = "0.16.0"
-prism-common = { path = "../../packages/prism_common", version = "1.0.0"}
+prism-testing = { path = "../../packages/prism_testing", version = "1.0.0"}
+

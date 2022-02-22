@@ -14,7 +14,7 @@ use prismswap::pair::{
 };
 use std::str::FromStr;
 
-use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
+use prism_testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::limit_order::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, LastOrderIdResponse, OrderBy, OrderResponse,
     OrdersResponse, QueryMsg,

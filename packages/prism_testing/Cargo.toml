@@ -1,5 +1,5 @@
 [package]
-name = "prism-common"
+name = "prism-testing"
 version = "1.0.0"
 authors = ["Prism"]
 edition = "2018"

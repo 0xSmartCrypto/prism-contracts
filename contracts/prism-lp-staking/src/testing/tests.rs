@@ -7,7 +7,7 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 
-use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier, MOCK_CONTRACT_ADDR};
+use prism_testing::mock_querier::{mock_dependencies, WasmMockQuerier, MOCK_CONTRACT_ADDR};
 use prism_protocol::lp_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
     RewardInfoResponseItem, StakerInfoResponse, StakersInfoResponse, UnbondOrdersResponse,

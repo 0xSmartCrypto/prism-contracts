@@ -11,7 +11,7 @@ use cosmwasm_std::{
     Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, MinterResponse};
-use prism_common::testing::mock_querier::mock_dependencies;
+use prism_testing::mock_querier::mock_dependencies;
 use prism_protocol::common::OrderBy;
 use prism_protocol::gov::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PollExecuteMsg, PollResponse,
@@ -3678,7 +3678,7 @@ fn test_max_poll_votes() {
     let info = mock_info(TEST_VOTER, &[]);
     let err = execute(deps.as_mut(), env, info, msg).unwrap_err();
     assert_eq!(err,
-        StdError::generic_err(format!("Can not vote on more than {} at the same time. Voting rewards of finished polls should be claimed.", 
+        StdError::generic_err(format!("Can not vote on more than {} at the same time. Voting rewards of finished polls should be claimed.",
         MAX_POLL_VOTES_PER_USER)));
 }
 
