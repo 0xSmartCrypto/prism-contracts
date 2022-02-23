@@ -1,8 +1,5 @@
-## v1.1.0 RC3
+## v1.2.0 RC1
 
-Version `1.1.0` targets the release of:
-  * Vault
-  * yLuna Staking
-  * LP Staking
-  * Airdrop Registry
-  * New collector
+Release of `xprism-boost` contract for AMPS farming.
+
+Only affects `prism-xprism-boost` module.

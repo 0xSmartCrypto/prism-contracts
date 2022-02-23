@@ -53,3 +53,8 @@ This page contains a listing of the balances stored within each contract
 | yluna, pluna | delegator rewards that have already been converted to pluna/yluna via ProcessDelegatorRewards |
 | native coins |  delegator rewards that have not yet been converted to pluna/yluna.  when we bond/unbond with any validator, delegator rewards are automatically pulled from that validator and sent to yasset-staking.  These are not converted to pluna/yluna until UpdateGlobalIndex is called |
 | airdrops |  Deposited from vault |
+
+## xprism-boost
+| Denom | Description |
+| - | - |
+| xprism | the contract holds the xprism locked by all users farming amps |
