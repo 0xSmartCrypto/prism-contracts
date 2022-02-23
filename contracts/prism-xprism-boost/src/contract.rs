@@ -156,7 +156,7 @@ pub fn bond(
         amt_bonded: Uint128::zero(),
         total_boost: Uint128::zero(),
         last_updated: env.block.time.seconds(),
-        initial_bond: env.block.time.seconds(),
+        boost_accrual_start_time: env.block.time.seconds(),
     });
 
     let mut user_info = _accumulate_boost(deps.storage, env, info)?;
@@ -188,7 +188,7 @@ pub fn unbond(
         USER_INFO.remove(deps.storage, &info.sender);
     } else {
         user_info.last_updated = env.block.time.seconds();
-        user_info.initial_bond = env.block.time.seconds();
+        user_info.boost_accrual_start_time = env.block.time.seconds();
         USER_INFO.save(deps.storage, &info.sender, &user_info)?;
     }
 

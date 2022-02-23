@@ -63,5 +63,5 @@ pub struct UserInfo {
     pub total_boost: Uint128, // 6 decimal places
     pub last_updated: u64,    // seconds
     // time when first bond initially occurred, updated on a withdraw
-    pub initial_bond: u64, // seconds
+    pub boost_accrual_start_time: u64, // seconds
 }

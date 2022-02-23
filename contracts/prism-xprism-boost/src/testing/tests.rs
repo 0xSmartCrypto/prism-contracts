@@ -134,7 +134,7 @@ fn test_basic_bonding() {
             amt_bonded: Uint128::from(100u128),
             total_boost: Uint128::zero(),
             last_updated: 100u64,
-            initial_bond: 100u64,
+            boost_accrual_start_time: 100u64,
         }
     );
 
@@ -166,7 +166,7 @@ fn test_basic_bonding() {
             amt_bonded: Uint128::from(1u128),
             total_boost: Uint128::zero(),
             last_updated: 100u64,
-            initial_bond: 100u64,
+            boost_accrual_start_time: 100u64,
         }
     );
 
@@ -236,7 +236,7 @@ fn test_boost_updates() {
             amt_bonded: Uint128::from(100u128),
             total_boost: Uint128::from(50u128),
             last_updated: 3600u64,
-            initial_bond: 0u64,
+            boost_accrual_start_time: 0u64,
         }
     );
 
@@ -265,7 +265,7 @@ fn test_boost_updates() {
             amt_bonded: Uint128::from(101u128),
             total_boost: Uint128::from(50u128),
             last_updated: 3600u64,
-            initial_bond: 0u64,
+            boost_accrual_start_time: 0u64,
         }
     );
 
@@ -291,7 +291,7 @@ fn test_boost_updates() {
             amt_bonded: Uint128::from(2u128),
             total_boost: Uint128::from(0u128),
             last_updated: 3600u64,
-            initial_bond: 3600u64,
+            boost_accrual_start_time: 3600u64,
         }
     );
 
@@ -313,7 +313,7 @@ fn test_boost_updates() {
             amt_bonded: Uint128::from(2u128),
             total_boost: Uint128::from(200u128),
             last_updated: 10000000000u64,
-            initial_bond: 3600u64,
+            boost_accrual_start_time: 3600u64,
         }
     );
 
