@@ -60,4 +60,6 @@ pub struct UserInfo {
     pub amt_bonded: Uint128,
     pub total_boost: Uint128, // 6 decimal places
     pub last_updated: u64,
+    // time when first bond initially occurred, updated on a withdraw
+    pub initial_bond: u64,
 }
