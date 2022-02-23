@@ -10,9 +10,12 @@ use prism_protocol::xprism_boost::{
     Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, UserInfo,
 };
 use std::cmp::min;
+use std::str::FromStr;
 
 const CONTRACT_NAME: &str = "prism-xprism-boost";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const MAX_BOOST_PER_HOUR: &str = "1.0";
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -22,6 +25,10 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    if msg.boost_per_hour > Decimal::from_str(MAX_BOOST_PER_HOUR)? {
+        return Err(ContractError::InvalidBoostInterval {});
+    }
 
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
@@ -111,11 +118,12 @@ pub fn update_config(
     }
 
     // boost interval update
-    cfg.boost_per_hour = boost_per_hour.unwrap_or(cfg.boost_per_hour);
+    if let Some(boost_per_hour) = boost_per_hour {
+        if boost_per_hour > Decimal::from_str(MAX_BOOST_PER_HOUR)? {
+            return Err(ContractError::InvalidBoostInterval {});
+        }
 
-    // Zero is OK, but negative is not.
-    if cfg.boost_per_hour < Decimal::zero() {
-        return Err(ContractError::InvalidBoostInterval {});
+        cfg.boost_per_hour = boost_per_hour;
     }
 
     // max xprism update
