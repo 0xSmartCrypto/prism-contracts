@@ -1,6 +1,6 @@
 [package]
 name = "prism-xprism-boost"
-version = "1.0.0"
+version = "1.2.0"
 authors = ["Prism"]
 edition = "2018"
 description = "Prism launch pool contract"
