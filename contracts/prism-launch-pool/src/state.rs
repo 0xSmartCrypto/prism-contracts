@@ -5,6 +5,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub const CONFIG: Item<Config> = Item::new("config");
+
+/// DISTRIBUTION_STATUS is a global object (not tied to an individual user) that
+/// summarizes information used to compute rewards.
 pub const DISTRIBUTION_STATUS: Item<DistributionStatus> = Item::new("distribution_status");
 
 /// BOND_AMOUNTS is map that tells how much each user has bound. Key: user
@@ -23,6 +26,9 @@ pub const PENDING_WITHDRAW: Map<&[u8], Uint128> = Map::new("pending_withdraw");
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct DistributionStatus {
     pub total_distributed: Uint128,
+    /// total_bond_amount is the total amount of yluna that has been bonded by
+    /// users. It starts at 0. It gets incremented when Bond is called and
+    /// decremented when Unbond is called.
     pub total_bond_amount: Uint128,
     pub pending_reward: Uint128,
     pub reward_index: Decimal,
