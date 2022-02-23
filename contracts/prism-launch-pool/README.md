@@ -6,7 +6,7 @@ Behind the scenes, this contract takes the y-assets sent by users and stakes the
 
 You can think about this contract as an alternative to the [yasset-staking][1] contract for users. If Alice has one yluna, she can do at least two different things with it:
 1) She can stake in the [yasset-staking][1] contract and get yield rewards over time; or
-2) She can stake it in this contract and get PRISM tokens over time.
+2) She can stake it in this contract and get PRISM tokens over time (but no yield rewards).
 ## ExecuteMsg:
   - **Bond** (Cw20 receive hook): This method bonds y-assets in return for PRISM rewards.  The bonded assets are immediately bonded with the [yasset-staking][1] contract.
   - **Unbond**: Allows users to unbond their previously bonded y-assets.  There is no unbonding period, the corresponding y-asset tokens are immediately unstaked from the [yasset-staking][1] contract and transferred back to the user.

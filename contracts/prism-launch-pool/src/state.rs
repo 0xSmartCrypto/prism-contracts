@@ -6,6 +6,13 @@ use serde::{Deserialize, Serialize};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const DISTRIBUTION_STATUS: Item<DistributionStatus> = Item::new("distribution_status");
+
+/// BOND_AMOUNTS is map that tells how much each user has bound. Key: user
+/// address, Value: number of y-lunas that this user has bound.
+///
+/// When Bond is called, the user's entry is incremented and upserted. When
+/// Unbond is called, the user's entry is decremented (but never removed from
+/// the map).
 pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
 
 pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");

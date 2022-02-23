@@ -220,7 +220,7 @@ pub fn unbond(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: Option<Uint128>,
+    amount: Option<Uint128>, // If None, the user's entire stake will be unbonded.
 ) -> Result<Response, ContractError> {
     update_reward_index(deps.storage, &env)?;
     pull_pending_rewards(deps.storage, &info.sender.clone().into_string())?;
