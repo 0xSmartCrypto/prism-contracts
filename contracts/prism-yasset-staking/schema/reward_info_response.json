@@ -19,16 +19,6 @@
     },
     "staker_addr": {
       "type": "string"
-    },
-    "staking_mode": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/StakingMode"
-        },
-        {
-          "type": "null"
-        }
-      ]
     }
   },
   "definitions": {
@@ -64,7 +54,7 @@
     },
     "AssetInfoBase_for_Addr": {
       "description": "Represents the type of an fungible asset\n\nEach **asset info** instance can be one of two variants:\n\n- CW20 tokens. To create an **asset info** instance of this type, provide the contract address. - Native SDK coins. To create an **asset info** instance of this type, provide the denomination.",
-      "oneOf": [
+      "anyOf": [
         {
           "type": "object",
           "required": [
@@ -89,13 +79,6 @@
           },
           "additionalProperties": false
         }
-      ]
-    },
-    "StakingMode": {
-      "type": "string",
-      "enum": [
-        "x_prism",
-        "default"
       ]
     },
     "Uint128": {

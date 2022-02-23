@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Cw20HookMsg",
-  "oneOf": [
+  "anyOf": [
     {
       "description": "StakeVotingTokens a user can stake their xPRISM to vote on polls",
       "type": "object",
@@ -63,7 +63,15 @@
       ],
       "properties": {
         "mint_xprism": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "receiver": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
         }
       },
       "additionalProperties": false

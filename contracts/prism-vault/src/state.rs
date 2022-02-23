@@ -6,16 +6,16 @@ use cw_storage_plus::{Bound, Item, Map, U64Key};
 
 use prism_protocol::{
     internal::de::deserialize_key,
-    vault::{Config, State, UnbondHistory, UnbondRequest},
+    vault::{ConfigResponse, StateResponse, UnbondHistoryResponse},
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Parameters {
-    pub epoch_period: u64,
+    pub epoch_period: u64, // as a duration in seconds
     pub underlying_coin_denom: String,
-    pub unbonding_period: u64,
-    pub peg_recovery_fee: Decimal,
-    pub er_threshold: Decimal,
+    pub unbonding_period: u64,     // as a duration in seconds
+    pub peg_recovery_fee: Decimal, // must be in [0, 1].
+    pub er_threshold: Decimal,     // exchange rate threshold. Must be in [0, 1].
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -23,6 +23,120 @@ pub struct CurrentBatch {
     pub id: u64,
     pub requested_with_fee: Uint128,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct State {
+    pub exchange_rate: Decimal,
+    pub total_bond_amount: Uint128,
+    pub last_index_modification: u64,
+    pub prev_vault_balance: Uint128,
+    pub actual_unbonded_amount: Uint128,
+    pub last_unbonded_time: u64,
+    pub last_processed_batch: u64,
+}
+
+impl State {
+    pub fn update_exchange_rate(&mut self, total_issued: Uint128, requested_with_fee: Uint128) {
+        let actual_supply = total_issued + requested_with_fee;
+        if self.total_bond_amount.is_zero() || actual_supply.is_zero() {
+            self.exchange_rate = Decimal::one()
+        } else {
+            self.exchange_rate = Decimal::from_ratio(self.total_bond_amount, actual_supply);
+        }
+    }
+
+    pub fn as_res(&self) -> StateResponse {
+        StateResponse {
+            exchange_rate: self.exchange_rate,
+            total_bond_amount: self.total_bond_amount,
+            last_index_modification: self.last_index_modification,
+            prev_vault_balance: self.prev_vault_balance,
+            actual_unbonded_amount: self.actual_unbonded_amount,
+            last_unbonded_time: self.last_unbonded_time,
+            last_processed_batch: self.last_processed_batch,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Config {
+    // owner is the address of the owner of the Vault. It is used to
+    // authenticate owner-only endpoints (an error will be returned if this
+    // field doesn't match the caller's address).
+    pub owner: Addr,
+    // yluna_staking is the address of the yasset-staking contract. If set,
+    // delegation rewards are deposited directly there (via SetWithdrawAddress).
+    // Example: Alice calls Bond on the Vault with 1 Luna. The Vault delegates
+    // that Luna to a validator. Rewards from that delegation go straight to the
+    // yasset-staking contract, bypassing the Vault completely.
+    pub yluna_staking: Addr,
+    // cluna_contract, yluna_contract and pluna_contract are the addresses of
+    // the corresponding CW20 contracts. They are needed to mint, burn and
+    // transfer these tokens.
+    pub cluna_contract: Addr,
+    pub yluna_contract: Addr,
+    pub pluna_contract: Addr,
+    pub airdrop_registry_contract: Addr,
+    // initialized indicates whether the Vault is fully initialized and ready to
+    // be used. It is needed to break a cyclical dependency during contract
+    // initialization (Vault needs yasset-staking's address, but yasset-staking
+    // needs Vault's address, so we break the cycle by instantiating Vault first
+    // with initialized=false).
+    pub initialized: bool,
+    pub token_admin: Addr,
+    pub token_code_id: u64,
+    pub manager: Addr,
+}
+
+impl Config {
+    pub fn as_res(&self) -> ConfigResponse {
+        ConfigResponse {
+            owner: self.owner.to_string(),
+            yluna_staking: self.yluna_staking.to_string(),
+            cluna_contract: self.cluna_contract.to_string(),
+            yluna_contract: self.yluna_contract.to_string(),
+            pluna_contract: self.pluna_contract.to_string(),
+            airdrop_registry_contract: self.airdrop_registry_contract.to_string(),
+            initialized: self.initialized,
+            manager: self.manager.to_string(),
+        }
+    }
+
+    pub fn assert_initialized(self) -> StdResult<Config> {
+        if self.initialized {
+            Ok(self)
+        } else {
+            Err(StdError::generic_err(
+                "Contract initialization is not completed",
+            ))
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct UnbondHistory {
+    pub batch_id: u64,
+    pub time: u64,
+    pub amount: Uint128,
+    pub applied_exchange_rate: Decimal,
+    pub withdraw_rate: Decimal,
+    pub released: bool,
+}
+
+impl UnbondHistory {
+    pub fn as_res(&self) -> UnbondHistoryResponse {
+        UnbondHistoryResponse {
+            batch_id: self.batch_id,
+            time: self.time,
+            amount: self.amount,
+            applied_exchange_rate: self.applied_exchange_rate,
+            withdraw_rate: self.withdraw_rate,
+            released: self.released,
+        }
+    }
+}
+
+pub type UnbondRequest = Vec<(u64, Uint128)>;
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const PARAMETERS: Item<Parameters> = Item::new("parameters");
@@ -33,7 +147,7 @@ pub const UNBOND_HISTORY: Map<U64Key, UnbondHistory> = Map::new("unbond_history"
 pub const VALIDATORS: Map<&Addr, bool> = Map::new("validators");
 
 /// Store undelegation wait list per each batch
-/// HashMap<user's address, <batch_id, requested_amount>
+/// HashMap<user's address + batch_id, requested_amount>
 pub fn store_unbond_wait_list(
     storage: &mut dyn Storage,
     batch_id: u64,

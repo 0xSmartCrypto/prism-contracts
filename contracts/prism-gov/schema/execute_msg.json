@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ExecuteMsg",
-  "oneOf": [
+  "anyOf": [
     {
       "type": "object",
       "required": [
@@ -10,26 +10,6 @@
       "properties": {
         "receive": {
           "$ref": "#/definitions/Cw20ReceiveMsg"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "post_initialize"
-      ],
-      "properties": {
-        "post_initialize": {
-          "type": "object",
-          "required": [
-            "xprism_token"
-          ],
-          "properties": {
-            "xprism_token": {
-              "type": "string"
-            }
-          }
         }
       },
       "additionalProperties": false

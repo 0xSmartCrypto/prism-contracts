@@ -1,13 +1,15 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
 use cw_asset::{Asset, AssetInfo};
 
+pub const MAX_PROTOCOL_FEE: &str = "0.5";
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    pub owner: String,
     pub vault: String,
     pub gov: String,
     pub collector: String,
@@ -16,7 +18,7 @@ pub struct InstantiateMsg {
     pub yluna_token: String,
     pub pluna_token: String,
     pub prism_token: String,
-    pub withdraw_fee: Decimal,
+    pub xprism_token: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -33,6 +35,15 @@ pub enum ExecuteMsg {
     /// Withdraw pending rewards
     ClaimRewards {},
 
+    /// Withdraw pending rewards and convert to a whitelisted asset info
+    ConvertAndClaimRewards {
+        claim_asset: AssetInfo,
+    },
+    MintXprismClaimHook {
+        receiver: Addr,
+        prev_balance: Uint128,
+    },
+
     ////////////////////////
     /// Internal operations
     ////////////////////////
@@ -43,7 +54,10 @@ pub enum ExecuteMsg {
     /// 3) DepositMintedPylunaHook
     ProcessDelegatorRewards {},
     LunaToPylunaHook {},
-    DepositMintedPylunaHook {},
+    DepositMintedPylunaHook {
+        prev_pluna_balance: Uint128,
+        prev_yluna_balance: Uint128,
+    },
 
     /// Deposit rewards to yLuna stakers
     DepositRewards {
@@ -51,8 +65,13 @@ pub enum ExecuteMsg {
     },
 
     ////////////////////////
-    /// Gov operations
+    /// Owner operations
     ////////////////////////
+    UpdateConfig {
+        owner: Option<String>,
+        collector: Option<String>,
+        protocol_fee: Option<Decimal>,
+    },
     WhitelistRewardAsset {
         asset: AssetInfo,
     },
@@ -65,7 +84,7 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
     /// Bond yLuna to start receiving luna staking rewards
-    Bond { mode: Option<StakingMode> },
+    Bond {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -75,10 +94,12 @@ pub enum QueryMsg {
     PoolInfo { asset_token: String },
     RewardInfo { staker_addr: String },
     RewardAssetWhitelist {},
+    BondAmount {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
+    pub owner: String,
     pub vault: String,
     pub gov: String,
     pub collector: String,
@@ -87,7 +108,7 @@ pub struct ConfigResponse {
     pub yluna_token: String,
     pub pluna_token: String,
     pub prism_token: String,
-    pub withdraw_fee: Decimal,
+    pub xprism_token: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -100,24 +121,10 @@ pub struct PoolInfoResponse {
 pub struct RewardInfoResponse {
     pub staker_addr: String,
     pub staked_amount: Uint128,
-    pub staking_mode: Option<StakingMode>,
     pub rewards: Vec<Asset>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardAssetWhitelistResponse {
     pub assets: Vec<AssetInfo>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum StakingMode {
-    XPrism,
-    Default,
-}
-
-impl fmt::Display for StakingMode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
 }

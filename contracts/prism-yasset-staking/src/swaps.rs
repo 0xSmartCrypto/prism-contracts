@@ -1,6 +1,7 @@
 use crate::state::CONFIG;
 use cosmwasm_std::{
-    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
+    attr, to_binary, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    Uint128, WasmMsg,
 };
 use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
@@ -12,29 +13,31 @@ pub const REWARD_DENOM: &str = "uluna";
 
 /// 1. Swap all native tokens to uluna
 /// 2. Use the uluna to mint pluna and yluna
-/// 4. Deposit pluna and yluna as reward to stakers
+/// 3. Deposit pluna and yluna as reward to stakers
+///
+/// This method should be called after native delegator rewards have already
+/// been deposited into this contract.
 pub fn process_delegator_rewards(
     deps: DepsMut,
     env: Env,
     _info: MessageInfo,
 ) -> StdResult<Response<TerraMsgWrapper>> {
-    let contr_addr = env.contract.address.clone();
-    let balances = deps.querier.query_all_balances(contr_addr)?;
-    let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
-
-    let reward_denom = String::from(REWARD_DENOM);
-
+    // Find all native denoms for which we have a balance.
+    let balances = deps.querier.query_all_balances(&env.contract.address)?;
     let denoms: Vec<String> = balances.iter().map(|item| item.denom.clone()).collect();
 
+    let reward_denom = String::from(REWARD_DENOM);
     let exchange_rates = query_exchange_rates(&deps, reward_denom.clone(), denoms)?;
 
+    let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
     for coin in balances {
-        if coin.denom == reward_denom.clone()
+        if coin.denom == reward_denom
             || !exchange_rates
                 .exchange_rates
                 .iter()
                 .any(|x| x.quote_denom == coin.denom)
         {
+            // ignore luna and any other denom that's not convertible to luna.
             continue;
         }
 
@@ -59,6 +62,13 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
 
     let luna_amt = query_balance(&deps.querier, &env.contract.address, reward_denom.clone())?;
 
+    // Record the current balance to know how much was minted when
+    // DepositMintedPylunaHook is executed right after.
+    let prev_pluna_balance =
+        query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
+    let prev_yluna_balance =
+        query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
+
     Ok(Response::new()
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
@@ -71,20 +81,39 @@ pub fn luna_to_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraM
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: env.contract.address.to_string(),
-                msg: to_binary(&ExecuteMsg::DepositMintedPylunaHook {})?,
+                msg: to_binary(&ExecuteMsg::DepositMintedPylunaHook {
+                    prev_pluna_balance,
+                    prev_yluna_balance,
+                })?,
                 funds: vec![],
             }),
         ])
         .add_attributes(vec![attr("action", "luna_to_pyluna_hook")]))
 }
 
-pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response<TerraMsgWrapper>> {
+pub fn deposit_minted_pyluna_hook(
+    deps: DepsMut,
+    info: MessageInfo,
+    env: Env,
+    prev_pluna_balance: Uint128,
+    prev_yluna_balance: Uint128,
+) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // query yluna amount to know how much we received from vault
+    if info.sender != env.contract.address {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    // query pluna amount to know how much we received from vault
     // received pluna amount should always be same as yluna amount
-    let yluna_amt = query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
-    let pluna_amt = query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
+    // we query both amounts to prevent manipulation by sending one of the tokens to the contract
+    let curr_pluna_balance =
+        query_token_balance(&deps.querier, &cfg.pluna_token, &env.contract.address)?;
+    let curr_yluna_balance =
+        query_token_balance(&deps.querier, &cfg.yluna_token, &env.contract.address)?;
+
+    let reward_pluna = curr_pluna_balance.checked_sub(prev_pluna_balance)?;
+    let reward_yluna = curr_yluna_balance.checked_sub(prev_yluna_balance)?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -93,11 +122,11 @@ pub fn deposit_minted_pyluna_hook(deps: DepsMut, env: Env) -> StdResult<Response
                 assets: vec![
                     Asset {
                         info: AssetInfo::Cw20(cfg.yluna_token),
-                        amount: yluna_amt,
+                        amount: reward_yluna,
                     },
                     Asset {
                         info: AssetInfo::Cw20(cfg.pluna_token),
-                        amount: pluna_amt,
+                        amount: reward_pluna,
                     },
                 ],
             })?,

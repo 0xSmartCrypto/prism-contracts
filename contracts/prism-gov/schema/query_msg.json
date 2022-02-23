@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "QueryMsg",
-  "oneOf": [
+  "anyOf": [
     {
       "type": "object",
       "required": [
@@ -220,6 +220,18 @@
               "minimum": 0.0
             }
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "xprism_state"
+      ],
+      "properties": {
+        "xprism_state": {
+          "type": "object"
         }
       },
       "additionalProperties": false

@@ -1,6 +1,6 @@
 [package]
 name = "prism-vault"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Prism"]
 edition = "2018"
 description = "Prism vault contract"
@@ -45,7 +45,7 @@ schemars = "0.8.1"
 prismswap = { path = "../../packages/prismswap", version = "1.0.0"}
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 rand = "0.5.0"
-prism-protocol = { path = "../../packages/prism_protocol", version = "1.0.0", features = ["internal"]}
+prism-protocol = { path = "../../packages/prism_protocol", version = "1.1.0", features = ["internal"]}
 signed_integer = { path = "../../packages/signed_integers", default-features = false, version = "0.1.0"}
 
 [dev-dependencies]

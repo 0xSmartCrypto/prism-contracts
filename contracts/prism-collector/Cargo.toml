@@ -1,6 +1,6 @@
 [package]
 name = "prism-collector"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Prism"]
 edition = "2018"
 description = "Prism collector contract"
@@ -43,7 +43,7 @@ cw-asset = { version = "0.3.4", features = ["legacy"] }
 cw-storage-plus = { version = "0.8.0", features = ["iterator"] }
 schemars = "0.8.1"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-prism-protocol = { version = "1.0.0", path = "../../packages/prism_protocol" }
+prism-protocol = { version = "1.1.0", path = "../../packages/prism_protocol" }
 prismswap = { path = "../../packages/prismswap", version = "1.0.0"}
 thiserror = { version = "1.0.20" }
 

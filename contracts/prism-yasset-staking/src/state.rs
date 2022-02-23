@@ -1,4 +1,3 @@
-use prism_protocol::yasset_staking::StakingMode;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -7,16 +6,32 @@ use cw_asset::AssetInfo;
 use cw_storage_plus::{Item, Map};
 
 pub const CONFIG: Item<Config> = Item::new("config");
+
+/// WHITELISTED_ASSETS is a list of denominations that will be accepted as
+/// rewards by this contract. The DepositRewards method will reject any deposits
+/// that are not in one of these denominations.
 pub const WHITELISTED_ASSETS: Item<Vec<AssetInfo>> = Item::new("whitelisted_assets");
+
+/// TOTAL_BOND_AMOUNT holds the total amount of y-asset that has been staked by
+/// people in this contract. It starts at 0. It is incremented during Bond calls
+/// and decremented during Unbond calls.
 pub const TOTAL_BOND_AMOUNT: Item<Uint128> = Item::new("total_bond_amount");
 
 pub const POOL_INFO: Map<&[u8], PoolInfo> = Map::new("pool_info");
-// owner, asset_info -> RewardInfo;
+// owner, asset_info -> RewardInfo
 pub const REWARDS: Map<(&[u8], &[u8]), RewardInfo> = Map::new("rewards");
+
+/// BOND_AMOUNTS is a map detailing how much y-asset each user has staked in
+/// this contract. It starts as an empty map. When a user stakes a quantity for
+/// the first time, a new entry is inserted. This entry is never removed and is
+/// kept up-to-date when Bond/Unbond are called.
+///
+///  Keys: owner address, Values: BondInfo
 pub const BOND_AMOUNTS: Map<&[u8], BondInfo> = Map::new("bond_amounts");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    pub owner: Addr,
     pub vault: Addr,
     pub gov: Addr,
     pub collector: Addr,
@@ -25,13 +40,14 @@ pub struct Config {
     pub yluna_token: Addr,
     pub pluna_token: Addr,
     pub prism_token: Addr,
-    pub withdraw_fee: Decimal,
+    pub xprism_token: Addr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+/// BondInfo has info about what a specific user has staked in this contract.
+/// There is one BondInfo per user (stored in the BOND_AMOUNTS map).
 pub struct BondInfo {
-    pub bond_amount: Uint128,
-    pub mode: Option<StakingMode>,
+    pub bond_amount: Uint128, // amount of y-asset that was staked.
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
@@ -40,7 +56,12 @@ pub struct PoolInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+/// RewardInfo has info about rewards in a specific denomination that a specific
+/// user has earned. There is one RewardInfo per (user, reward denomination)
+/// pair (stored in the REWARDS map).
 pub struct RewardInfo {
     pub index: Decimal,
+    /// pending_reward is the amount of a specific asset that a user would
+    /// immediately receive if he were to call ClaimRewards right now.
     pub pending_reward: Uint128,
 }

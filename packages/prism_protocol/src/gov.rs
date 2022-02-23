@@ -67,8 +67,9 @@ pub enum Cw20HookMsg {
         link: Option<String>,
         execute_msg: Option<PollExecuteMsg>,
     },
-
-    MintXprism {},
+    MintXprism {
+        receiver: Option<String>,
+    },
     RedeemXprism {},
 }
 
