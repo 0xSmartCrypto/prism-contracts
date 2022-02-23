@@ -97,14 +97,12 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::DistributionStatus {} => {
             to_binary(&_update_reward_index(deps.storage, &env)?.as_res())
         }
-        QueryMsg::RewardInfo { staker_addr } => to_binary(
-            &_pull_pending_rewards(deps.storage, &deps.api.addr_validate(&staker_addr)?)?.as_res(),
-        ),
-        QueryMsg::VestingStatus { staker_addr } => to_binary(&query_vesting_status(
-            deps,
-            env,
-            &deps.api.addr_validate(&staker_addr)?,
-        )?),
+        QueryMsg::RewardInfo { staker_addr } => {
+            to_binary(&_pull_pending_rewards(deps.storage, &staker_addr)?.as_res())
+        }
+        QueryMsg::VestingStatus { staker_addr } => {
+            to_binary(&query_vesting_status(deps, env, staker_addr)?)
+        }
     }
 }
 
@@ -192,14 +190,12 @@ pub fn bond(
     amount: Uint128,
 ) -> Result<Response, ContractError> {
     update_reward_index(deps.storage, &env)?;
-    let sender_addr = deps.api.addr_validate(sender)?;
-
-    pull_pending_rewards(deps.storage, &sender_addr)?;
+    pull_pending_rewards(deps.storage, sender)?;
     let cfg = CONFIG.load(deps.storage)?;
     let current_bond = BOND_AMOUNTS
-        .load(deps.storage, &sender_addr)
+        .load(deps.storage, sender.as_bytes())
         .unwrap_or_default();
-    BOND_AMOUNTS.save(deps.storage, &sender_addr, &(current_bond + amount))?;
+    BOND_AMOUNTS.save(deps.storage, sender.as_bytes(), &(current_bond + amount))?;
 
     DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
         item.total_bond_amount += amount;
@@ -227,13 +223,13 @@ pub fn unbond(
     amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     update_reward_index(deps.storage, &env)?;
-    pull_pending_rewards(deps.storage, &info.sender)?;
+    pull_pending_rewards(deps.storage, &info.sender.clone().into_string())?;
     let cfg = CONFIG.load(deps.storage)?;
-    let current_bond = BOND_AMOUNTS.load(deps.storage, &info.sender).map_err(|_| {
-        ContractError::InvalidUnbond {
+    let current_bond = BOND_AMOUNTS
+        .load(deps.storage, info.sender.as_bytes())
+        .map_err(|_| ContractError::InvalidUnbond {
             reason: "no tokens bonded".to_string(),
-        }
-    })?;
+        })?;
 
     let unbond_amt = match amount {
         Some(amount) => {
@@ -247,7 +243,11 @@ pub fn unbond(
         None => current_bond,
     };
 
-    BOND_AMOUNTS.save(deps.storage, &info.sender, &(current_bond - unbond_amt))?;
+    BOND_AMOUNTS.save(
+        deps.storage,
+        info.sender.as_bytes(),
+        &(current_bond - unbond_amt),
+    )?;
 
     DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
         item.total_bond_amount -= unbond_amt;
@@ -274,15 +274,17 @@ pub fn unbond(
     ]))
 }
 
-pub fn _pull_pending_rewards(storage: &dyn Storage, address: &Addr) -> StdResult<RewardInfo> {
+pub fn _pull_pending_rewards(storage: &dyn Storage, address: &str) -> StdResult<RewardInfo> {
     let distribution_status = DISTRIBUTION_STATUS.load(storage)?;
     let bond_amount = BOND_AMOUNTS
-        .load(storage, address)
+        .load(storage, address.as_bytes())
         .unwrap_or_else(|_| Uint128::zero());
-    let mut reward_info = REWARD_INFO.load(storage, address).unwrap_or(RewardInfo {
-        index: distribution_status.reward_index,
-        pending_reward: Uint128::zero(),
-    });
+    let mut reward_info = REWARD_INFO
+        .load(storage, address.as_bytes())
+        .unwrap_or(RewardInfo {
+            index: distribution_status.reward_index,
+            pending_reward: Uint128::zero(),
+        });
     let pending_reward = (bond_amount * distribution_status.reward_index)
         .checked_sub(bond_amount * reward_info.index)?;
     reward_info.index = distribution_status.reward_index;
@@ -290,9 +292,9 @@ pub fn _pull_pending_rewards(storage: &dyn Storage, address: &Addr) -> StdResult
     Ok(reward_info)
 }
 
-pub fn pull_pending_rewards(storage: &mut dyn Storage, address: &Addr) -> StdResult<()> {
+pub fn pull_pending_rewards(storage: &mut dyn Storage, address: &str) -> StdResult<()> {
     let reward_info = _pull_pending_rewards(storage, address)?;
-    REWARD_INFO.save(storage, address, &reward_info)
+    REWARD_INFO.save(storage, address.as_bytes(), &reward_info)
 }
 
 pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<DistributionStatus> {
@@ -335,19 +337,21 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 pub fn query_vesting_status(
     deps: Deps,
     env: Env,
-    staker_addr: &Addr,
+    staker_addr: String,
 ) -> StdResult<VestingStatusResponse> {
     let current_time = env.block.time.seconds();
 
     let mut can_withdraw = PENDING_WITHDRAW
-        .load(deps.storage, staker_addr)
+        .load(deps.storage, staker_addr.as_bytes())
         .unwrap_or_else(|_| Uint128::zero());
     let mut scheduled_vests: Vec<(u64, Uint128)> = vec![];
 
-    for item in SCHEDULED_VEST
-        .prefix(staker_addr)
-        .range(deps.storage, None, None, Order::Ascending)
-    {
+    for item in SCHEDULED_VEST.prefix(staker_addr.as_bytes()).range(
+        deps.storage,
+        None,
+        None,
+        Order::Ascending,
+    ) {
         let (key, unlocked) = item?;
         let end_time = u64::from_be_bytes(key.try_into().unwrap());
         scheduled_vests.push((end_time, unlocked));
