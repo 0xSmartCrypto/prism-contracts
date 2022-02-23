@@ -26,7 +26,7 @@ pub fn instantiate(
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
         xprism_token: deps.api.addr_validate(&msg.xprism_token)?,
-        boost_interval: msg.boost_interval,
+        boost_per_hour: msg.boost_per_hour,
         max_boost_per_xprism: msg.max_boost_per_xprism,
     };
 
@@ -42,34 +42,45 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
-        ExecuteMsg::UpdateConfig {
-            owner,
-            boost_interval,
-            max_boost_per_xprism,
-        } => update_config(deps, info, owner, boost_interval, max_boost_per_xprism),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
+        _ => {
+            let config = CONFIG.load(deps.storage)?;
+            match msg {
+                ExecuteMsg::Receive(msg) => {
+                    // only xprism token contract can execute this message
+                    if config.xprism_token != info.sender {
+                        return Err(ContractError::Unauthorized {});
+                    }
+                    receive_cw20(deps, env, info, msg)
+                }
+                ExecuteMsg::UpdateConfig {
+                    owner,
+                    boost_per_hour,
+                    max_boost_per_xprism,
+                } => {
+                    // only owner
+                    if config.owner != info.sender {
+                        return Err(ContractError::Unauthorized {});
+                    }
+
+                    update_config(deps, info, owner, boost_per_hour, max_boost_per_xprism)
+                }
+                _ => Err(ContractError::Unauthorized {}),
+            }
+        }
     }
 }
 
 pub fn receive_cw20(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    _info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
 ) -> Result<Response, ContractError> {
     let msg = cw20_msg.msg;
 
     match from_binary(&msg)? {
-        Cw20HookMsg::Bond {} => {
-            let cfg = CONFIG.load(deps.storage)?;
-
-            // only xprism token contract can execute this message
-            if cfg.xprism_token != info.sender {
-                return Err(ContractError::Unauthorized {});
-            }
-            bond(deps, env, &cw20_msg.sender, cw20_msg.amount)
-        }
+        Cw20HookMsg::Bond {} => bond(deps, env, &cw20_msg.sender, cw20_msg.amount),
     }
 }
 
@@ -86,36 +97,33 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 pub fn update_config(
     deps: DepsMut,
-    info: MessageInfo,
+    _info: MessageInfo,
     owner: Option<String>,
-    boost_interval: Option<Decimal>,
+    boost_per_hour: Option<Decimal>,
     max_boost_per_xprism: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let mut cfg = CONFIG.load(deps.storage)?;
-    if cfg.owner != info.sender {
-        return Err(ContractError::Unauthorized {});
-    }
 
     // owner update
-    if owner != None {
-        cfg.owner = deps.api.addr_validate(&owner.unwrap())?;
+    if let Some(owner) = owner {
+        cfg.owner = deps.api.addr_validate(&owner)?;
     }
 
     // boost interval update
-    cfg.boost_interval = boost_interval.unwrap_or(cfg.boost_interval);
-    // sanity check
-    if cfg.boost_interval < Decimal::zero() {
+    cfg.boost_per_hour = boost_per_hour.unwrap_or(cfg.boost_per_hour);
+
+    // Zero is OK, but negative is not.
+    if cfg.boost_per_hour < Decimal::zero() {
         return Err(ContractError::InvalidBoostInterval {});
     }
 
     // max xprism update
-    if max_boost_per_xprism != None {
-        let new_max = max_boost_per_xprism.unwrap();
+    if let Some(max_boost_per_xprism) = max_boost_per_xprism {
         // only allow increases
-        if new_max <= cfg.max_boost_per_xprism {
+        if max_boost_per_xprism <= cfg.max_boost_per_xprism {
             return Err(ContractError::InvalidMaxBoost {});
         }
-        cfg.max_boost_per_xprism = new_max;
+        cfg.max_boost_per_xprism = max_boost_per_xprism;
     }
 
     CONFIG.save(deps.storage, &cfg)?;
@@ -129,6 +137,10 @@ pub fn bond(
     sender: &str,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
+    if amount == Uint128::zero() {
+        return Err(ContractError::InvalidBond {});
+    }
+
     let addr = deps.api.addr_validate(sender)?;
     let info = USER_INFO.load(deps.storage, &addr).unwrap_or(UserInfo {
         amt_bonded: Uint128::zero(),
@@ -147,7 +159,7 @@ pub fn unbond(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: Option<Uint128>,
+    amount: Option<Uint128>, // If amount is None, the user's entire balance is unbonded
 ) -> Result<Response, ContractError> {
     let mut user_info = USER_INFO.load(deps.storage, &info.sender)?;
     let amt = amount.unwrap_or(user_info.amt_bonded);
@@ -157,6 +169,8 @@ pub fn unbond(
     }
 
     user_info.amt_bonded = user_info.amt_bonded.checked_sub(amt)?;
+
+    // By design, boost resets to 0 whenever a user unbonds any amount (no matter how small).
     user_info.total_boost = Uint128::zero();
 
     if user_info.amt_bonded.is_zero() {
@@ -190,7 +204,7 @@ pub fn _accumulate_boost(
     if !info.amt_bonded.is_zero() && env.block.time.seconds() > info.last_updated {
         let cfg = CONFIG.load(storage)?;
         let new_boost = info.amt_bonded
-            * cfg.boost_interval
+            * cfg.boost_per_hour
             * Decimal::from_ratio(
                 (env.block.time.seconds() - info.last_updated) as u128,
                 3600u128,

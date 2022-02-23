@@ -8,7 +8,7 @@ use cw20::Cw20ReceiveMsg;
 pub struct InstantiateMsg {
     pub owner: String,
     pub xprism_token: String,
-    pub boost_interval: Decimal,
+    pub boost_per_hour: Decimal,
     pub max_boost_per_xprism: Uint128,
 }
 
@@ -19,7 +19,7 @@ pub enum ExecuteMsg {
 
     UpdateConfig {
         owner: Option<String>,
-        boost_interval: Option<Decimal>,
+        boost_per_hour: Option<Decimal>,
         max_boost_per_xprism: Option<Uint128>,
     },
 
@@ -49,17 +49,18 @@ pub enum QueryMsg {
 pub struct Config {
     pub owner: Addr,
     pub xprism_token: Addr,
-    // boost_interval represents the amount of amps a user will accumulate per xprism
-    // per hour
-    pub boost_interval: Decimal,
+    // boost_per_hour represents the amount of amps a user will accumulate per xprism
+    // per hour. 1 boost/hr = Decimal(1000000)
+    pub boost_per_hour: Decimal,
+    // max amount of boost per xprism for a user, 6 decimal places (1 boost = 1000000)
     pub max_boost_per_xprism: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, JsonSchema)]
 pub struct UserInfo {
-    pub amt_bonded: Uint128,
+    pub amt_bonded: Uint128,  // amount of xprism
     pub total_boost: Uint128, // 6 decimal places
-    pub last_updated: u64,
+    pub last_updated: u64,    // seconds
     // time when first bond initially occurred, updated on a withdraw
     pub initial_bond: u64,
 }

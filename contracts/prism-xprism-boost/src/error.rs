@@ -12,6 +12,9 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
+    #[error("Invalid Bond")]
+    InvalidBond {},
+
     #[error("Invalid Unbond")]
     InvalidUnbond {},
 

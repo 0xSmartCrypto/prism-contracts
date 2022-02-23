@@ -19,13 +19,13 @@ use prism_protocol::xprism_boost::{
 // 1. Test instantiate and update config from bad person
 // 2. Test instantiate and update config from
 #[test]
-fn config_updates() {
+fn test_config_updates() {
     let mut deps = mock_dependencies(&[]);
     // 10 boost per hour
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
         xprism_token: "xprism".to_string(),
-        boost_interval: Decimal::from_ratio(10u128, 1u128),
+        boost_per_hour: Decimal::from_ratio(10u128, 1u128),
         max_boost_per_xprism: Uint128::from(100u128),
     };
 
@@ -39,7 +39,7 @@ fn config_updates() {
         Config {
             owner: Addr::unchecked("owner"),
             xprism_token: Addr::unchecked("xprism"),
-            boost_interval: Decimal::from_ratio(10u128, 1u128),
+            boost_per_hour: Decimal::from_ratio(10u128, 1u128),
             max_boost_per_xprism: Uint128::from(100u128),
         }
     );
@@ -48,7 +48,7 @@ fn config_updates() {
     let evil = mock_info("evil", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("me".to_string()),
-        boost_interval: Some(Decimal::from_ratio(10000u128, 1u128)),
+        boost_per_hour: Some(Decimal::from_ratio(10000u128, 1u128)),
         max_boost_per_xprism: Some(Uint128::from(100u128)),
     };
 
@@ -59,7 +59,7 @@ fn config_updates() {
     let good = mock_info("owner", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("new_owner".to_string()),
-        boost_interval: Some(Decimal::from_ratio(10000u128, 1u128)),
+        boost_per_hour: Some(Decimal::from_ratio(10000u128, 1u128)),
         max_boost_per_xprism: Some(Uint128::from(101u128)),
     };
 
@@ -71,7 +71,7 @@ fn config_updates() {
         Config {
             owner: Addr::unchecked("new_owner"),
             xprism_token: Addr::unchecked("xprism"),
-            boost_interval: Decimal::from_ratio(10000u128, 1u128),
+            boost_per_hour: Decimal::from_ratio(10000u128, 1u128),
             max_boost_per_xprism: Uint128::from(101u128),
         }
     );
@@ -83,13 +83,13 @@ fn config_updates() {
 // 7. Bond, unbond some, check query is still there
 // 5. Bond, unbond same amount, make sure query fails
 #[test]
-fn basic_bonding() {
+fn test_basic_bonding() {
     let mut deps = mock_dependencies(&[]);
     // 10 boost per hour
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
         xprism_token: "xprism".to_string(),
-        boost_interval: Decimal::from_ratio(10u128, 1u128),
+        boost_per_hour: Decimal::from_ratio(10u128, 1u128),
         max_boost_per_xprism: Uint128::from(100u128),
     };
 
@@ -194,13 +194,13 @@ fn basic_bonding() {
 // 10. try unbonding and make sure boost goes to 0
 // 11. bond some, wait a billion years and make sure we clamp boost
 #[test]
-fn amp_updates() {
+fn test_boost_updates() {
     let mut deps = mock_dependencies(&[]);
     // 100 boost per hour
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
         xprism_token: "xprism".to_string(),
-        boost_interval: Decimal::from_ratio(100u128, 1u128),
+        boost_per_hour: Decimal::from_ratio(100u128, 1u128),
         max_boost_per_xprism: Uint128::from(100u128),
     };
 
