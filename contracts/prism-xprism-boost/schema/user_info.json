@@ -4,12 +4,18 @@
   "type": "object",
   "required": [
     "amt_bonded",
+    "initial_bond",
     "last_updated",
     "total_boost"
   ],
   "properties": {
     "amt_bonded": {
       "$ref": "#/definitions/Uint128"
+    },
+    "initial_bond": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "last_updated": {
       "type": "integer",
