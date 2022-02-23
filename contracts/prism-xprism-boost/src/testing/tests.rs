@@ -44,6 +44,17 @@ fn test_config_updates() {
         }
     );
 
+    // try updating config with invalid boost_per_hour
+    let owner = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        boost_per_hour: Some(Decimal::from_ratio(11u128, 10u128)),
+        max_boost_per_xprism: Some(Uint128::from(100u128)),
+    };
+
+    let err = execute(deps.as_mut(), mock_env(), owner, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidBoostInterval {});
+
     // try updating config by a malicious user
     let evil = mock_info("evil", &[]);
     let msg = ExecuteMsg::UpdateConfig {
