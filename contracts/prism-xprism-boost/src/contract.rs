@@ -95,6 +95,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
+/// Only owner can execute
 pub fn update_config(
     deps: DepsMut,
     _info: MessageInfo,
@@ -131,6 +132,7 @@ pub fn update_config(
     Ok(Response::new())
 }
 
+/// Any user can execute
 pub fn bond(
     deps: DepsMut,
     env: Env,
@@ -155,13 +157,14 @@ pub fn bond(
     Ok(Response::new().add_attributes(vec![attr("user", addr), attr("bond", amount)]))
 }
 
+/// Any user that has previously bonded can execute
 pub fn unbond(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     amount: Option<Uint128>, // If amount is None, the user's entire balance is unbonded
 ) -> Result<Response, ContractError> {
-    let mut user_info = USER_INFO.load(deps.storage, &info.sender)?;
+    let mut user_info = USER_INFO.load(deps.storage, &info.sender)?; // fails if does not exist
     let amt = amount.unwrap_or(user_info.amt_bonded);
 
     if amt > user_info.amt_bonded {
@@ -196,6 +199,8 @@ pub fn unbond(
         .add_attributes(vec![attr("user", info.sender), attr("unbond", amt)]))
 }
 
+/// Internal operation to calculate boost accrued since `last_updated` and accumulate it
+/// into `total_boost`. `total_boost` should never exceed the maxmimum boost allowed.
 pub fn _accumulate_boost(
     storage: &dyn Storage,
     env: Env,

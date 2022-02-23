@@ -17,6 +17,7 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
 
+    // owner operation
     UpdateConfig {
         owner: Option<String>,
         boost_per_hour: Option<Decimal>,
@@ -62,5 +63,5 @@ pub struct UserInfo {
     pub total_boost: Uint128, // 6 decimal places
     pub last_updated: u64,    // seconds
     // time when first bond initially occurred, updated on a withdraw
-    pub initial_bond: u64,
+    pub initial_bond: u64, // seconds
 }
