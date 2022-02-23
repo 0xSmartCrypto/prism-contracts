@@ -62,6 +62,11 @@ pub struct UserInfo {
     pub amt_bonded: Uint128,  // amount of xprism
     pub total_boost: Uint128, // 6 decimal places
     pub last_updated: u64,    // seconds
-    // time when first bond initially occurred, updated on a withdraw
-    pub boost_accrual_start_time: u64, // seconds
+    // boost_acrual_start_time is a timestamp in seconds. It is used in the UI
+    // to show users how long they have been accruing AMPS for. It is updated to
+    // the current time in the following situations:
+    //   - On bond, when you used to have 0 bonded ylunas and now you have >0
+    //     (but not on bond when you already had >0 bonded ylunas before)
+    //   - Any time you unbond
+    pub boost_accrual_start_time: u64,
 }
