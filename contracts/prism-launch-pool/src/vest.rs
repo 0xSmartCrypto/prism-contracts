@@ -11,7 +11,11 @@ pub const REDEMPTION_TIME: u64 = TIME_UNIT * 21u64;
 
 /// update_vest aggregates vested entries from SCHEDULED_VEST, removes them from
 /// SCHEDULED_VEST and stores the total in PENDING_WITHDRAW.
-pub fn update_vest(storage: &mut dyn Storage, current_time_seconds: u64, address: &str) -> StdResult<()> {
+pub fn update_vest(
+    storage: &mut dyn Storage,
+    current_time_seconds: u64,
+    address: &str,
+) -> StdResult<()> {
     let mut can_withdraw = PENDING_WITHDRAW
         .load(storage, address.as_bytes())
         .unwrap_or_else(|_| Uint128::zero());
