@@ -275,6 +275,7 @@ pub fn unbond(
 }
 
 /// Loads a user's reward_info from storage and returns and updated copy of it.
+/// Called on every bond, unbond and withdraw_rewards by this user.
 pub fn _pull_pending_rewards(storage: &dyn Storage, address: &str) -> StdResult<RewardInfo> {
     let distribution_status = DISTRIBUTION_STATUS.load(storage)?;
     let bond_amount = BOND_AMOUNTS
@@ -299,20 +300,27 @@ pub fn pull_pending_rewards(storage: &mut dyn Storage, address: &str) -> StdResu
 }
 
 /// Reads DISTRIBUTION_STATUS from storage and returns an updated copy of it.
+/// Called on every bond, unbond and withdraw_rewards (for all users).
 pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<DistributionStatus> {
     let cfg = CONFIG.load(storage)?;
     let mut distribution_status = DISTRIBUTION_STATUS.load(storage)?;
-    let (start, end, amount) = cfg.distribution_schedule;
+    let (start, end, amount_scheduled) = cfg.distribution_schedule;
     if env.block.time.seconds() < start {
+        // Nothing to do yet; distribution event will happen in the future.
         return Ok(distribution_status);
     };
-    let denom = end - start;
+    let denom = end - start; // Duration of distribution event in seconds.
+
+    // total_distribute is cumulative reward that should have been distributed
+    // by the protocol up to the current time.
+    // Units: PRISM tokens. Range: [0, amount_scheduled]
     let total_distribute =
-        amount.multiply_ratio(min(env.block.time.seconds() - start, denom), denom);
+        amount_scheduled.multiply_ratio(min(env.block.time.seconds() - start, denom), denom);
     let mut distribute_here = total_distribute - distribution_status.total_distributed;
     distribution_status.total_distributed = total_distribute;
 
     if distribution_status.total_bond_amount.is_zero() {
+        // No bonders. Save these rewards for later to avoid division for zero.
         distribution_status.pending_reward += distribute_here;
     } else {
         distribute_here += distribution_status.pending_reward;

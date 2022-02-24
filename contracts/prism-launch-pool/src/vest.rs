@@ -41,6 +41,9 @@ pub fn update_vest(
     PENDING_WITHDRAW.save(storage, address.as_bytes(), &can_withdraw)
 }
 
+/// withdraw_rewards starts the vesting period (rewards are not actually
+/// transfered to user yet, only added to SCHEDULE_VEST to be transfered in the
+/// future).
 pub fn withdraw_rewards(
     deps: DepsMut,
     env: Env,

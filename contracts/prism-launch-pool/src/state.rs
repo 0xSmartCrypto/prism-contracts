@@ -39,11 +39,24 @@ pub const PENDING_WITHDRAW: Map<&[u8], Uint128> = Map::new("pending_withdraw");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct DistributionStatus {
+    // total_distributed is the cumulative amount of rewards that have been
+    // distributed by the protocol since the schedule started and up to the time
+    // when this field was stored. "Distributed" here just means those rewards
+    // were either added to pending_reward or added to reward_index (not
+    // actually transferred out of the contract to people yet).
+    // Units: PRISM tokens.
     pub total_distributed: Uint128,
     /// total_bond_amount is the total amount of yluna that has been bonded by
     /// users. It starts at 0 when this contract is instantiated. It gets
     /// incremented when Bond is called and decremented when Unbond is called.
+    /// Units: yluna tokens.
     pub total_bond_amount: Uint128,
+    /// pending_reward is used to count rewards that should have been given to
+    /// people according to the schedule but weren't actually given to anybody
+    /// because there were no bonders at the moment (i.e. total_bond_amount was
+    /// 0). These rewards are saved for lucky future bonders. In practice this
+    /// probably never happens because there's always at least one bonder.
+    /// Units: PRISM tokens.
     pub pending_reward: Uint128,
     pub reward_index: Decimal,
 }
