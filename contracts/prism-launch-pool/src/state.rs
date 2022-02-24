@@ -65,6 +65,10 @@ pub struct Config {
     pub prism_token: Addr,
     pub yluna_staking: Addr,
     pub yluna_token: Addr,
+    /// distribution_schedule is a triple of:
+    ///   - start timestamp in seconds;
+    ///   - end timestamp in seconds;
+    ///   - amount of tokens to be distributed as rewards during this time period.
     pub distribution_schedule: (u64, u64, Uint128),
 }
 
