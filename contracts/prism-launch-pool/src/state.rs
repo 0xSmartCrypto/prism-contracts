@@ -22,7 +22,7 @@ pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
 // Key: user address.
 pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");
 
-/// SCHEDULED_VEST holds amounts of PRISM that should be released to users in the future.
+/// SCHEDULED_VEST holds amounts of PRISM that have already been earned by users but will vest in the future.
 ///
 /// Key: Pair of:
 ///  - user address (Addr)
@@ -33,8 +33,7 @@ pub const SCHEDULED_VEST: Map<(&[u8], &[u8]), Uint128> = Map::new("scheduled_ves
 
 /// PENDING_WITHDRAW indicates how much PRISM has already vested per user.
 ///
-/// Key: user address, Value: amount of PRISM ready to be transfered to the user
-/// right now.
+/// Key: user address, Value: amount of PRISM ready to be transferred to the user right now.
 pub const PENDING_WITHDRAW: Map<&[u8], Uint128> = Map::new("pending_withdraw");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
