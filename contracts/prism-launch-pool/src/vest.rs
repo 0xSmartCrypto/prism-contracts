@@ -9,7 +9,9 @@ use std::convert::TryInto;
 pub const TIME_UNIT: u64 = 60 * 60 * 24;
 pub const REDEMPTION_TIME: u64 = TIME_UNIT * 21u64;
 
-pub fn update_vest(storage: &mut dyn Storage, current_time: u64, address: &str) -> StdResult<()> {
+/// update_vest aggregates vested entries from SCHEDULED_VEST, removes them from
+/// SCHEDULED_VEST and stores the total in PENDING_WITHDRAW.
+pub fn update_vest(storage: &mut dyn Storage, current_time_seconds: u64, address: &str) -> StdResult<()> {
     let mut can_withdraw = PENDING_WITHDRAW
         .load(storage, address.as_bytes())
         .unwrap_or_else(|_| Uint128::zero());
@@ -20,12 +22,12 @@ pub fn update_vest(storage: &mut dyn Storage, current_time: u64, address: &str) 
             .prefix(address.as_bytes())
             .range(storage, None, None, Order::Ascending)
     {
-        let (key, unlocked) = item?;
+        let (key, amount_unlocked) = item?;
         let end_time = u64::from_be_bytes(key.try_into().unwrap());
-        if current_time < end_time {
+        if current_time_seconds < end_time {
             break;
         }
-        can_withdraw += unlocked;
+        can_withdraw += amount_unlocked;
         to_delete.push(end_time);
     }
 

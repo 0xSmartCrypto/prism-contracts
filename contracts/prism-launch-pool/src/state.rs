@@ -10,8 +10,9 @@ pub const CONFIG: Item<Config> = Item::new("config");
 /// summarizes information used to compute rewards.
 pub const DISTRIBUTION_STATUS: Item<DistributionStatus> = Item::new("distribution_status");
 
-/// BOND_AMOUNTS is map that tells how much each user has bound. Key: user
-/// address, Value: number of y-lunas that this user has bound.
+/// BOND_AMOUNTS is map that tells how much each user has bound.
+///
+/// Key: user address, Value: number of ylunas that this user has bound.
 ///
 /// When Bond is called, the user's entry is incremented and upserted. When
 /// Unbond is called, the user's entry is decremented (but never removed from
@@ -20,15 +21,28 @@ pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
 
 pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");
 
+/// SCHEDULED_VEST holds amounts of PRISM that should be released to users in
+/// the future.
+///
+/// Key: Pair of:
+///  - user address (Addr)
+///  - timestamp when funds are released in seconds (u64)
+///
+/// Value: Amount of PRISM that will be released.
 pub const SCHEDULED_VEST: Map<(&[u8], &[u8]), Uint128> = Map::new("scheduled_vest");
+
+/// PENDING_WITHDRAW indicates how much PRISM has already vested per user.
+///
+/// Key: user address, Value: amount of PRISM ready to be transfered to the user
+/// right now.
 pub const PENDING_WITHDRAW: Map<&[u8], Uint128> = Map::new("pending_withdraw");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct DistributionStatus {
     pub total_distributed: Uint128,
     /// total_bond_amount is the total amount of yluna that has been bonded by
-    /// users. It starts at 0. It gets incremented when Bond is called and
-    /// decremented when Unbond is called.
+    /// users. It starts at 0 when this contract is instantiated. It gets
+    /// incremented when Bond is called and decremented when Unbond is called.
     pub total_bond_amount: Uint128,
     pub pending_reward: Uint128,
     pub reward_index: Decimal,

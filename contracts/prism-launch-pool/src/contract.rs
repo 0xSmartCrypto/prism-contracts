@@ -59,8 +59,8 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg), // Bond
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
-        ExecuteMsg::WithdrawRewards {} => withdraw_rewards(deps, env, info),
-        ExecuteMsg::ClaimWithdrawnRewards {} => claim_withdrawn_rewards(deps, env, info),
+        ExecuteMsg::WithdrawRewards {} => withdraw_rewards(deps, env, info), // Start vesting period
+        ExecuteMsg::ClaimWithdrawnRewards {} => claim_withdrawn_rewards(deps, env, info), // Actually withdraw after rewards have vested
         ExecuteMsg::AdminWithdrawRewards {} => admin_withdraw_rewards(deps, env, info),
         ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
             admin_send_withdrawn_rewards(deps, env, info, &original_balances)
@@ -274,6 +274,7 @@ pub fn unbond(
     ]))
 }
 
+/// Loads a user's reward_info from storage and returns and updated copy of it.
 pub fn _pull_pending_rewards(storage: &dyn Storage, address: &str) -> StdResult<RewardInfo> {
     let distribution_status = DISTRIBUTION_STATUS.load(storage)?;
     let bond_amount = BOND_AMOUNTS
@@ -297,6 +298,7 @@ pub fn pull_pending_rewards(storage: &mut dyn Storage, address: &str) -> StdResu
     REWARD_INFO.save(storage, address.as_bytes(), &reward_info)
 }
 
+/// Reads DISTRIBUTION_STATUS from storage and returns an updated copy of it.
 pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<DistributionStatus> {
     let cfg = CONFIG.load(storage)?;
     let mut distribution_status = DISTRIBUTION_STATUS.load(storage)?;
