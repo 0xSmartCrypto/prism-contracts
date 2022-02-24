@@ -78,7 +78,7 @@ pub struct DistributionStatus {
     /// or withdraw_rewards), we snapshot the value of the global reward_index and store it under this user's individual
     /// RewardInfo.index field.
     ///
-    /// The magic is to realize that, at any time, if we know:
+    /// The magic is to realize that for a given user, at any time, if we know:
     ///    - (1) CurrRI = value of current reward_index;
     ///    - (2) PrevRI = snapshot of global reward_index when this user last bonded/unbonded (which we have, because we
     ///       stored it in user's index field);
@@ -86,8 +86,8 @@ pub struct DistributionStatus {
     ///
     /// ...then we are able to figure out this user's actual share of released rewards in PRISM tokens since the
     /// snapshot was taken! This share is just: CurrB * (CurrRI - PrevRI). This works because (CurrRI - PrevRI) is the
-    /// number of PRISM rewards that should be paid per bound yluna unit to anyone that happened to have 1 bound unit at
-    /// the time of PrevRI and held on to it until the time of CurrRI.
+    /// number of PRISM rewards that should be paid to anyone that happened to have 1 bound yluna unit at the time of
+    /// PrevRI and kept it bound until the time of CurrRI.
     pub reward_index: Decimal,
 }
 
