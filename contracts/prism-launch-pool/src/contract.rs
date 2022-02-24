@@ -311,11 +311,13 @@ pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<Distr
     };
     let denom = end - start; // Duration of distribution event in seconds.
 
-    // total_distribute is cumulative reward that should have been distributed
-    // by the protocol up to the current time.
-    // Units: PRISM tokens. Range: [0, amount_scheduled]
+    // total_distribute is cumulative reward that should have been released by
+    // the protocol since the beginning of the schedule and up to the current
+    // time. Units: PRISM tokens. Range: [0, amount_scheduled]
     let total_distribute =
         amount_scheduled.multiply_ratio(min(env.block.time.seconds() - start, denom), denom);
+    // distribute_here is amount of rewards that should be released by the
+    // protocol since last time update_reward_index was called until now.
     let mut distribute_here = total_distribute - distribution_status.total_distributed;
     distribution_status.total_distributed = total_distribute;
 
