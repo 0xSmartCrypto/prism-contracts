@@ -18,6 +18,8 @@ pub const DISTRIBUTION_STATUS: Item<DistributionStatus> = Item::new("distributio
 /// decremented (but never removed from the map).
 pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
 
+// REWARD_INFO keeps track of rewards that have been earned by users (but haven't vested yet).
+// Key: user address.
 pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");
 
 /// SCHEDULED_VEST holds amounts of PRISM that should be released to users in the future.
