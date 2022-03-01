@@ -21,8 +21,8 @@ pub const BOOST_DISTRIBUTION_STATUS: Item<DistributionStatus> =
 /// decremented (but never removed from the map).
 pub const BOND_AMOUNTS: Map<&[u8], Uint128> = Map::new("bond_amounts");
 
-// REWARD_INFO keeps track of rewards that have been earned by users (but haven't vested yet).
-// Key: user address.
+/// REWARD_INFO keeps track of rewards that have been earned by users (but haven't vested yet).
+/// Key: user address.
 pub const REWARD_INFO: Map<&[u8], RewardInfo> = Map::new("reward_info");
 
 /// SCHEDULED_VEST holds amounts of PRISM that have already been earned by users but will vest in the future.
@@ -41,10 +41,10 @@ pub const PENDING_WITHDRAW: Map<&[u8], Uint128> = Map::new("pending_withdraw");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct DistributionStatus {
-    // total_distributed is the cumulative amount of rewards that have been distributed by the protocol since the
-    // schedule started and up to the time when this field was stored. "Distributed" here just means those rewards were
-    // either added to pending_reward or added to reward_index (not actually transferred out of the contract to people
-    // yet). Units: PRISM tokens.
+    /// total_distributed is the cumulative amount of rewards that have been distributed by the protocol since the
+    /// schedule started and up to the time when this field was stored. "Distributed" here just means those rewards were
+    /// either added to pending_reward or added to reward_index (not actually transferred out of the contract to people
+    /// yet). Units: PRISM tokens.
     pub total_distributed: Uint128,
     /// total_weight is the total amount of yluna that has been bonded by users. It starts at 0 when this contract
     /// is instantiated. It gets incremented when Bond is called and decremented when Unbond is called. Units: yluna
@@ -155,8 +155,8 @@ impl RewardInfo {
             base_index: self.base_index,
             boost_index: self.boost_index,
             boost_weight: self.boost_weight,
-            // pending_reward is the amount of PRISM tokens that already belong to the user (although they still need to
-            // go through the 30-day vesting period).
+            /// pending_reward is the amount of PRISM tokens that already belong to the user (although they still need
+            /// to go through the 30-day vesting period).
             pending_reward: self.pending_reward,
             active_boost: self.active_boost,
         }
