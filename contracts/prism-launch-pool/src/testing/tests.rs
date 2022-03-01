@@ -2,6 +2,7 @@ use crate::state::{RewardInfo, BOND_AMOUNTS};
 use crate::{
     contract::{execute, instantiate, query},
     error::ContractError,
+    state::{BOND_AMOUNTS, REWARD_INFO},
 };
 use cosmwasm_std::attr;
 use cosmwasm_std::OwnedDeps;
@@ -608,20 +609,19 @@ fn unbond() {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (
-            100000000000000u64,
-            200000000000000u64,
-            Uint128::from(1000000u128),
-        ),
+        // Distribute 5000 reward tokens during a 30-second event.
+        distribution_schedule: (30u64, 60u64, Uint128::from(5_000u128)),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(0);
+    instantiate(deps.as_mut(), env.clone(), info, msg).unwrap();
 
-    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-    // bond 100
+    // bond 100 right at the beginning of the event.
+    env.block.time = Timestamp::from_seconds(30);
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "addr0000".to_string(),
         amount: Uint128::from(100u128),
@@ -629,14 +629,14 @@ fn unbond() {
     });
 
     let info = mock_info("ylunatoken0000", &[]);
-    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     // try to unbond from a different sender with nothing bonded
     let info = mock_info("addr0001", &[]);
     let msg = ExecuteMsg::Unbond {
         amount: Some(Uint128::from(101u128)),
     };
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap_err();
     assert_eq!(
         res,
         ContractError::InvalidUnbond {
@@ -650,7 +650,7 @@ fn unbond() {
     let msg = ExecuteMsg::Unbond {
         amount: Some(unbond_amt),
     };
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap_err();
     assert_eq!(
         res,
         ContractError::InvalidUnbond {
@@ -658,13 +658,14 @@ fn unbond() {
         }
     );
 
-    // successful unbond of 25
+    // Successful unbond of 25 at end of event.
+    env.block.time = Timestamp::from_seconds(60);
     let unbond_amt = Uint128::from(25u128);
     let info = mock_info("addr0000", &[]);
     let msg = ExecuteMsg::Unbond {
         amount: Some(unbond_amt),
     };
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     assert_eq!(
         res.messages,
@@ -691,22 +692,32 @@ fn unbond() {
 
     assert_eq!(
         from_binary::<DistributionStatusResponse>(
-            &query(deps.as_ref(), mock_env(), QueryMsg::DistributionStatus {},).unwrap(),
+            &query(deps.as_ref(), env.clone(), QueryMsg::DistributionStatus {},).unwrap(),
         )
         .unwrap(),
         DistributionStatusResponse {
-            total_distributed: Uint128::zero(),
+            total_distributed: Uint128::from(5_000u128),
             total_bond_amount: Uint128::from(75u128),
             pending_reward: Uint128::zero(),
-            reward_index: Decimal::zero(),
+            // reward_index is 5000/100 because 5000 thousand PRISM tokens where
+            // distributed during the event among 100 bound yluna tokens.
+            reward_index: Decimal::from_ratio(5_000u128, 100u128),
         }
     );
+
+    // Internal assertion: make sure user has entries in these maps.
+    REWARD_INFO
+        .load(&deps.storage, "addr0000".as_bytes())
+        .unwrap();
+    BOND_AMOUNTS
+        .load(&deps.storage, "addr0000".as_bytes())
+        .unwrap();
 
     // successful unbond of remaining 75 (using None as amount)
     let remaining_amt = Uint128::from(75u128);
     let info = mock_info("addr0000", &[]);
     let msg = ExecuteMsg::Unbond { amount: None };
-    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
 
     assert_eq!(
         res.messages,
@@ -735,7 +746,7 @@ fn unbond() {
         from_binary::<VestingStatusResponse>(
             &query(
                 deps.as_ref(),
-                mock_env(),
+                env.clone(),
                 QueryMsg::VestingStatus {
                     staker_addr: "addr0000".to_string(),
                 },
@@ -751,22 +762,25 @@ fn unbond() {
 
     assert_eq!(
         from_binary::<DistributionStatusResponse>(
-            &query(deps.as_ref(), mock_env(), QueryMsg::DistributionStatus {},).unwrap(),
+            &query(deps.as_ref(), env.clone(), QueryMsg::DistributionStatus {},).unwrap(),
         )
         .unwrap(),
         DistributionStatusResponse {
-            total_distributed: Uint128::zero(),
+            total_distributed: Uint128::from(5_000u128),
             total_bond_amount: Uint128::zero(),
             pending_reward: Uint128::zero(),
-            reward_index: Decimal::zero(),
+            reward_index: Decimal::from_ratio(5_000u128, 100u128),
         }
     );
 
+    // At this point the user has unbound everything they had, but they should
+    // still have pending_reward > 0 because they haven't withdrawn those
+    // rewards yet.
     assert_eq!(
         from_binary::<RewardInfoResponse>(
             &query(
                 deps.as_ref(),
-                mock_env(),
+                env,
                 QueryMsg::RewardInfo {
                     staker_addr: "addr0000".to_string()
                 }
@@ -775,10 +789,19 @@ fn unbond() {
         )
         .unwrap(),
         RewardInfoResponse {
-            index: Decimal::zero(),
-            pending_reward: Uint128::zero(),
+            index: Decimal::from_ratio(5_000u128, 100u128),
+            pending_reward: Uint128::from(5_000u128),
         }
     );
+
+    // Internal assertion: make sure user has entries in these maps, even after
+    // unbonding everything.
+    REWARD_INFO
+        .load(&deps.storage, "addr0000".as_bytes())
+        .unwrap();
+    BOND_AMOUNTS
+        .load(&deps.storage, "addr0000".as_bytes())
+        .unwrap();
 }
 
 #[test]
