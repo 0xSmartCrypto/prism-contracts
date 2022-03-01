@@ -14,8 +14,8 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
 use prism_common::testing::mock_querier::{mock_dependencies, MOCK_CONTRACT_ADDR};
 use prism_protocol::launch_pool::{
-    ConfigResponse, Cw20HookMsg, DistributionStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
-    RewardInfoResponse, VestingStatusResponse,
+    ConfigResponse, Cw20HookMsg, DistributionInfo, DistributionStatusResponse, ExecuteMsg,
+    InstantiateMsg, QueryMsg, RewardInfoResponse, VestingStatusResponse,
 };
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg,
@@ -30,7 +30,9 @@ fn proper_initialization() {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (100u64, 99u64, Uint128::from(1000000u128)),
+        base_distribution_schedule: (100u64, 99u64, Uint128::from(1000000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -44,7 +46,9 @@ fn proper_initialization() {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -61,7 +65,9 @@ fn proper_initialization() {
             owner: "owner0000".to_string(),
             operator: "op0000".to_string(),
             prism_token: "prism0000".to_string(),
-            distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            boost_contract: "boost0000".to_string(),
             yluna_staking: "ylunastaking0000".to_string(),
             yluna_token: "ylunatoken0000".to_string(),
         }
@@ -76,7 +82,9 @@ fn withdraw_rewards() {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -129,10 +137,11 @@ fn withdraw_rewards() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env.clone(), QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(500000u128),
-            total_bond_amount: Uint128::from(100u128),
+            total_weight: Uint128::from(100u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(500000u128, 100u128),
         }
@@ -167,10 +176,11 @@ fn withdraw_rewards() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env, QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(1000000u128),
-            total_bond_amount: Uint128::from(100u128),
+            total_weight: Uint128::from(100u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(1000000u128, 100u128),
         }
@@ -185,7 +195,9 @@ fn withdraw_rewards_with_no_bond() {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -223,10 +235,11 @@ fn withdraw_rewards_with_no_bond() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env.clone(), QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(500000u128),
-            total_bond_amount: Uint128::zero(),
+            total_weight: Uint128::zero(),
             pending_reward: Uint128::from(500000u128),
             reward_index: Decimal::zero(),
         }
@@ -268,10 +281,11 @@ fn withdraw_rewards_with_no_bond() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env.clone(), QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(500000u128),
-            total_bond_amount: Uint128::from(100u128),
+            total_weight: Uint128::from(100u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(500000u128, 100u128),
         }
@@ -290,8 +304,11 @@ fn withdraw_rewards_with_no_bond() {
         )
         .unwrap(),
         RewardInfoResponse {
-            index: Decimal::from_ratio(500000u128, 100u128),
+            base_index: Decimal::from_ratio(500000u128, 100u128),
             pending_reward: Uint128::zero(),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         }
     );
 }
@@ -305,7 +322,9 @@ fn withdraw_rewards_bulk_auth() {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -347,7 +366,9 @@ fn withdraw_rewards_bulk() {
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         // Distribute 100 PRISMs between time 10s to 20s.
-        distribution_schedule: (10u64, 20u64, Uint128::from(100u128)),
+        base_distribution_schedule: (10u64, 20u64, Uint128::from(100u128)),
+        boost_distribution_schedule: (10u64, 20u64, Uint128::zero()),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -418,10 +439,11 @@ fn withdraw_rewards_bulk() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env, QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(100u128),
-            total_bond_amount: Uint128::from(10u128),
+            total_weight: Uint128::from(10u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(100u128, 10u128),
         }
@@ -468,10 +490,11 @@ fn withdraw_rewards_bulk() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env, QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(100u128),
-            total_bond_amount: Uint128::from(10u128),
+            total_weight: Uint128::from(10u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(100u128, 10u128),
         }
@@ -518,10 +541,11 @@ fn withdraw_rewards_bulk() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env, QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(100u128),
-            total_bond_amount: Uint128::from(10u128),
+            total_weight: Uint128::from(10u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(100u128, 10u128),
         }
@@ -536,11 +560,13 @@ fn bond() {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (
+        base_distribution_schedule: (
             100000000000000u64,
             200000000000000u64,
             Uint128::from(1000000u128),
         ),
+        boost_distribution_schedule: (0u64, 10u64, Uint128::zero()),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -590,8 +616,11 @@ fn bond() {
         )
         .unwrap(),
         RewardInfoResponse {
-            index: Decimal::zero(),
+            base_index: Decimal::zero(),
             pending_reward: Uint128::zero(),
+            boost_index: Decimal::zero(),
+            boost_weight: Uint128::zero(),
+            active_boost: Uint128::zero(),
         }
     );
 
@@ -599,10 +628,11 @@ fn bond() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), mock_env(), QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::zero(),
-            total_bond_amount: Uint128::from(100u128),
+            total_weight: Uint128::from(100u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::zero(),
         }
@@ -618,7 +648,9 @@ fn unbond() {
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         // Distribute 5000 reward tokens during a 30-second event.
-        distribution_schedule: (30u64, 60u64, Uint128::from(5_000u128)),
+        base_distribution_schedule: (30u64, 60u64, Uint128::from(5_000u128)),
+        boost_distribution_schedule: (0u64, 10u64, Uint128::zero()),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -702,10 +734,11 @@ fn unbond() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env.clone(), QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(5_000u128),
-            total_bond_amount: Uint128::from(75u128),
+            total_weight: Uint128::from(75u128),
             pending_reward: Uint128::zero(),
             // reward_index is 5000/100 because 5000 thousand PRISM tokens where
             // distributed during the event among 100 bound yluna tokens.
@@ -772,10 +805,11 @@ fn unbond() {
         from_binary::<DistributionStatusResponse>(
             &query(deps.as_ref(), env.clone(), QueryMsg::DistributionStatus {},).unwrap(),
         )
-        .unwrap(),
-        DistributionStatusResponse {
+        .unwrap()
+        .base,
+        DistributionInfo {
             total_distributed: Uint128::from(5_000u128),
-            total_bond_amount: Uint128::zero(),
+            total_weight: Uint128::zero(),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(5_000u128, 100u128),
         }
@@ -797,8 +831,11 @@ fn unbond() {
         )
         .unwrap(),
         RewardInfoResponse {
-            index: Decimal::from_ratio(5_000u128, 100u128),
+            base_index: Decimal::from_ratio(5_000u128, 100u128),
             pending_reward: Uint128::from(5_000u128),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         }
     );
 
@@ -820,7 +857,9 @@ fn claim_withdrawn_rewards() {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -944,7 +983,9 @@ fn admin_withdraw_rewards() {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
-        distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -1122,16 +1163,15 @@ fn rewards_index_from_hell() {
         execute(deps.as_mut(), env, info, msg).unwrap();
     };
     let check_global_distribution_status =
-        |time: u64,
-         deps: &OwnedDeps<_, _, _>,
-         want_distribution_status: DistributionStatusResponse| {
+        |time: u64, deps: &OwnedDeps<_, _, _>, want_distribution_status: DistributionInfo| {
             let mut env = mock_env();
             env.block.time = Timestamp::from_seconds(time);
             assert_eq!(
                 from_binary::<DistributionStatusResponse>(
                     &query(deps.as_ref(), env, QueryMsg::DistributionStatus {},).unwrap(),
                 )
-                .unwrap(),
+                .unwrap()
+                .base,
                 want_distribution_status,
             );
         };
@@ -1198,7 +1238,9 @@ fn rewards_index_from_hell() {
         operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         // Distribute 100k PRISMs between time 100s to 200s.
-        distribution_schedule: (100u64, 200u64, Uint128::from(100_000u128)),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(100_000u128)),
+        boost_distribution_schedule: (0u64, 10u64, Uint128::zero()),
+        boost_contract: "boost0000".to_string(),
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
     };
@@ -1210,9 +1252,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         110,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(10_000u128),
-            total_bond_amount: Uint128::from(0u128),
+            total_weight: Uint128::from(0u128),
             pending_reward: Uint128::from(10_000u128),
             reward_index: Decimal::zero(),
         },
@@ -1226,9 +1268,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         110,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(10_000u128),
-            total_bond_amount: Uint128::from(2u128),
+            total_weight: Uint128::from(2u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128),
         },
@@ -1238,8 +1280,11 @@ fn rewards_index_from_hell() {
         &deps,
         "bob",
         RewardInfo {
-            index: Decimal::zero(), // this index == 0 is what will allow Bob to claim the initial rewards. Notice that Alice's index field below is != 0.
+            base_index: Decimal::zero(), // this index == 0 is what will allow Bob to claim the initial rewards. Notice that Alice's index field below is != 0.
             pending_reward: Uint128::zero(),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         },
     );
     check_individual_vesting_schedule(110, &deps, "bob", vec![]);
@@ -1248,9 +1293,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         110,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(10_000u128),
-            total_bond_amount: Uint128::from(5u128),
+            total_weight: Uint128::from(5u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128),
         },
@@ -1260,8 +1305,11 @@ fn rewards_index_from_hell() {
         &deps,
         "alice",
         RewardInfo {
-            index: Decimal::from_ratio(10_000u128, 2u128),
+            base_index: Decimal::from_ratio(10_000u128, 2u128),
             pending_reward: Uint128::zero(),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         },
     );
     check_individual_vesting_schedule(110, &deps, "alice", vec![]);
@@ -1272,9 +1320,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         120,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(20_000u128),
-            total_bond_amount: Uint128::from(4u128),
+            total_weight: Uint128::from(4u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128),
@@ -1285,8 +1333,12 @@ fn rewards_index_from_hell() {
         &deps,
         "alice",
         RewardInfo {
-            index: Decimal::from_ratio(10_000u128, 2u128) + Decimal::from_ratio(10_000u128, 5u128),
+            base_index: Decimal::from_ratio(10_000u128, 2u128)
+                + Decimal::from_ratio(10_000u128, 5u128),
             pending_reward: Uint128::from(10_000 / 5 * 3_u128),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         },
     );
     check_individual_vesting_schedule(120, &deps, "alice", vec![]);
@@ -1300,9 +1352,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         130,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(30_000u128),
-            total_bond_amount: Uint128::from(4u128),
+            total_weight: Uint128::from(4u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
@@ -1314,10 +1366,13 @@ fn rewards_index_from_hell() {
         &deps,
         "bob",
         RewardInfo {
-            index: Decimal::from_ratio(10_000u128, 2u128)
+            base_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
                 + Decimal::from_ratio(10_000u128, 4u128),
             pending_reward: Uint128::zero(),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         },
     );
     check_individual_vesting_schedule(
@@ -1336,9 +1391,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         140,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(40_000u128),
-            total_bond_amount: Uint128::from(8u128),
+            total_weight: Uint128::from(8u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
@@ -1351,11 +1406,14 @@ fn rewards_index_from_hell() {
         &deps,
         "carol",
         RewardInfo {
-            index: Decimal::from_ratio(10_000u128, 2u128)
+            base_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
                 + Decimal::from_ratio(10_000u128, 4u128)
                 + Decimal::from_ratio(10_000u128, 4u128),
             pending_reward: Uint128::zero(),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         },
     );
     check_individual_vesting_schedule(140, &deps, "carol", vec![]);
@@ -1378,9 +1436,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         150,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(50_000u128),
-            total_bond_amount: Uint128::from(8u128),
+            total_weight: Uint128::from(8u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
@@ -1394,12 +1452,15 @@ fn rewards_index_from_hell() {
         &deps,
         "alice",
         RewardInfo {
-            index: Decimal::from_ratio(10_000u128, 2u128)
+            base_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
                 + Decimal::from_ratio(10_000u128, 4u128)
                 + Decimal::from_ratio(10_000u128, 4u128)
                 + Decimal::from_ratio(10_000u128, 8u128),
             pending_reward: Uint128::zero(),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         },
     );
     check_individual_vesting_schedule(
@@ -1418,9 +1479,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         160,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(60_000u128),
-            total_bond_amount: Uint128::from(50u128),
+            total_weight: Uint128::from(50u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
@@ -1435,13 +1496,16 @@ fn rewards_index_from_hell() {
         &deps,
         "carol",
         RewardInfo {
-            index: Decimal::from_ratio(10_000u128, 2u128)
+            base_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
                 + Decimal::from_ratio(10_000u128, 4u128)
                 + Decimal::from_ratio(10_000u128, 4u128)
                 + Decimal::from_ratio(10_000u128, 8u128)
                 + Decimal::from_ratio(10_000u128, 8u128),
             pending_reward: Uint128::from(10_000 / 8 * 4 + 10_000 / 8 * 4_u128),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         },
     );
     check_individual_vesting_schedule(160, &deps, "carol", vec![]);
@@ -1454,9 +1518,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         210,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(100_000u128),
-            total_bond_amount: Uint128::from(4u128),
+            total_weight: Uint128::from(4u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
@@ -1472,7 +1536,7 @@ fn rewards_index_from_hell() {
         &deps,
         "carol",
         RewardInfo {
-            index: Decimal::from_ratio(10_000u128, 2u128)
+            base_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
                 + Decimal::from_ratio(10_000u128, 4u128)
                 + Decimal::from_ratio(10_000u128, 4u128)
@@ -1480,6 +1544,9 @@ fn rewards_index_from_hell() {
                 + Decimal::from_ratio(10_000u128, 8u128)
                 + Decimal::from_ratio(40_000u128, 50u128),
             pending_reward: Uint128::from(10_000 / 8 * 4 + 10_000 / 8 * 4 + 40_000 / 50 * 46_u128),
+            boost_index: Decimal::zero(),
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
         },
     );
     check_individual_vesting_schedule(210, &deps, "carol", vec![]);
@@ -1503,9 +1570,9 @@ fn rewards_index_from_hell() {
     check_global_distribution_status(
         300,
         &deps,
-        DistributionStatusResponse {
+        DistributionInfo {
             total_distributed: Uint128::from(100_000u128),
-            total_bond_amount: Uint128::from(4u128),
+            total_weight: Uint128::from(4u128),
             pending_reward: Uint128::zero(),
             reward_index: Decimal::from_ratio(10_000u128, 2u128)
                 + Decimal::from_ratio(10_000u128, 5u128)
@@ -1522,7 +1589,7 @@ fn rewards_index_from_hell() {
             &deps,
             person,
             RewardInfo {
-                index: Decimal::from_ratio(10_000u128, 2u128)
+                base_index: Decimal::from_ratio(10_000u128, 2u128)
                     + Decimal::from_ratio(10_000u128, 5u128)
                     + Decimal::from_ratio(10_000u128, 4u128)
                     + Decimal::from_ratio(10_000u128, 4u128)
@@ -1530,6 +1597,9 @@ fn rewards_index_from_hell() {
                     + Decimal::from_ratio(10_000u128, 8u128)
                     + Decimal::from_ratio(40_000u128, 50u128),
                 pending_reward: Uint128::zero(),
+                boost_index: Decimal::zero(),
+                active_boost: Uint128::zero(),
+                boost_weight: Uint128::zero(),
             },
         );
     }

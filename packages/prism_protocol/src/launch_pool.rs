@@ -10,13 +10,15 @@ pub struct InstantiateMsg {
     // authorized to execute AdminWithdrawRewards
     pub owner: String,
     // authorized to execute WithdrawRewardsBulk
-    pub operator: String, 
+    pub operator: String,
     pub prism_token: String,
     pub yluna_staking: String,
     pub yluna_token: String,
+    pub boost_contract: String,
     // start, end, amount of $PRISM to distribute
     // distribute linearly
-    pub distribution_schedule: (u64, u64, Uint128),
+    pub base_distribution_schedule: (u64, u64, Uint128),
+    pub boost_distribution_schedule: (u64, u64, Uint128),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -30,6 +32,10 @@ pub enum ExecuteMsg {
     Unbond {
         amount: Option<Uint128>,
     },
+
+    /// Updates the user's boost weight based on the current boost amount
+    ActivateBoost {},
+
     /// Withdraw $PRISM rewards
     /// Starts 21 day vesting period
     WithdrawRewards {},
@@ -79,20 +85,31 @@ pub struct ConfigResponse {
     pub prism_token: String,
     pub yluna_staking: String,
     pub yluna_token: String,
-    pub distribution_schedule: (u64, u64, Uint128),
+    pub boost_contract: String,
+    pub base_distribution_schedule: (u64, u64, Uint128),
+    pub boost_distribution_schedule: (u64, u64, Uint128),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DistributionStatusResponse {
+    pub base: DistributionInfo,
+    pub boost: DistributionInfo,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DistributionInfo {
     pub total_distributed: Uint128,
-    pub total_bond_amount: Uint128,
+    pub total_weight: Uint128,
     pub pending_reward: Uint128,
     pub reward_index: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfoResponse {
-    pub index: Decimal,
+    pub base_index: Decimal,
+    pub boost_index: Decimal,
+    pub boost_weight: Uint128,
+    pub active_boost: Uint128,
     pub pending_reward: Uint128,
 }
 

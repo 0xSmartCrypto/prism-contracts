@@ -3,7 +3,9 @@
   "title": "ConfigResponse",
   "type": "object",
   "required": [
-    "distribution_schedule",
+    "base_distribution_schedule",
+    "boost_contract",
+    "boost_distribution_schedule",
     "operator",
     "owner",
     "prism_token",
@@ -11,7 +13,30 @@
     "yluna_token"
   ],
   "properties": {
-    "distribution_schedule": {
+    "base_distribution_schedule": {
+      "type": "array",
+      "items": [
+        {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ],
+      "maxItems": 3,
+      "minItems": 3
+    },
+    "boost_contract": {
+      "type": "string"
+    },
+    "boost_distribution_schedule": {
       "type": "array",
       "items": [
         {

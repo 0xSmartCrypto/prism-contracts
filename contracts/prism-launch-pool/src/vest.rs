@@ -1,4 +1,4 @@
-use crate::contract::{pull_pending_rewards, update_reward_index};
+use crate::contract::{_pull_pending_rewards, update_reward_indexes};
 use crate::error::ContractError;
 use crate::state::{CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
 use cosmwasm_std::Addr;
@@ -49,7 +49,7 @@ pub fn withdraw_rewards(
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
-    update_reward_index(deps.storage, &env, &cfg)?;
+    update_reward_indexes(deps.storage, &env, &cfg)?;
     _withdraw_rewards_single(&mut deps, &env, &info.sender)
 }
 
@@ -58,9 +58,8 @@ pub fn _withdraw_rewards_single(
     env: &Env,
     human_address: &Addr,
 ) -> Result<Response, ContractError> {
-    pull_pending_rewards(deps.storage, human_address.as_str())?;
+    let mut reward_info = _pull_pending_rewards(deps.storage, human_address)?;
 
-    let mut reward_info = REWARD_INFO.load(deps.storage, human_address.as_bytes())?;
     let to_withdraw = reward_info.pending_reward;
     reward_info.pending_reward = Uint128::zero();
     REWARD_INFO.save(deps.storage, human_address.as_bytes(), &reward_info)?;
@@ -116,7 +115,7 @@ pub fn withdraw_rewards_bulk(
         return Err(ContractError::Unauthorized {});
     }
 
-    update_reward_index(deps.storage, &env, &cfg)?;
+    update_reward_indexes(deps.storage, &env, &cfg)?;
 
     let start = match start_after_address {
         Some(address) => {
