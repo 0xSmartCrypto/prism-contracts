@@ -60,7 +60,7 @@ pub struct DistributionStatus {
     /// would be "cumulative_piecewise_rewards_per_bonded_unit".
     ///
     /// reward_index is a monotonically increasing value (i.e. it only grows, it never decreases). See documentation at
-    /// [https://github.com/prism-finance/prism-contracts/blob/main/rewards_index_explanation.md] for more details.
+    /// [https://github.com/prism-finance/prism-contracts/blob/main/reward_index_explanation.md] for more details.
     pub reward_index: Decimal,
 }
 
