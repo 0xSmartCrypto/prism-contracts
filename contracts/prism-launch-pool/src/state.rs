@@ -110,23 +110,23 @@ impl Config {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfo {
+    /// base_index is a snapshot of the global DISTRIBUTION_STATUS.reward_index field at the time of this user's
+    /// previous bond/unbond event (see detailed example in reward_index documentation).
     pub base_index: Decimal,
     pub boost_index: Decimal,
     pub active_boost: Uint128,
     pub boost_weight: Uint128,
+    /// pending_reward is the amount of PRISM tokens that already belong to the user (although they still need to go
+    /// through the 30-day vesting period).
     pub pending_reward: Uint128,
 }
 
 impl RewardInfo {
     pub fn as_res(&self) -> RewardInfoResponse {
         RewardInfoResponse {
-            /// base_index is a snapshot of the global DISTRIBUTION_STATUS.reward_index field at the time of this user's
-            /// previous bond/unbond event (see detailed example in reward_index documentation).
             base_index: self.base_index,
             boost_index: self.boost_index,
             boost_weight: self.boost_weight,
-            /// pending_reward is the amount of PRISM tokens that already belong to the user (although they still need
-            /// to go through the 30-day vesting period).
             pending_reward: self.pending_reward,
             active_boost: self.active_boost,
         }
