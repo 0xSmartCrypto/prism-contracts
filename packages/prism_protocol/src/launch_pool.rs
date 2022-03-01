@@ -31,6 +31,17 @@ pub enum ExecuteMsg {
     /// Starts 21 day vesting period
     WithdrawRewards {},
 
+    /// Start vesting period for many accounts in a single call. See
+    /// documentation for the `withdraw_rewards_bulk` function for details.
+    WithdrawRewardsBulk {
+        /// Process up to `limit` accounts in this call. Can be tweaked to
+        /// process more or less users depending on gas fees.
+        limit: usize,
+        /// Only consider accounts whose address is strictly larger than this
+        /// field.
+        start_after_address: Option<String>,
+    },
+
     ClaimWithdrawnRewards {},
 
     /// Withdraw underlying rewards from yLUNA staking contract

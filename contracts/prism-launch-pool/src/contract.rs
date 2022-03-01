@@ -3,7 +3,7 @@ use crate::state::{
     Config, DistributionStatus, RewardInfo, BOND_AMOUNTS, CONFIG, DISTRIBUTION_STATUS,
     PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST,
 };
-use crate::vest::{claim_withdrawn_rewards, withdraw_rewards};
+use crate::vest::{claim_withdrawn_rewards, withdraw_rewards, withdraw_rewards_bulk};
 use cosmwasm_std::{
     entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
@@ -65,6 +65,10 @@ pub fn execute(
         ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
             admin_send_withdrawn_rewards(deps, env, info, &original_balances)
         }
+        ExecuteMsg::WithdrawRewardsBulk {
+            limit,
+            start_after_address,
+        } => withdraw_rewards_bulk(deps, env, info, limit, start_after_address),
     }
 }
 
@@ -95,7 +99,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::DistributionStatus {} => {
-            to_binary(&_update_reward_index(deps.storage, &env)?.as_res())
+            let cfg = CONFIG.load(deps.storage)?;
+            to_binary(&_update_reward_index(deps.storage, &env, &cfg)?.as_res())
         }
         QueryMsg::RewardInfo { staker_addr } => {
             to_binary(&_pull_pending_rewards(deps.storage, &staker_addr)?.as_res())
@@ -189,9 +194,9 @@ pub fn bond(
     sender: &str,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
-    update_reward_index(deps.storage, &env)?;
-    pull_pending_rewards(deps.storage, sender)?;
     let cfg = CONFIG.load(deps.storage)?;
+    update_reward_index(deps.storage, &env, &cfg)?;
+    pull_pending_rewards(deps.storage, sender)?;
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, sender.as_bytes())
         .unwrap_or_default();
@@ -222,9 +227,9 @@ pub fn unbond(
     info: MessageInfo,
     amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
-    update_reward_index(deps.storage, &env)?;
-    pull_pending_rewards(deps.storage, &info.sender.clone().into_string())?;
     let cfg = CONFIG.load(deps.storage)?;
+    update_reward_index(deps.storage, &env, &cfg)?;
+    pull_pending_rewards(deps.storage, &info.sender.clone().into_string())?;
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, info.sender.as_bytes())
         .map_err(|_| ContractError::InvalidUnbond {
@@ -297,8 +302,11 @@ pub fn pull_pending_rewards(storage: &mut dyn Storage, address: &str) -> StdResu
     REWARD_INFO.save(storage, address.as_bytes(), &reward_info)
 }
 
-pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<DistributionStatus> {
-    let cfg = CONFIG.load(storage)?;
+pub fn _update_reward_index(
+    storage: &dyn Storage,
+    env: &Env,
+    cfg: &Config,
+) -> StdResult<DistributionStatus> {
     let mut distribution_status = DISTRIBUTION_STATUS.load(storage)?;
     let (start, end, amount) = cfg.distribution_schedule;
     if env.block.time.seconds() < start {
@@ -323,8 +331,8 @@ pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<Distr
     Ok(distribution_status)
 }
 
-pub fn update_reward_index(storage: &mut dyn Storage, env: &Env) -> StdResult<()> {
-    let distribution_status = _update_reward_index(storage, env)?;
+pub fn update_reward_index(storage: &mut dyn Storage, env: &Env, cfg: &Config) -> StdResult<()> {
+    let distribution_status = _update_reward_index(storage, env, cfg)?;
     DISTRIBUTION_STATUS.save(storage, &distribution_status)
 }
 
