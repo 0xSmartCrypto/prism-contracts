@@ -1,7 +1,7 @@
 use crate::{
     contract::{execute, instantiate, query},
     error::ContractError,
-    state::{REWARD_INFO, RewardInfo, BOND_AMOUNTS},
+    state::{RewardInfo, BOND_AMOUNTS, REWARD_INFO},
 };
 use cosmwasm_std::attr;
 use cosmwasm_std::OwnedDeps;
@@ -28,6 +28,7 @@ fn proper_initialization() {
     // invalid distribution schedule
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         distribution_schedule: (100u64, 99u64, Uint128::from(1000000u128)),
         yluna_staking: "ylunastaking0000".to_string(),
@@ -41,6 +42,7 @@ fn proper_initialization() {
     // successful init
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
         yluna_staking: "ylunastaking0000".to_string(),
@@ -57,6 +59,7 @@ fn proper_initialization() {
         config,
         ConfigResponse {
             owner: "owner0000".to_string(),
+            operator: "op0000".to_string(),
             prism_token: "prism0000".to_string(),
             distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
             yluna_staking: "ylunastaking0000".to_string(),
@@ -71,6 +74,7 @@ fn withdraw_rewards() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
         yluna_staking: "ylunastaking0000".to_string(),
@@ -179,6 +183,7 @@ fn withdraw_rewards_with_no_bond() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
         yluna_staking: "ylunastaking0000".to_string(),
@@ -298,6 +303,7 @@ fn withdraw_rewards_bulk_auth() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
         yluna_staking: "ylunastaking0000".to_string(),
@@ -312,13 +318,13 @@ fn withdraw_rewards_bulk_auth() {
         start_after_address: Some(String::from("monkey")),
     };
 
-    // Non-owner fails.
+    // Non-operator fails.
     let user_info = mock_info("alice0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), user_info, msg.clone()).unwrap_err();
     assert_eq!(err, ContractError::Unauthorized {});
 
-    // Owner succeeds.
-    let user_info = mock_info("owner0000", &[]);
+    // Operator succeeds.
+    let user_info = mock_info("op0000", &[]);
     execute(deps.as_mut(), mock_env(), user_info, msg).unwrap();
 }
 
@@ -338,6 +344,7 @@ fn withdraw_rewards_bulk() {
     // Time 0: Init contract.
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         // Distribute 100 PRISMs between time 10s to 20s.
         distribution_schedule: (10u64, 20u64, Uint128::from(100u128)),
@@ -373,7 +380,7 @@ fn withdraw_rewards_bulk() {
 
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(21u64);
-    let user_info = mock_info("owner0000", &[]);
+    let user_info = mock_info("op0000", &[]);
     let msg = ExecuteMsg::WithdrawRewardsBulk {
         limit: 2,
         start_after_address: Some(String::from("alice")), // Alice should be skipped.
@@ -423,7 +430,7 @@ fn withdraw_rewards_bulk() {
     // Still time 21: Second call to withdraw_rewards_bulk.
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(21u64); // After event ends.
-    let user_info = mock_info("owner0000", &[]);
+    let user_info = mock_info("op0000", &[]);
     let msg = ExecuteMsg::WithdrawRewardsBulk {
         limit: 100, // Limit larger than actual amount of users should be fine.
         start_after_address: Some(String::from("carol")),
@@ -473,7 +480,7 @@ fn withdraw_rewards_bulk() {
     // Still time 21: Last call to cover Alice.
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(21u64);
-    let user_info = mock_info("owner0000", &[]);
+    let user_info = mock_info("op0000", &[]);
     let msg = ExecuteMsg::WithdrawRewardsBulk {
         limit: 1,
         start_after_address: None, // None should default to Alice since she's first alphabetically.
@@ -527,6 +534,7 @@ fn bond() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         distribution_schedule: (
             100000000000000u64,
@@ -607,6 +615,7 @@ fn unbond() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         // Distribute 5000 reward tokens during a 30-second event.
         distribution_schedule: (30u64, 60u64, Uint128::from(5_000u128)),
@@ -809,6 +818,7 @@ fn claim_withdrawn_rewards() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
         yluna_staking: "ylunastaking0000".to_string(),
@@ -932,6 +942,7 @@ fn admin_withdraw_rewards() {
 
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
         yluna_staking: "ylunastaking0000".to_string(),
@@ -1184,6 +1195,7 @@ fn rewards_index_from_hell() {
     let mut deps = mock_dependencies(&[]);
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
         prism_token: "prism0000".to_string(),
         // Distribute 100k PRISMs between time 100s to 200s.
         distribution_schedule: (100u64, 200u64, Uint128::from(100_000u128)),
@@ -1351,7 +1363,7 @@ fn rewards_index_from_hell() {
     // Time 150: Rewards for Alice are withdrawn by the bot.
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(150);
-    let info = mock_info("owner0000", &[]);
+    let info = mock_info("op0000", &[]);
     execute(
         deps.as_mut(),
         env,
@@ -1475,7 +1487,7 @@ fn rewards_index_from_hell() {
     // Time 300: Rewards for all users are withdrawn by the bot.
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(300);
-    let info = mock_info("owner0000", &[]);
+    let info = mock_info("op0000", &[]);
     execute(
         deps.as_mut(),
         env,

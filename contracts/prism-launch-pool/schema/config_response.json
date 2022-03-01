@@ -4,6 +4,7 @@
   "type": "object",
   "required": [
     "distribution_schedule",
+    "operator",
     "owner",
     "prism_token",
     "yluna_staking",
@@ -29,6 +30,9 @@
       ],
       "maxItems": 3,
       "minItems": 3
+    },
+    "operator": {
+      "type": "string"
     },
     "owner": {
       "type": "string"

@@ -23,11 +23,10 @@ pub fn update_vest(storage: &mut dyn Storage, current_time: u64, address: &str) 
         .unwrap_or_else(|_| Uint128::zero());
     let mut to_delete = vec![];
 
-    for item in
-        SCHEDULED_VEST
-            .prefix(address.as_bytes())
-            .range(storage, None, None, Order::Ascending)
-            .take(MAX_UPDATE_VEST_PER_TX as usize)
+    for item in SCHEDULED_VEST
+        .prefix(address.as_bytes())
+        .range(storage, None, None, Order::Ascending)
+        .take(MAX_UPDATE_VEST_PER_TX as usize)
     {
         let (key, unlocked) = item?;
         let end_time = u64::from_be_bytes(key.try_into().unwrap());
@@ -113,7 +112,7 @@ pub fn withdraw_rewards_bulk(
     start_after_address: Option<String>,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
-    if info.sender != cfg.owner {
+    if info.sender != cfg.operator {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -145,7 +144,7 @@ pub fn withdraw_rewards_bulk(
         Some(last) => last.to_string(),
         None => String::from(""),
     };
-    
+
     // return last address to indicate the next start_after_address
     Ok(Response::new().add_attribute("last_address", last_address))
 }

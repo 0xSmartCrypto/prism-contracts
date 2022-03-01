@@ -7,7 +7,10 @@ use cw_asset::Asset;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    // authorized to execute AdminWithdrawRewards
     pub owner: String,
+    // authorized to execute WithdrawRewardsBulk
+    pub operator: String, 
     pub prism_token: String,
     pub yluna_staking: String,
     pub yluna_token: String,
@@ -72,6 +75,7 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
+    pub operator: String,
     pub prism_token: String,
     pub yluna_staking: String,
     pub yluna_token: String,

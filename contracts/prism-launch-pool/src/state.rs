@@ -35,6 +35,7 @@ impl DistributionStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: Addr,
+    pub operator: Addr,
     pub prism_token: Addr,
     pub yluna_staking: Addr,
     pub yluna_token: Addr,
@@ -45,6 +46,7 @@ impl Config {
     pub fn as_res(&self) -> ConfigResponse {
         ConfigResponse {
             owner: self.owner.to_string(),
+            operator: self.operator.to_string(),
             prism_token: self.prism_token.to_string(),
             yluna_staking: self.yluna_staking.to_string(),
             yluna_token: self.yluna_token.to_string(),

@@ -35,6 +35,7 @@ pub fn instantiate(
 
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
+        operator: deps.api.addr_validate(&msg.operator)?,
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
         yluna_staking: deps.api.addr_validate(&msg.yluna_staking)?,
         yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
