@@ -358,7 +358,7 @@ pub fn activate_boost(
     // accumulate accrued rewards
     let mut reward_info = _pull_pending_rewards(deps.storage, &info.sender)?;
 
-    // update yluna bond amount
+    // load yluna bond amount
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, info.sender.as_bytes())
         .unwrap_or_default();
@@ -388,8 +388,8 @@ pub fn activate_boost(
     ]))
 }
 
-/// Loads a user's reward_info from storage and returns and updated copy of it.
-/// Called on every bond, unbond and withdraw_rewards by this user.
+/// Loads a user's reward_info from storage and returns and updated copy of it. Called on every bond, unbond,
+/// activate_boost, withdraw_rewards, withdraw_rewards_bulk that affect this user.
 pub fn _pull_pending_rewards(storage: &dyn Storage, address: &Addr) -> StdResult<RewardInfo> {
     let base_distribution_status = BASE_DISTRIBUTION_STATUS.load(storage)?;
     let boost_distribution_status = BOOST_DISTRIBUTION_STATUS.load(storage)?;
@@ -422,12 +422,12 @@ pub fn _pull_pending_rewards(storage: &dyn Storage, address: &Addr) -> StdResult
     Ok(reward_info)
 }
 
-/// Reads DISTRIBUTION_STATUS from storage and returns an updated copy of it.
-/// Called on every bond, unbond and withdraw_rewards (for all users).
+/// Receives a mutable reference to a DistributionStatus and a distribution_schedule, and mutates the DistributionStatus
+/// to have current values for total_distributed, reward_index, etc according to the schedule.
 pub fn _update_reward_index(
     env: &Env,
     distribution_status: &mut DistributionStatus,
-    distribution_schedule: (u64, u64, Uint128),
+    distribution_schedule: (u64, u64, Uint128), // (start timestamp in seconds, end timestamp in seconds, amount of PRISM tokens to distribute during the event)
 ) -> StdResult<()> {
     let (start, end, amount_scheduled) = distribution_schedule;
     if env.block.time.seconds() < start {
@@ -436,13 +436,12 @@ pub fn _update_reward_index(
     };
     let denom = end - start; // Duration of distribution event in seconds.
 
-    // total_distribute is cumulative reward that should have been released by
-    // the protocol since the beginning of the schedule and up to the current
-    // time. Units: PRISM tokens. Range: [0, amount_scheduled]
+    // total_distribute is cumulative reward that should have been released by the protocol since the beginning of the
+    // schedule and up to the current time. Units: PRISM tokens. Range: [0, amount_scheduled]
     let total_distribute =
         amount_scheduled.multiply_ratio(min(env.block.time.seconds() - start, denom), denom);
-    // distribute_here is amount of rewards that should be released by the
-    // protocol since last time update_reward_index was called until now.
+    // distribute_here is amount of rewards that should be released by the protocol since last time _update_reward_index
+    // was called until now.
     let mut distribute_here = total_distribute - distribution_status.total_distributed;
     distribution_status.total_distributed = total_distribute;
 
@@ -460,6 +459,9 @@ pub fn _update_reward_index(
     Ok(())
 }
 
+/// update_reward_indexes loads BASE_DISTRIBUTION_STATUS and BOOST_DISTRIBUTION_STATUS from storage, mutates them, and
+/// saves them back to storage. This is called (regardless of user) on bond, unbond, activate_boost, withdraw_rewards
+/// and withdraw_rewards_bulk.
 pub fn update_reward_indexes(storage: &mut dyn Storage, env: &Env, cfg: &Config) -> StdResult<()> {
     let mut base_distribution_status = BASE_DISTRIBUTION_STATUS.load(storage)?;
     let mut boost_distribution_status = BOOST_DISTRIBUTION_STATUS.load(storage)?;
