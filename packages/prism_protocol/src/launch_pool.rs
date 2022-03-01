@@ -47,7 +47,7 @@ pub enum ExecuteMsg {
     WithdrawRewardsBulk {
         /// Process up to `limit` accounts in this call. Can be tweaked to
         /// process more or less users depending on gas fees.
-        limit: usize,
+        limit: u64,
         /// Only consider accounts whose address is strictly larger than this
         /// field.
         start_after_address: Option<String>,

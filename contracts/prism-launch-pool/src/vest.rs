@@ -107,7 +107,7 @@ pub fn withdraw_rewards_bulk(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    limit: usize,
+    limit: u64,
     start_after_address: Option<String>,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
@@ -130,7 +130,7 @@ pub fn withdraw_rewards_bulk(
     // the iterator).
     let addresses: Vec<Addr> = REWARD_INFO
         .keys(deps.storage, start, None, Order::Ascending)
-        .take(limit)
+        .take(limit as usize)
         .map(|k| deserialize_key::<Addr>(k).unwrap())
         .collect();
 
