@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ExecuteMsg",
-  "oneOf": [
+  "anyOf": [
     {
       "type": "object",
       "required": [
@@ -40,6 +40,19 @@
       "additionalProperties": false
     },
     {
+      "description": "Updates the user's boost weight based on the current boost amount",
+      "type": "object",
+      "required": [
+        "activate_boost"
+      ],
+      "properties": {
+        "activate_boost": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Withdraw $PRISM rewards Starts 21 day vesting period",
       "type": "object",
       "required": [
@@ -48,6 +61,37 @@
       "properties": {
         "withdraw_rewards": {
           "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Start vesting period for many accounts in a single call. See documentation for the `withdraw_rewards_bulk` function for details.",
+      "type": "object",
+      "required": [
+        "withdraw_rewards_bulk"
+      ],
+      "properties": {
+        "withdraw_rewards_bulk": {
+          "type": "object",
+          "required": [
+            "limit"
+          ],
+          "properties": {
+            "limit": {
+              "description": "Process up to `limit` accounts in this call. Can be tweaked to process more or less users depending on gas fees.",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "start_after_address": {
+              "description": "Only consider accounts whose address is strictly larger than this field.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
         }
       },
       "additionalProperties": false
@@ -135,7 +179,7 @@
     },
     "AssetInfoBase_for_Addr": {
       "description": "Represents the type of an fungible asset\n\nEach **asset info** instance can be one of two variants:\n\n- CW20 tokens. To create an **asset info** instance of this type, provide the contract address. - Native SDK coins. To create an **asset info** instance of this type, provide the denomination.",
-      "oneOf": [
+      "anyOf": [
         {
           "type": "object",
           "required": [

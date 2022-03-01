@@ -3,12 +3,24 @@
   "title": "RewardInfoResponse",
   "type": "object",
   "required": [
-    "index",
+    "active_boost",
+    "base_index",
+    "boost_index",
+    "boost_weight",
     "pending_reward"
   ],
   "properties": {
-    "index": {
+    "active_boost": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "base_index": {
       "$ref": "#/definitions/Decimal"
+    },
+    "boost_index": {
+      "$ref": "#/definitions/Decimal"
+    },
+    "boost_weight": {
+      "$ref": "#/definitions/Uint128"
     },
     "pending_reward": {
       "$ref": "#/definitions/Uint128"

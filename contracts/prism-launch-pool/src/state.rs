@@ -1,14 +1,17 @@
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_storage_plus::{Item, Map};
-use prism_protocol::launch_pool::{ConfigResponse, DistributionStatusResponse, RewardInfoResponse};
+use prism_protocol::launch_pool::{ConfigResponse, DistributionInfo, RewardInfoResponse};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-/// DISTRIBUTION_STATUS is a global object (not tied to an individual user) that summarizes information used to compute
+/// BASE_DISTRIBUTION_STATUS is a global object (not tied to an individual user) that summarizes information used to compute
 /// rewards.
-pub const DISTRIBUTION_STATUS: Item<DistributionStatus> = Item::new("distribution_status");
+pub const BASE_DISTRIBUTION_STATUS: Item<DistributionStatus> =
+    Item::new("base_distribution_status");
+pub const BOOST_DISTRIBUTION_STATUS: Item<DistributionStatus> =
+    Item::new("boost_distribution_status");
 
 /// BOND_AMOUNTS is map that tells how much each user has bound.
 ///
@@ -43,10 +46,10 @@ pub struct DistributionStatus {
     // either added to pending_reward or added to reward_index (not actually transferred out of the contract to people
     // yet). Units: PRISM tokens.
     pub total_distributed: Uint128,
-    /// total_bond_amount is the total amount of yluna that has been bonded by users. It starts at 0 when this contract
+    /// total_weight is the total amount of yluna that has been bonded by users. It starts at 0 when this contract
     /// is instantiated. It gets incremented when Bond is called and decremented when Unbond is called. Units: yluna
     /// tokens.
-    pub total_bond_amount: Uint128,
+    pub total_weight: Uint128,
     /// pending_reward is used to count rewards that should have been given to people according to the schedule but
     /// weren't actually given to anybody because there were no bonders at the moment (i.e. total_bond_amount was 0).
     /// These rewards are saved for lucky future bonders. In practice this probably never happens because there's always
@@ -92,10 +95,10 @@ pub struct DistributionStatus {
 }
 
 impl DistributionStatus {
-    pub fn as_res(&self) -> DistributionStatusResponse {
-        DistributionStatusResponse {
+    pub fn as_res(&self) -> DistributionInfo {
+        DistributionInfo {
             total_distributed: self.total_distributed,
-            total_bond_amount: self.total_bond_amount,
+            total_weight: self.total_weight,
             pending_reward: self.pending_reward,
             reward_index: self.reward_index,
         }
@@ -105,43 +108,57 @@ impl DistributionStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: Addr,
+    pub operator: Addr,
     pub prism_token: Addr,
     pub yluna_staking: Addr,
     pub yluna_token: Addr,
-    /// distribution_schedule is a triple of:
+    pub vesting_period: u64,
+    pub boost_contract: Addr,
+    /// base_distribution_schedule is a triple of:
     ///   - start timestamp in seconds;
     ///   - end timestamp in seconds;
     ///   - amount of tokens to be distributed as rewards during this time period.
-    pub distribution_schedule: (u64, u64, Uint128),
+    pub base_distribution_schedule: (u64, u64, Uint128),
+    pub boost_distribution_schedule: (u64, u64, Uint128),
 }
 
 impl Config {
     pub fn as_res(&self) -> ConfigResponse {
         ConfigResponse {
             owner: self.owner.to_string(),
+            operator: self.operator.to_string(),
             prism_token: self.prism_token.to_string(),
             yluna_staking: self.yluna_staking.to_string(),
             yluna_token: self.yluna_token.to_string(),
-            distribution_schedule: self.distribution_schedule,
+            vesting_period: self.vesting_period,
+            boost_contract: self.boost_contract.to_string(),
+            base_distribution_schedule: self.base_distribution_schedule,
+            boost_distribution_schedule: self.boost_distribution_schedule,
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfo {
-    pub index: Decimal,
+    pub base_index: Decimal,
+    pub boost_index: Decimal,
+    pub active_boost: Uint128,
+    pub boost_weight: Uint128,
     pub pending_reward: Uint128,
 }
 
 impl RewardInfo {
     pub fn as_res(&self) -> RewardInfoResponse {
         RewardInfoResponse {
-            /// index is a snapshot of the global DISTRIBUTION_STATUS.reward_index field at the time of this user's
+            /// base_index is a snapshot of the global DISTRIBUTION_STATUS.reward_index field at the time of this user's
             /// previous bond/unbond event (see detailed example in reward_index documentation).
-            index: self.index,
+            base_index: self.base_index,
+            boost_index: self.boost_index,
+            boost_weight: self.boost_weight,
             // pending_reward is the amount of PRISM tokens that already belong to the user (although they still need to
             // go through the 30-day vesting period).
             pending_reward: self.pending_reward,
+            active_boost: self.active_boost,
         }
     }
 }

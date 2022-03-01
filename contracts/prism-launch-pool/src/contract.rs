@@ -1,18 +1,22 @@
 use crate::error::ContractError;
+use crate::querier::query_boost_amount;
 use crate::state::{
-    Config, DistributionStatus, RewardInfo, BOND_AMOUNTS, CONFIG, DISTRIBUTION_STATUS,
-    PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST,
+    Config, DistributionStatus, RewardInfo, BASE_DISTRIBUTION_STATUS, BOND_AMOUNTS,
+    BOOST_DISTRIBUTION_STATUS, CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST,
 };
-use crate::vest::{claim_withdrawn_rewards, withdraw_rewards};
+use crate::vest::{claim_withdrawn_rewards, withdraw_rewards, withdraw_rewards_bulk};
 use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
+    attr, entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut,
+    Env, MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg,
+    WasmQuery,
 };
 use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
+use integer_sqrt::IntegerSquareRoot;
 use prism_protocol::launch_pool::{
-    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, VestingStatusResponse,
+    ConfigResponse, Cw20HookMsg, DistributionStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
+    VestingStatusResponse,
 };
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
@@ -35,17 +39,27 @@ pub fn instantiate(
 
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
+        operator: deps.api.addr_validate(&msg.operator)?,
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
         yluna_staking: deps.api.addr_validate(&msg.yluna_staking)?,
         yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
-        distribution_schedule: msg.distribution_schedule,
+        vesting_period: msg.vesting_period,
+        boost_contract: deps.api.addr_validate(&msg.boost_contract)?,
+        base_distribution_schedule: msg.base_distribution_schedule,
+        boost_distribution_schedule: msg.boost_distribution_schedule,
     };
 
-    if msg.distribution_schedule.0 > msg.distribution_schedule.1 {
+    if msg.base_distribution_schedule.0 > msg.base_distribution_schedule.1 {
         return Err(ContractError::InvalidDistributionSchedule {});
     }
+    if msg.boost_distribution_schedule.0 > msg.boost_distribution_schedule.1 {
+        return Err(ContractError::InvalidDistributionSchedule {});
+    }
+
     CONFIG.save(deps.storage, &cfg)?;
-    DISTRIBUTION_STATUS.save(deps.storage, &DistributionStatus::default())?;
+    BASE_DISTRIBUTION_STATUS.save(deps.storage, &DistributionStatus::default())?;
+    BOOST_DISTRIBUTION_STATUS.save(deps.storage, &DistributionStatus::default())?;
+
     Ok(Response::new())
 }
 
@@ -59,12 +73,17 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg), // Bond
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
+        ExecuteMsg::ActivateBoost {} => activate_boost(deps, env, info),
         ExecuteMsg::WithdrawRewards {} => withdraw_rewards(deps, env, info), // Start vesting period
         ExecuteMsg::ClaimWithdrawnRewards {} => claim_withdrawn_rewards(deps, env, info), // Actually withdraw after rewards have vested
         ExecuteMsg::AdminWithdrawRewards {} => admin_withdraw_rewards(deps, env, info),
         ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
             admin_send_withdrawn_rewards(deps, env, info, &original_balances)
         }
+        ExecuteMsg::WithdrawRewardsBulk {
+            limit,
+            start_after_address,
+        } => withdraw_rewards_bulk(deps, env, info, limit, start_after_address),
     }
 }
 
@@ -75,6 +94,7 @@ pub fn receive_cw20(
     cw20_msg: Cw20ReceiveMsg,
 ) -> Result<Response, ContractError> {
     let msg = cw20_msg.msg;
+    let cw20_sender = deps.api.addr_validate(&cw20_msg.sender)?;
 
     match from_binary(&msg)? {
         Cw20HookMsg::Bond {} => {
@@ -85,7 +105,7 @@ pub fn receive_cw20(
                 return Err(ContractError::Unauthorized {});
             }
 
-            bond(deps, env, &cw20_msg.sender, cw20_msg.amount)
+            bond(deps, env, cw20_sender, cw20_msg.amount)
         }
     }
 }
@@ -94,10 +114,9 @@ pub fn receive_cw20(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::DistributionStatus {} => {
-            to_binary(&_update_reward_index(deps.storage, &env)?.as_res())
-        }
+        QueryMsg::DistributionStatus {} => to_binary(&query_distribution_status(deps, env)?),
         QueryMsg::RewardInfo { staker_addr } => {
+            let staker_addr = deps.api.addr_validate(&staker_addr)?;
             to_binary(&_pull_pending_rewards(deps.storage, &staker_addr)?.as_res())
         }
         QueryMsg::VestingStatus { staker_addr } => {
@@ -186,25 +205,49 @@ pub fn admin_send_withdrawn_rewards(
 pub fn bond(
     deps: DepsMut,
     env: Env,
-    sender: &str,
+    sender: Addr,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
-    update_reward_index(deps.storage, &env)?;
-    pull_pending_rewards(deps.storage, sender)?;
     let cfg = CONFIG.load(deps.storage)?;
+    update_reward_indexes(deps.storage, &env, &cfg)?;
+
+    // accumulate accrued rewards
+    let mut reward_info = _pull_pending_rewards(deps.storage, &sender)?;
+
+    // update yluna bond amount
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, sender.as_bytes())
         .unwrap_or_default();
-    BOND_AMOUNTS.save(deps.storage, sender.as_bytes(), &(current_bond + amount))?;
+    let new_bond_amount = current_bond + amount;
+    BOND_AMOUNTS.save(deps.storage, sender.as_bytes(), &new_bond_amount)?;
 
-    DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
-        item.total_bond_amount += amount;
+    BASE_DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
+        item.total_weight += amount;
 
         Ok(item)
     })?;
 
-    Ok(
-        Response::new().add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+    // update boost weight
+    let boost_amount =
+        query_boost_amount(&deps.querier, &cfg.boost_contract, &sender).unwrap_or(Uint128::zero());
+    let new_boost_weight =
+        Uint128::from((new_bond_amount.u128() * boost_amount.u128()).integer_sqrt());
+
+    BOOST_DISTRIBUTION_STATUS.update(
+        deps.storage,
+        |mut item| -> StdResult<DistributionStatus> {
+            item.total_weight = item.total_weight - reward_info.boost_weight + new_boost_weight;
+
+            Ok(item)
+        },
+    )?;
+
+    reward_info.boost_weight = new_boost_weight;
+    reward_info.active_boost = boost_amount;
+    REWARD_INFO.save(deps.storage, sender.as_bytes(), &reward_info)?;
+
+    Ok(Response::new()
+        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.yluna_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: cfg.yluna_staking.to_string(),
@@ -212,8 +255,12 @@ pub fn bond(
                 msg: to_binary(&StakingHookMsg::Bond {})?,
             })?,
             funds: vec![],
-        })]),
-    )
+        })])
+        .add_attributes(vec![
+            attr("action", "yluna_farming_bond"),
+            attr("total_user_bonded", new_bond_amount.to_string()),
+            attr("boost_amount", boost_amount.to_string()),
+        ]))
 }
 
 pub fn unbond(
@@ -222,9 +269,13 @@ pub fn unbond(
     info: MessageInfo,
     amount: Option<Uint128>, // If None, the user's entire stake will be unbonded.
 ) -> Result<Response, ContractError> {
-    update_reward_index(deps.storage, &env)?;
-    pull_pending_rewards(deps.storage, &info.sender.clone().into_string())?;
     let cfg = CONFIG.load(deps.storage)?;
+    update_reward_indexes(deps.storage, &env, &cfg)?;
+
+    // accumulate accrued rewards
+    let mut reward_info = _pull_pending_rewards(deps.storage, &info.sender)?;
+
+    // update yluna bond amount
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, info.sender.as_bytes())
         .map_err(|_| ContractError::InvalidUnbond {
@@ -243,71 +294,145 @@ pub fn unbond(
         None => current_bond,
     };
 
-    BOND_AMOUNTS.save(
-        deps.storage,
-        info.sender.as_bytes(),
-        &(current_bond - unbond_amt),
-    )?;
+    let new_bond_amount = current_bond - unbond_amt;
+    BOND_AMOUNTS.save(deps.storage, info.sender.as_bytes(), &new_bond_amount)?;
 
-    DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
-        item.total_bond_amount -= unbond_amt;
+    BASE_DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
+        item.total_weight -= unbond_amt;
 
         Ok(item)
     })?;
 
-    Ok(Response::new().add_messages(vec![
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_staking.to_string(),
-            msg: to_binary(&StakingExecuteMsg::Unbond {
-                amount: Some(unbond_amt),
-            })?,
-            funds: vec![],
-        }),
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_token.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: info.sender.to_string(),
-                amount: unbond_amt,
-            })?,
-            funds: vec![],
-        }),
+    // update boost weight
+    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, &info.sender)
+        .unwrap_or(Uint128::zero());
+    let new_boost_weight =
+        Uint128::from((new_bond_amount.u128() * boost_amount.u128()).integer_sqrt());
+
+    BOOST_DISTRIBUTION_STATUS.update(
+        deps.storage,
+        |mut item| -> StdResult<DistributionStatus> {
+            item.total_weight = item.total_weight - reward_info.boost_weight + new_boost_weight;
+
+            Ok(item)
+        },
+    )?;
+
+    reward_info.boost_weight = new_boost_weight;
+    reward_info.active_boost = boost_amount;
+    REWARD_INFO.save(deps.storage, info.sender.as_bytes(), &reward_info)?;
+
+    Ok(Response::new()
+        .add_messages(vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.yluna_staking.to_string(),
+                msg: to_binary(&StakingExecuteMsg::Unbond {
+                    amount: Some(unbond_amt),
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.yluna_token.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: info.sender.to_string(),
+                    amount: unbond_amt,
+                })?,
+                funds: vec![],
+            }),
+        ])
+        .add_attributes(vec![
+            attr("action", "yluna_farming_unbond"),
+            attr("total_user_bonded", new_bond_amount.to_string()),
+            attr("boost_amount", boost_amount.to_string()),
+        ]))
+}
+
+pub fn activate_boost(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    update_reward_indexes(deps.storage, &env, &cfg)?;
+
+    // accumulate accrued rewards
+    let mut reward_info = _pull_pending_rewards(deps.storage, &info.sender)?;
+
+    // update yluna bond amount
+    let current_bond = BOND_AMOUNTS
+        .load(deps.storage, info.sender.as_bytes())
+        .unwrap_or_default();
+
+    // update boost weight
+    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, &info.sender)
+        .unwrap_or(Uint128::zero());
+    let new_boost_weight =
+        Uint128::from((current_bond.u128() * boost_amount.u128()).integer_sqrt());
+
+    BOOST_DISTRIBUTION_STATUS.update(
+        deps.storage,
+        |mut item| -> StdResult<DistributionStatus> {
+            item.total_weight = item.total_weight - reward_info.boost_weight + new_boost_weight;
+
+            Ok(item)
+        },
+    )?;
+
+    reward_info.boost_weight = new_boost_weight;
+    reward_info.active_boost = boost_amount;
+    REWARD_INFO.save(deps.storage, info.sender.as_bytes(), &reward_info)?;
+
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "activate_boost"),
+        attr("boost_amount", boost_amount.to_string()),
     ]))
 }
 
 /// Loads a user's reward_info from storage and returns and updated copy of it.
 /// Called on every bond, unbond and withdraw_rewards by this user.
-pub fn _pull_pending_rewards(storage: &dyn Storage, address: &str) -> StdResult<RewardInfo> {
-    let distribution_status = DISTRIBUTION_STATUS.load(storage)?;
+pub fn _pull_pending_rewards(storage: &dyn Storage, address: &Addr) -> StdResult<RewardInfo> {
+    let base_distribution_status = BASE_DISTRIBUTION_STATUS.load(storage)?;
+    let boost_distribution_status = BOOST_DISTRIBUTION_STATUS.load(storage)?;
+
     let bond_amount = BOND_AMOUNTS
         .load(storage, address.as_bytes())
         .unwrap_or_else(|_| Uint128::zero());
     let mut reward_info = REWARD_INFO
         .load(storage, address.as_bytes())
         .unwrap_or(RewardInfo {
-            index: distribution_status.reward_index,
+            base_index: base_distribution_status.reward_index,
+            boost_index: boost_distribution_status.reward_index,
+            active_boost: Uint128::zero(),
+            boost_weight: Uint128::zero(),
             pending_reward: Uint128::zero(),
         });
-    let pending_reward = (bond_amount * distribution_status.reward_index)
-        .checked_sub(bond_amount * reward_info.index)?;
-    reward_info.index = distribution_status.reward_index;
-    reward_info.pending_reward += pending_reward;
-    Ok(reward_info)
-}
 
-pub fn pull_pending_rewards(storage: &mut dyn Storage, address: &str) -> StdResult<()> {
-    let reward_info = _pull_pending_rewards(storage, address)?;
-    REWARD_INFO.save(storage, address.as_bytes(), &reward_info)
+    let base_pending_reward = (bond_amount * base_distribution_status.reward_index)
+        .checked_sub(bond_amount * reward_info.base_index)?;
+    let boost_pending_reward = (reward_info.boost_weight * boost_distribution_status.reward_index)
+        .checked_sub(reward_info.boost_weight * reward_info.boost_index)?;
+
+    // accumulate pending reward
+    reward_info.pending_reward += base_pending_reward + boost_pending_reward;
+
+    // set user indexes
+    reward_info.base_index = base_distribution_status.reward_index;
+    reward_info.boost_index = boost_distribution_status.reward_index;
+
+    Ok(reward_info)
 }
 
 /// Reads DISTRIBUTION_STATUS from storage and returns an updated copy of it.
 /// Called on every bond, unbond and withdraw_rewards (for all users).
-pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<DistributionStatus> {
-    let cfg = CONFIG.load(storage)?;
-    let mut distribution_status = DISTRIBUTION_STATUS.load(storage)?;
-    let (start, end, amount_scheduled) = cfg.distribution_schedule;
+pub fn _update_reward_index(
+    env: &Env,
+    distribution_status: &mut DistributionStatus,
+    distribution_schedule: (u64, u64, Uint128),
+) -> StdResult<()> {
+    let (start, end, amount_scheduled) = distribution_schedule;
     if env.block.time.seconds() < start {
         // Nothing to do yet; distribution event will happen in the future.
-        return Ok(distribution_status);
+        return Ok(());
     };
     let denom = end - start; // Duration of distribution event in seconds.
 
@@ -321,29 +446,70 @@ pub fn _update_reward_index(storage: &dyn Storage, env: &Env) -> StdResult<Distr
     let mut distribute_here = total_distribute - distribution_status.total_distributed;
     distribution_status.total_distributed = total_distribute;
 
-    if distribution_status.total_bond_amount.is_zero() {
+    if distribution_status.total_weight.is_zero() {
         // No bonders. Save these rewards for later to avoid division for zero.
         distribution_status.pending_reward += distribute_here;
     } else {
         distribute_here += distribution_status.pending_reward;
         let normal_reward_per_bond =
-            Decimal::from_ratio(distribute_here, distribution_status.total_bond_amount);
+            Decimal::from_ratio(distribute_here, distribution_status.total_weight);
         distribution_status.reward_index =
             distribution_status.reward_index + normal_reward_per_bond;
         distribution_status.pending_reward = Uint128::zero();
     }
-    Ok(distribution_status)
+    Ok(())
 }
 
-pub fn update_reward_index(storage: &mut dyn Storage, env: &Env) -> StdResult<()> {
-    let distribution_status = _update_reward_index(storage, env)?;
-    DISTRIBUTION_STATUS.save(storage, &distribution_status)
+pub fn update_reward_indexes(storage: &mut dyn Storage, env: &Env, cfg: &Config) -> StdResult<()> {
+    let mut base_distribution_status = BASE_DISTRIBUTION_STATUS.load(storage)?;
+    let mut boost_distribution_status = BOOST_DISTRIBUTION_STATUS.load(storage)?;
+
+    // update base global index
+    _update_reward_index(
+        env,
+        &mut base_distribution_status,
+        cfg.base_distribution_schedule,
+    )?;
+    BASE_DISTRIBUTION_STATUS.save(storage, &base_distribution_status)?;
+    // update boost global index
+    _update_reward_index(
+        env,
+        &mut boost_distribution_status,
+        cfg.boost_distribution_schedule,
+    )?;
+    BOOST_DISTRIBUTION_STATUS.save(storage, &boost_distribution_status)?;
+
+    Ok(())
 }
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let cfg: Config = CONFIG.load(deps.storage)?;
 
     Ok(cfg.as_res())
+}
+
+pub fn query_distribution_status(deps: Deps, env: Env) -> StdResult<DistributionStatusResponse> {
+    let cfg = CONFIG.load(deps.storage)?;
+    let mut base_distribution_status = BASE_DISTRIBUTION_STATUS.load(deps.storage)?;
+    let mut boost_distribution_status = BOOST_DISTRIBUTION_STATUS.load(deps.storage)?;
+
+    // update base global index
+    _update_reward_index(
+        &env,
+        &mut base_distribution_status,
+        cfg.base_distribution_schedule,
+    )?;
+    // update boost global index
+    _update_reward_index(
+        &env,
+        &mut boost_distribution_status,
+        cfg.boost_distribution_schedule,
+    )?;
+
+    Ok(DistributionStatusResponse {
+        base: base_distribution_status.as_res(),
+        boost: boost_distribution_status.as_res(),
+    })
 }
 
 pub fn query_vesting_status(

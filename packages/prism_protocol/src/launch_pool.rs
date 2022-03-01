@@ -7,13 +7,20 @@ use cw_asset::Asset;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    // authorized to execute AdminWithdrawRewards
     pub owner: String,
+    // authorized to execute WithdrawRewardsBulk
+    pub operator: String,
     pub prism_token: String,
     pub yluna_staking: String,
     pub yluna_token: String,
+    /// vesting period in seconds
+    pub vesting_period: u64,
+    pub boost_contract: String,
     // start, end, amount of $PRISM to distribute
     // distribute linearly
-    pub distribution_schedule: (u64, u64, Uint128),
+    pub base_distribution_schedule: (u64, u64, Uint128),
+    pub boost_distribution_schedule: (u64, u64, Uint128),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -27,9 +34,24 @@ pub enum ExecuteMsg {
     Unbond {
         amount: Option<Uint128>,
     },
+
+    /// Updates the user's boost weight based on the current boost amount
+    ActivateBoost {},
+
     /// Withdraw $PRISM rewards
     /// Starts 21 day vesting period
     WithdrawRewards {},
+
+    /// Start vesting period for many accounts in a single call. See
+    /// documentation for the `withdraw_rewards_bulk` function for details.
+    WithdrawRewardsBulk {
+        /// Process up to `limit` accounts in this call. Can be tweaked to
+        /// process more or less users depending on gas fees.
+        limit: usize,
+        /// Only consider accounts whose address is strictly larger than this
+        /// field.
+        start_after_address: Option<String>,
+    },
 
     ClaimWithdrawnRewards {},
 
@@ -61,23 +83,36 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
+    pub operator: String,
     pub prism_token: String,
     pub yluna_staking: String,
     pub yluna_token: String,
-    pub distribution_schedule: (u64, u64, Uint128),
+    pub vesting_period: u64,
+    pub boost_contract: String,
+    pub base_distribution_schedule: (u64, u64, Uint128),
+    pub boost_distribution_schedule: (u64, u64, Uint128),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct DistributionStatusResponse {
+    pub base: DistributionInfo,
+    pub boost: DistributionInfo,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DistributionInfo {
     pub total_distributed: Uint128,
-    pub total_bond_amount: Uint128,
+    pub total_weight: Uint128,
     pub pending_reward: Uint128,
     pub reward_index: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfoResponse {
-    pub index: Decimal,
+    pub base_index: Decimal,
+    pub boost_index: Decimal,
+    pub boost_weight: Uint128,
+    pub active_boost: Uint128,
     pub pending_reward: Uint128,
 }
 
