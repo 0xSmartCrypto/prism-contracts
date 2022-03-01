@@ -1,8 +1,7 @@
-use crate::state::{RewardInfo, BOND_AMOUNTS};
 use crate::{
     contract::{execute, instantiate, query},
     error::ContractError,
-    state::{BOND_AMOUNTS, REWARD_INFO},
+    state::{REWARD_INFO, RewardInfo, BOND_AMOUNTS},
 };
 use cosmwasm_std::attr;
 use cosmwasm_std::OwnedDeps;

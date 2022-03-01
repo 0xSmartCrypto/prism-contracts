@@ -12,6 +12,11 @@ use std::convert::TryInto;
 pub const TIME_UNIT: u64 = 60 * 60 * 24;
 pub const REDEMPTION_TIME: u64 = TIME_UNIT * 21u64;
 
+// we set cap the iterations to check the vests
+// in normal conditons, with a dality bulk execution,
+// for most users there should be a maximum of 30 entries
+pub const MAX_UPDATE_VEST_PER_TX: u64 = 50u64;
+
 pub fn update_vest(storage: &mut dyn Storage, current_time: u64, address: &str) -> StdResult<()> {
     let mut can_withdraw = PENDING_WITHDRAW
         .load(storage, address.as_bytes())
@@ -22,6 +27,7 @@ pub fn update_vest(storage: &mut dyn Storage, current_time: u64, address: &str) 
         SCHEDULED_VEST
             .prefix(address.as_bytes())
             .range(storage, None, None, Order::Ascending)
+            .take(MAX_UPDATE_VEST_PER_TX as usize)
     {
         let (key, unlocked) = item?;
         let end_time = u64::from_be_bytes(key.try_into().unwrap());
@@ -139,8 +145,8 @@ pub fn withdraw_rewards_bulk(
         Some(last) => last.to_string(),
         None => String::from(""),
     };
-    // TODO: Should we return the output as an attribute like I did here, or in
-    // the data field of the response? Ask Carlos.
+    
+    // return last address to indicate the next start_after_address
     Ok(Response::new().add_attribute("last_address", last_address))
 }
 
