@@ -10,7 +10,6 @@ use std::convert::TryInto;
 
 // seconds in a day, make time discrete per day
 pub const TIME_UNIT: u64 = 60 * 60 * 24;
-pub const REDEMPTION_TIME: u64 = TIME_UNIT * 21u64;
 
 // we set cap the iterations to check the vests
 // in normal conditons, with a dality bulk execution,
@@ -71,7 +70,8 @@ pub fn _withdraw_rewards_single(
     )?;
 
     if !to_withdraw.is_zero() {
-        let mut end_time = env.block.time.seconds() + REDEMPTION_TIME;
+        let cfg = CONFIG.load(deps.storage)?;
+        let mut end_time = env.block.time.seconds() + cfg.vesting_period;
         end_time -= end_time % TIME_UNIT;
 
         let orig_vest = SCHEDULED_VEST

@@ -43,6 +43,7 @@ pub fn instantiate(
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
         yluna_staking: deps.api.addr_validate(&msg.yluna_staking)?,
         yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
+        vesting_period: msg.vesting_period,
         boost_contract: deps.api.addr_validate(&msg.boost_contract)?,
         base_distribution_schedule: msg.base_distribution_schedule,
         boost_distribution_schedule: msg.boost_distribution_schedule,
