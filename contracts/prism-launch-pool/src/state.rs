@@ -46,6 +46,10 @@ pub struct Config {
     pub boost_contract: Addr,
     pub base_distribution_schedule: (u64, u64, Uint128),
     pub boost_distribution_schedule: (u64, u64, Uint128),
+    /// An attempt to bond less than this amount will return an error. Useful
+    /// to disallow trolls from creating 1 million addresses with 1 µ-yLuna each
+    /// just to make `withdraw_rewards_bulk` more expensive.
+    pub min_bond_amount: Uint128,
 }
 
 impl Config {

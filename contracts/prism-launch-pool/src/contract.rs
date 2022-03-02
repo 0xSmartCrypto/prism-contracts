@@ -47,6 +47,7 @@ pub fn instantiate(
         boost_contract: deps.api.addr_validate(&msg.boost_contract)?,
         base_distribution_schedule: msg.base_distribution_schedule,
         boost_distribution_schedule: msg.boost_distribution_schedule,
+        min_bond_amount: msg.min_bonding_amount,
     };
 
     if msg.base_distribution_schedule.0 > msg.base_distribution_schedule.1 {
@@ -206,6 +207,16 @@ pub fn bond(
     amount: Uint128,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
+
+    if amount < cfg.min_bond_amount {
+        return Err(ContractError::InvalidBond {
+            reason: format!(
+                "bond amount too low; must be at least {}",
+                cfg.min_bond_amount.u128()
+            ),
+        });
+    }
+
     update_reward_indexes(deps.storage, &env, &cfg)?;
 
     // accumulate accrued rewards
@@ -225,8 +236,8 @@ pub fn bond(
     })?;
 
     // update boost weight
-    let boost_amount =
-        query_boost_amount(&deps.querier, &cfg.boost_contract, &sender).unwrap_or(Uint128::zero());
+    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, &sender)
+        .unwrap_or_else(|_| Uint128::zero());
     let new_boost_weight =
         Uint128::from((new_bond_amount.u128() * boost_amount.u128()).integer_sqrt());
 
@@ -302,7 +313,7 @@ pub fn unbond(
 
     // update boost weight
     let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, &info.sender)
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
     let new_boost_weight =
         Uint128::from((new_bond_amount.u128() * boost_amount.u128()).integer_sqrt());
 
@@ -362,7 +373,7 @@ pub fn activate_boost(
 
     // update boost weight
     let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, &info.sender)
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
     let new_boost_weight =
         Uint128::from((current_bond.u128() * boost_amount.u128()).integer_sqrt());
 

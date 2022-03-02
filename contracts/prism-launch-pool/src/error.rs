@@ -12,6 +12,9 @@ pub enum ContractError {
     #[error("Invalid distribution schedule")]
     InvalidDistributionSchedule {},
 
+    #[error("Invalid bond amount: {reason}")]
+    InvalidBond { reason: String },
+
     #[error("Invalid unbond amount: {reason}")]
     InvalidUnbond { reason: String },
 

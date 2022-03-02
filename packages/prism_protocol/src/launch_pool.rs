@@ -21,6 +21,9 @@ pub struct InstantiateMsg {
     // distribute linearly
     pub base_distribution_schedule: (u64, u64, Uint128),
     pub boost_distribution_schedule: (u64, u64, Uint128),
+    // Attempts to bond less than this amount will result in an error.
+    // Units: µ-yLunas.
+    pub min_bonding_amount: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
