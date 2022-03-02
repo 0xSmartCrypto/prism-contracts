@@ -8,8 +8,8 @@ You can think about this contract as an alternative to the [yasset-staking][1] c
 1) She can stake in the [yasset-staking][1] contract and get yield rewards over time; or
 2) She can stake it in this contract and get PRISM tokens over time.
 ## ExecuteMsg:
-  - **Bond** (Cw20 receive hook): This method bonds y-assets in return for PRISM rewards.  The bonded assets are immediately bonded with the [yasset-staking](/contracts/ prism-yasset-staking) contract.
-  - **Unbond**: Allows users to unbond their previously bonded y-assets.  There is no unbonding period, the corresponding y-asset tokens are immediately unstaked from the yasset-staking contract and transferred back to the user.
+  - **Bond** (Cw20 receive hook): This method bonds y-assets in return for PRISM rewards.  The bonded assets are immediately bonded with the [yasset-staking][1] contract.
+  - **Unbond**: Allows users to unbond their previously bonded y-assets.  There is no unbonding period, the corresponding y-asset tokens are immediately unstaked from the [yasset-staking][1] contract and transferred back to the user.
   - **WithdrawRewards**: This method initiates the PRISM reward withdrawal process.  After calling this method, users must wait 30 days for their PRISM rewards to become fully vested.  After the 30-day vesting period, the user can call ClaimWithdrawnRewards in order to receive their PRISM rewards.
   - **ClaimWithdrawnRewards**: This method will send all vested PRISM tokens to the claiming user.  WithdrawRewards should be called prior to this method in order to begin the vesting process.
   - **AdminWithdrawRewards**: This method will claim our staking rewards from the [yasset-staking][1] contract and then issue an AdminSendWithdrawnRewards message to send those rewards to the contract owner.  Must be called by Admin user.

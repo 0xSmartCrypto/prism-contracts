@@ -37,11 +37,14 @@ impl DistributionStatus {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    // Authorized to execute AdminWithdrawRewards. Usually a human.
     pub owner: Addr,
+    // Authorized to execute WithdrawRewardsBulk. Usually a bot.
     pub operator: Addr,
     pub prism_token: Addr,
     pub yluna_staking: Addr,
     pub yluna_token: Addr,
+    // How long rewards take to vest, in seconds.
     pub vesting_period: u64,
     pub boost_contract: Addr,
     pub base_distribution_schedule: (u64, u64, Uint128),

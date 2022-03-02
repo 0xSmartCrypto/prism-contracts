@@ -1,6 +1,6 @@
 use crate::contract::{_pull_pending_rewards, update_reward_indexes};
 use crate::error::ContractError;
-use crate::state::{CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
+use crate::state::{Config, CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
 use cosmwasm_std::Addr;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage, Uint128};
 use cw_asset::{Asset, AssetInfo};
@@ -11,9 +11,9 @@ use std::convert::TryInto;
 // seconds in a day, make time discrete per day
 pub const TIME_UNIT: u64 = 60 * 60 * 24;
 
-// we set cap the iterations to check the vests
-// in normal conditons, with a dality bulk execution,
-// for most users there should be a maximum of 30 entries
+// Cap the number of iterations when processing vested entries. Under normal
+// conditions, with a daily bulk execution, for most users there should be a
+// maximum of 30 entries.
 pub const MAX_UPDATE_VEST_PER_TX: u64 = 50u64;
 
 pub fn update_vest(storage: &mut dyn Storage, current_time: u64, address: &str) -> StdResult<()> {
@@ -49,12 +49,13 @@ pub fn withdraw_rewards(
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     update_reward_indexes(deps.storage, &env, &cfg)?;
-    _withdraw_rewards_single(&mut deps, &env, &info.sender)
+    _withdraw_rewards_single(&mut deps, &env, &cfg, &info.sender)
 }
 
-pub fn _withdraw_rewards_single(
+fn _withdraw_rewards_single(
     deps: &mut DepsMut,
     env: &Env,
+    cfg: &Config,
     human_address: &Addr,
 ) -> Result<Response, ContractError> {
     let mut reward_info = _pull_pending_rewards(deps.storage, human_address)?;
@@ -70,7 +71,6 @@ pub fn _withdraw_rewards_single(
     )?;
 
     if !to_withdraw.is_zero() {
-        let cfg = CONFIG.load(deps.storage)?;
         let mut end_time = env.block.time.seconds() + cfg.vesting_period;
         end_time -= end_time % TIME_UNIT;
 
@@ -135,7 +135,7 @@ pub fn withdraw_rewards_bulk(
         .collect();
 
     for address in &addresses {
-        _withdraw_rewards_single(&mut deps, &env, address)?;
+        _withdraw_rewards_single(&mut deps, &env, &cfg, address)?;
     }
 
     // Return last address that was processed, for next call.

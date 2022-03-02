@@ -88,6 +88,18 @@ pub fn execute(
     }
 }
 
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::DistributionStatus {} => to_binary(&query_distribution_status(deps, env)?),
+        QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
+        QueryMsg::VestingStatus { staker_addr } => {
+            to_binary(&query_vesting_status(deps, env, staker_addr)?)
+        }
+    }
+}
+
 pub fn receive_cw20(
     deps: DepsMut,
     env: Env,
@@ -107,18 +119,6 @@ pub fn receive_cw20(
             }
 
             bond(deps, env, cw20_sender, cw20_msg.amount)
-        }
-    }
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::DistributionStatus {} => to_binary(&query_distribution_status(deps, env)?),
-        QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
-        QueryMsg::VestingStatus { staker_addr } => {
-            to_binary(&query_vesting_status(deps, env, staker_addr)?)
         }
     }
 }
@@ -220,12 +220,12 @@ pub fn bond(
     update_reward_indexes(deps.storage, &env, &cfg)?;
 
     // accumulate accrued rewards
-    let mut reward_info = _pull_pending_rewards(deps.storage, &sender)?;
+    let reward_info = _pull_pending_rewards(deps.storage, &sender)?;
 
     // update yluna bond amount
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, sender.as_bytes())
-        .unwrap_or_default();
+        .unwrap_or(Uint128::zero());
     let new_bond_amount = current_bond + amount;
     BOND_AMOUNTS.save(deps.storage, sender.as_bytes(), &new_bond_amount)?;
 
@@ -235,24 +235,13 @@ pub fn bond(
         Ok(item)
     })?;
 
-    // update boost weight
-    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, &sender)
-        .unwrap_or_else(|_| Uint128::zero());
-    let new_boost_weight =
-        Uint128::from((new_bond_amount.u128() * boost_amount.u128()).integer_sqrt());
-
-    BOOST_DISTRIBUTION_STATUS.update(
-        deps.storage,
-        |mut item| -> StdResult<DistributionStatus> {
-            item.total_weight = item.total_weight - reward_info.boost_weight + new_boost_weight;
-
-            Ok(item)
-        },
+    let boost_amount = update_and_save_boost_weight_and_reward_info(
+        deps,
+        &cfg,
+        &sender,
+        &new_bond_amount,
+        reward_info,
     )?;
-
-    reward_info.boost_weight = new_boost_weight;
-    reward_info.active_boost = boost_amount;
-    REWARD_INFO.save(deps.storage, sender.as_bytes(), &reward_info)?;
 
     Ok(Response::new()
         .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
@@ -281,7 +270,7 @@ pub fn unbond(
     update_reward_indexes(deps.storage, &env, &cfg)?;
 
     // accumulate accrued rewards
-    let mut reward_info = _pull_pending_rewards(deps.storage, &info.sender)?;
+    let reward_info = _pull_pending_rewards(deps.storage, &info.sender)?;
 
     // update yluna bond amount
     let current_bond = BOND_AMOUNTS
@@ -311,24 +300,13 @@ pub fn unbond(
         Ok(item)
     })?;
 
-    // update boost weight
-    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, &info.sender)
-        .unwrap_or_else(|_| Uint128::zero());
-    let new_boost_weight =
-        Uint128::from((new_bond_amount.u128() * boost_amount.u128()).integer_sqrt());
-
-    BOOST_DISTRIBUTION_STATUS.update(
-        deps.storage,
-        |mut item| -> StdResult<DistributionStatus> {
-            item.total_weight = item.total_weight - reward_info.boost_weight + new_boost_weight;
-
-            Ok(item)
-        },
+    let boost_amount = update_and_save_boost_weight_and_reward_info(
+        deps,
+        &cfg,
+        &info.sender,
+        &new_bond_amount,
+        reward_info,
     )?;
-
-    reward_info.boost_weight = new_boost_weight;
-    reward_info.active_boost = boost_amount;
-    REWARD_INFO.save(deps.storage, info.sender.as_bytes(), &reward_info)?;
 
     Ok(Response::new()
         .add_messages(vec![
@@ -364,34 +342,25 @@ pub fn activate_boost(
     update_reward_indexes(deps.storage, &env, &cfg)?;
 
     // accumulate accrued rewards
-    let mut reward_info = _pull_pending_rewards(deps.storage, &info.sender)?;
+    let reward_info = _pull_pending_rewards(deps.storage, &info.sender)?;
 
     // update yluna bond amount
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, info.sender.as_bytes())
-        .unwrap_or_default();
+        .unwrap_or(Uint128::zero());
 
     // update boost weight
-    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, &info.sender)
-        .unwrap_or_else(|_| Uint128::zero());
-    let new_boost_weight =
-        Uint128::from((current_bond.u128() * boost_amount.u128()).integer_sqrt());
-
-    BOOST_DISTRIBUTION_STATUS.update(
-        deps.storage,
-        |mut item| -> StdResult<DistributionStatus> {
-            item.total_weight = item.total_weight - reward_info.boost_weight + new_boost_weight;
-
-            Ok(item)
-        },
+    let boost_amount = update_and_save_boost_weight_and_reward_info(
+        deps,
+        &cfg,
+        &info.sender,
+        &current_bond,
+        reward_info,
     )?;
-
-    reward_info.boost_weight = new_boost_weight;
-    reward_info.active_boost = boost_amount;
-    REWARD_INFO.save(deps.storage, info.sender.as_bytes(), &reward_info)?;
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "activate_boost"),
+        attr("total_user_bonded", current_bond.to_string()),
         attr("boost_amount", boost_amount.to_string()),
     ]))
 }
@@ -552,4 +521,35 @@ pub fn query_vesting_status(
         scheduled_vests,
         withdrawable: can_withdraw,
     })
+}
+
+// Computes up-to-date values for BOOST_DISTRIBUTION_STATUS.total_weight as well as user's REWARD_INFO entry, and saves
+// both to storage. Returns user's boost amount, which is freshly queried from the Boost contract.
+fn update_and_save_boost_weight_and_reward_info(
+    deps: DepsMut,
+    cfg: &Config,
+    sender: &Addr,
+    current_bound_amount: &Uint128,
+    mut reward_info: RewardInfo,
+) -> Result<Uint128, ContractError> {
+    // update boost weight
+    let boost_amount =
+        query_boost_amount(&deps.querier, &cfg.boost_contract, sender).unwrap_or(Uint128::zero());
+    let new_boost_weight =
+        Uint128::from((current_bound_amount.u128() * boost_amount.u128()).integer_sqrt());
+
+    BOOST_DISTRIBUTION_STATUS.update(
+        deps.storage,
+        |mut item| -> StdResult<DistributionStatus> {
+            item.total_weight = item.total_weight - reward_info.boost_weight + new_boost_weight;
+
+            Ok(item)
+        },
+    )?;
+
+    reward_info.boost_weight = new_boost_weight;
+    reward_info.active_boost = boost_amount;
+    REWARD_INFO.save(deps.storage, sender.as_bytes(), &reward_info)?;
+
+    Ok(boost_amount)
 }
