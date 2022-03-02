@@ -321,6 +321,7 @@ fn withdraw_rewards_with_no_bond() {
         )
         .unwrap(),
         RewardInfoResponse {
+            bond_amount: Uint128::from(100u128),
             base_index: Decimal::from_ratio(500000u128, 100u128),
             pending_reward: Uint128::zero(),
             boost_index: Decimal::zero(),
@@ -636,6 +637,7 @@ fn bond() {
         )
         .unwrap(),
         RewardInfoResponse {
+            bond_amount: Uint128::from(100u128),
             base_index: Decimal::zero(),
             pending_reward: Uint128::zero(),
             boost_index: Decimal::zero(),
@@ -852,6 +854,7 @@ fn unbond() {
         )
         .unwrap(),
         RewardInfoResponse {
+            bond_amount: Uint128::zero(),
             base_index: Decimal::from_ratio(5_000u128, 100u128),
             pending_reward: Uint128::from(5_000u128),
             boost_index: Decimal::zero(),

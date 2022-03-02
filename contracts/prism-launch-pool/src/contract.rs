@@ -16,7 +16,7 @@ use cw_asset::{Asset, AssetInfo};
 use integer_sqrt::IntegerSquareRoot;
 use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, DistributionStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
-    VestingStatusResponse,
+    RewardInfoResponse, VestingStatusResponse,
 };
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
@@ -115,10 +115,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::DistributionStatus {} => to_binary(&query_distribution_status(deps, env)?),
-        QueryMsg::RewardInfo { staker_addr } => {
-            let staker_addr = deps.api.addr_validate(&staker_addr)?;
-            to_binary(&_pull_pending_rewards(deps.storage, &staker_addr)?.as_res())
-        }
+        QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
         QueryMsg::VestingStatus { staker_addr } => {
             to_binary(&query_vesting_status(deps, env, staker_addr)?)
         }
@@ -498,6 +495,19 @@ pub fn query_distribution_status(deps: Deps, env: Env) -> StdResult<Distribution
         base: base_distribution_status.as_res(),
         boost: boost_distribution_status.as_res(),
     })
+}
+
+pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInfoResponse> {
+    let staker_addr = deps.api.addr_validate(&staker_addr)?;
+
+    // TODO: we should consider updating the distribution status to get more accurate result
+
+    let bond_amount = BOND_AMOUNTS
+        .load(deps.storage, staker_addr.as_bytes())
+        .unwrap_or_else(|_| Uint128::zero());
+    let reward_info = _pull_pending_rewards(deps.storage, &staker_addr)?;
+
+    Ok(reward_info.as_res(bond_amount))
 }
 
 pub fn query_vesting_status(

@@ -5,6 +5,7 @@
   "required": [
     "active_boost",
     "base_index",
+    "bond_amount",
     "boost_index",
     "boost_weight",
     "pending_reward"
@@ -15,6 +16,9 @@
     },
     "base_index": {
       "$ref": "#/definitions/Decimal"
+    },
+    "bond_amount": {
+      "$ref": "#/definitions/Uint128"
     },
     "boost_index": {
       "$ref": "#/definitions/Decimal"

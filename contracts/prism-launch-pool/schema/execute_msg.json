@@ -81,7 +81,7 @@
             "limit": {
               "description": "Process up to `limit` accounts in this call. Can be tweaked to process more or less users depending on gas fees.",
               "type": "integer",
-              "format": "uint",
+              "format": "uint64",
               "minimum": 0.0
             },
             "start_after_address": {

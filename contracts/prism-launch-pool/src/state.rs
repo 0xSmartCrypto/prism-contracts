@@ -74,8 +74,9 @@ pub struct RewardInfo {
 }
 
 impl RewardInfo {
-    pub fn as_res(&self) -> RewardInfoResponse {
+    pub fn as_res(&self, bond_amount: Uint128) -> RewardInfoResponse {
         RewardInfoResponse {
+            bond_amount,
             base_index: self.base_index,
             boost_index: self.boost_index,
             boost_weight: self.boost_weight,

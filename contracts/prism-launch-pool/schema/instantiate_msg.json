@@ -9,6 +9,7 @@
     "operator",
     "owner",
     "prism_token",
+    "vesting_period",
     "yluna_staking",
     "yluna_token"
   ],
@@ -64,6 +65,12 @@
     },
     "prism_token": {
       "type": "string"
+    },
+    "vesting_period": {
+      "description": "vesting period in seconds",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "yluna_staking": {
       "type": "string"

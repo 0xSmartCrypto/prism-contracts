@@ -109,6 +109,7 @@ pub struct DistributionInfo {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfoResponse {
+    pub bond_amount: Uint128,
     pub base_index: Decimal,
     pub boost_index: Decimal,
     pub boost_weight: Uint128,
