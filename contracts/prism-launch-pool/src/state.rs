@@ -42,6 +42,8 @@ pub struct Config {
     // Authorized to execute WithdrawRewardsBulk. Usually a bot.
     pub operator: Addr,
     pub prism_token: Addr,
+    pub xprism_token: Addr,
+    pub gov: Addr,
     pub yluna_staking: Addr,
     pub yluna_token: Addr,
     // How long rewards take to vest, in seconds.
@@ -61,6 +63,8 @@ impl Config {
             owner: self.owner.to_string(),
             operator: self.operator.to_string(),
             prism_token: self.prism_token.to_string(),
+            xprism_token: self.xprism_token.to_string(),
+            gov: self.gov.to_string(),
             yluna_staking: self.yluna_staking.to_string(),
             yluna_token: self.yluna_token.to_string(),
             vesting_period: self.vesting_period,

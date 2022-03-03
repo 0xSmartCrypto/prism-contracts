@@ -1,9 +1,10 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
 use cw_asset::Asset;
+use std::fmt;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -12,8 +13,10 @@ pub struct InstantiateMsg {
     // authorized to execute WithdrawRewardsBulk
     pub operator: String,
     pub prism_token: String,
+    pub xprism_token: String,
     pub yluna_staking: String,
     pub yluna_token: String,
+    pub gov: String,
     /// vesting period in seconds
     pub vesting_period: u64,
     pub boost_contract: String,
@@ -42,7 +45,7 @@ pub enum ExecuteMsg {
     ActivateBoost {},
 
     /// Withdraw $PRISM rewards
-    /// Starts 21 day vesting period
+    /// Starts 30 day vesting period
     WithdrawRewards {},
 
     /// Start vesting period for many accounts in a single call. See
@@ -56,7 +59,13 @@ pub enum ExecuteMsg {
         start_after_address: Option<String>,
     },
 
-    ClaimWithdrawnRewards {},
+    /// Claim rewards that have been previously withdrawn via WithdrawRewards
+    /// or WithdrawRewardsBulk.  Only vested rewards are available to be
+    /// withdrawn here.  The claim_type parameter specifies how the user
+    /// would like to receive those rewards.  
+    ClaimWithdrawnRewards {
+        claim_type: ClaimType,
+    },
 
     /// Withdraw underlying rewards from yLUNA staking contract
     AdminWithdrawRewards {},
@@ -65,6 +74,30 @@ pub enum ExecuteMsg {
     AdminSendWithdrawnRewards {
         original_balances: Vec<Asset>,
     },
+
+    BondWithBoostContractHook {
+        receiver: Addr,
+        prev_xprism_balance: Uint128,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum ClaimType {
+    /// claim rewards as Prism
+    Prism,
+
+    /// claim rewards as Xprism (via a MintXPrism gov message)
+    Xprism,
+
+    /// convert rewards to Xprism (via a MintXprism gov message), which is
+    /// then bonded with boost contract on behalf of the claiming user
+    Amps,
+}
+
+impl fmt::Display for ClaimType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -88,6 +121,8 @@ pub struct ConfigResponse {
     pub owner: String,
     pub operator: String,
     pub prism_token: String,
+    pub xprism_token: String,
+    pub gov: String,
     pub yluna_staking: String,
     pub yluna_token: String,
     pub vesting_period: u64,

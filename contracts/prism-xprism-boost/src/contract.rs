@@ -87,7 +87,15 @@ pub fn receive_cw20(
     let msg = cw20_msg.msg;
 
     match from_binary(&msg)? {
-        Cw20HookMsg::Bond {} => bond(deps, env, &cw20_msg.sender, cw20_msg.amount),
+        // if a user is specified in the Bond message, then we bond the
+        // received amount with that user.  otherwise we bond with the
+        // original cw20 sender.  This allows users/contracts to bond on
+        // behalf of another user.  An example this is inside the prism-launch
+        // pool contract when claiming rewards, we allow users to auto-bond
+        // their xprism with this contract.
+        Cw20HookMsg::Bond { user } => {
+            bond(deps, env, &user.unwrap_or(cw20_msg.sender), cw20_msg.amount)
+        }
     }
 }
 

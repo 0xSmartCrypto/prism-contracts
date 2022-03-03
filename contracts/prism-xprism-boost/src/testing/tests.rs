@@ -111,7 +111,7 @@ fn test_basic_bonding() {
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "not xprism".to_string(),
         amount: Uint128::from(100u128),
-        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond { user: None }).unwrap(),
     });
 
     let info = mock_info("addr", &[]);
@@ -124,7 +124,7 @@ fn test_basic_bonding() {
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "user".to_string(),
         amount: Uint128::from(100u128),
-        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond { user: None }).unwrap(),
     });
 
     let xprism_info = mock_info("xprism", &[]);
@@ -224,7 +224,7 @@ fn test_boost_updates() {
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "user".to_string(),
         amount: Uint128::from(100u128),
-        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond { user: None }).unwrap(),
     });
 
     let xprism_info = mock_info("xprism", &[]);
@@ -255,7 +255,7 @@ fn test_boost_updates() {
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "user".to_string(),
         amount: Uint128::from(1u128),
-        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond { user: None }).unwrap(),
     });
 
     let xprism_info = mock_info("xprism", &[]);
@@ -345,4 +345,96 @@ fn test_boost_updates() {
             kind: "prism_protocol::xprism_boost::UserInfo".into()
         }
     );
+}
+
+#[test]
+fn test_bonding_from_different_user() {
+    let mut deps = mock_dependencies(&[]);
+    // 10 boost per hour
+    let msg = InstantiateMsg {
+        owner: "owner".to_string(),
+        xprism_token: "xprism".to_string(),
+        boost_per_hour: Decimal::one(),
+        max_boost_per_xprism: Uint128::from(100u128),
+    };
+
+    let info = mock_info("addr", &[]);
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // user00001 bond 200 at T=100
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(100u64);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "user0001".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond { user: None }).unwrap(),
+    });
+
+    let xprism_info = mock_info("xprism", &[]);
+    execute(deps.as_mut(), env.clone(), xprism_info, msg).unwrap();
+
+    let res = query(
+        deps.as_ref(),
+        env,
+        QueryMsg::GetBoost {
+            user: Addr::unchecked("user0001"),
+        },
+    )
+    .unwrap();
+    let user_info: UserInfo = from_binary(&res).unwrap();
+    assert_eq!(
+        user_info,
+        UserInfo {
+            amt_bonded: Uint128::from(100u128),
+            total_boost: Uint128::zero(),
+            last_updated: 100u64,
+            boost_accrual_start_time: 100u64,
+        }
+    );
+
+    // user00002 bonds 100 at T=200 on behalf of user0001
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(200u64);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "user0002".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {
+            user: Some("user0001".to_string()),
+        })
+        .unwrap(),
+    });
+
+    let xprism_info = mock_info("xprism", &[]);
+    execute(deps.as_mut(), env.clone(), xprism_info, msg).unwrap();
+
+    // query user0001, verify 200 bonded
+    let res = query(
+        deps.as_ref(),
+        env.clone(),
+        QueryMsg::GetBoost {
+            user: Addr::unchecked("user0001"),
+        },
+    )
+    .unwrap();
+    let user_info: UserInfo = from_binary(&res).unwrap();
+    assert_eq!(
+        user_info,
+        UserInfo {
+            amt_bonded: Uint128::from(200u128),
+            total_boost: Uint128::from(2u128),
+            last_updated: 200u64,
+            boost_accrual_start_time: 100u64,
+        }
+    );
+
+    // query user0002, verify nothing bonded
+    let err = query(
+        deps.as_ref(),
+        env,
+        QueryMsg::GetBoost {
+            user: Addr::unchecked("user0002"),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, StdError::NotFound { .. }));
 }

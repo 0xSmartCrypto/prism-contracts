@@ -34,7 +34,7 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
     // add xprism
-    Bond {},
+    Bond { user: Option<String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

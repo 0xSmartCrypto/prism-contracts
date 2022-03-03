@@ -4,7 +4,9 @@ use crate::state::{
     Config, DistributionStatus, RewardInfo, BASE_DISTRIBUTION_STATUS, BOND_AMOUNTS,
     BOOST_DISTRIBUTION_STATUS, CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST,
 };
-use crate::vest::{claim_withdrawn_rewards, withdraw_rewards, withdraw_rewards_bulk};
+use crate::vest::{
+    bond_with_boost_contract_hook, claim_withdrawn_rewards, withdraw_rewards, withdraw_rewards_bulk,
+};
 use cosmwasm_std::{
     attr, entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut,
     Env, MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg,
@@ -41,6 +43,8 @@ pub fn instantiate(
         owner: deps.api.addr_validate(&msg.owner)?,
         operator: deps.api.addr_validate(&msg.operator)?,
         prism_token: deps.api.addr_validate(&msg.prism_token)?,
+        xprism_token: deps.api.addr_validate(&msg.xprism_token)?,
+        gov: deps.api.addr_validate(&msg.gov)?,
         yluna_staking: deps.api.addr_validate(&msg.yluna_staking)?,
         yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
         vesting_period: msg.vesting_period,
@@ -76,7 +80,9 @@ pub fn execute(
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::ActivateBoost {} => activate_boost(deps, env, info),
         ExecuteMsg::WithdrawRewards {} => withdraw_rewards(deps, env, info),
-        ExecuteMsg::ClaimWithdrawnRewards {} => claim_withdrawn_rewards(deps, env, info),
+        ExecuteMsg::ClaimWithdrawnRewards { claim_type } => {
+            claim_withdrawn_rewards(deps, env, info, claim_type)
+        }
         ExecuteMsg::AdminWithdrawRewards {} => admin_withdraw_rewards(deps, env, info),
         ExecuteMsg::AdminSendWithdrawnRewards { original_balances } => {
             admin_send_withdrawn_rewards(deps, env, info, &original_balances)
@@ -85,6 +91,10 @@ pub fn execute(
             limit,
             start_after_address,
         } => withdraw_rewards_bulk(deps, env, info, limit, start_after_address),
+        ExecuteMsg::BondWithBoostContractHook {
+            receiver,
+            prev_xprism_balance,
+        } => bond_with_boost_contract_hook(deps, info, env, receiver, prev_xprism_balance),
     }
 }
 

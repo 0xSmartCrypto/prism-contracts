@@ -6,10 +6,13 @@
     "base_distribution_schedule",
     "boost_contract",
     "boost_distribution_schedule",
+    "gov",
+    "min_bonding_amount",
     "operator",
     "owner",
     "prism_token",
     "vesting_period",
+    "xprism_token",
     "yluna_staking",
     "yluna_token"
   ],
@@ -57,6 +60,12 @@
       "maxItems": 3,
       "minItems": 3
     },
+    "gov": {
+      "type": "string"
+    },
+    "min_bonding_amount": {
+      "$ref": "#/definitions/Uint128"
+    },
     "operator": {
       "type": "string"
     },
@@ -71,6 +80,9 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
+    },
+    "xprism_token": {
+      "type": "string"
     },
     "yluna_staking": {
       "type": "string"

@@ -103,7 +103,15 @@
       ],
       "properties": {
         "claim_withdrawn_rewards": {
-          "type": "object"
+          "type": "object",
+          "required": [
+            "claim_type"
+          ],
+          "properties": {
+            "claim_type": {
+              "$ref": "#/definitions/ClaimType"
+            }
+          }
         }
       },
       "additionalProperties": false
@@ -139,6 +147,30 @@
               "items": {
                 "$ref": "#/definitions/AssetBase_for_Addr"
               }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "bond_with_boost_contract_hook"
+      ],
+      "properties": {
+        "bond_with_boost_contract_hook": {
+          "type": "object",
+          "required": [
+            "prev_xprism_balance",
+            "receiver"
+          ],
+          "properties": {
+            "prev_xprism_balance": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "receiver": {
+              "$ref": "#/definitions/Addr"
             }
           }
         }
@@ -209,6 +241,14 @@
     "Binary": {
       "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
       "type": "string"
+    },
+    "ClaimType": {
+      "type": "string",
+      "enum": [
+        "Prism",
+        "Xprism",
+        "Amps"
+      ]
     },
     "Cw20ReceiveMsg": {
       "description": "Cw20ReceiveMsg should be de/serialized under `Receive()` variant in a ExecuteMsg",

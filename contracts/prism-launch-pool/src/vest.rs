@@ -2,10 +2,18 @@ use crate::contract::{_pull_pending_rewards, update_reward_indexes};
 use crate::error::ContractError;
 use crate::state::{Config, CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
 use cosmwasm_std::Addr;
-use cosmwasm_std::{DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage, Uint128};
+use cosmwasm_std::{
+    to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Storage,
+    Uint128, WasmMsg,
+};
+use cw20::Cw20ExecuteMsg;
 use cw_asset::{Asset, AssetInfo};
 use cw_storage_plus::Bound;
+use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
 use prism_protocol::internal::de::deserialize_key;
+use prism_protocol::launch_pool::{ClaimType, ExecuteMsg};
+use prism_protocol::xprism_boost::Cw20HookMsg as BoostContractCw20HookMsg;
+use prismswap::querier::query_token_balance;
 use std::convert::TryInto;
 
 // seconds in a day, make time discrete per day
@@ -148,10 +156,15 @@ pub fn withdraw_rewards_bulk(
     Ok(Response::new().add_attribute("last_address", last_address))
 }
 
+/// Claim rewards as specified by the claim type, where the claim type can be
+/// either Prism (claim directly as prism), Xprism (claim as xprism), or
+/// Amps (claim as xprism and then bond that xprism with boost contract)
+/// Any user can execute
 pub fn claim_withdrawn_rewards(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
+    claim_type: ClaimType,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     update_vest(deps.storage, env.block.time.seconds(), info.sender.as_str())?;
@@ -162,14 +175,128 @@ pub fn claim_withdrawn_rewards(
         });
     }
 
+    let prism_asset = Asset {
+        info: AssetInfo::Cw20(cfg.prism_token.clone()),
+        amount,
+    };
+
+    let msgs = match claim_type {
+        ClaimType::Prism => {
+            // send prism rewards directly to user
+            vec![prism_asset.transfer_msg(info.sender.clone())?]
+        }
+        ClaimType::Xprism => {
+            // mint xprism from user's prism rewards and send xprism to the user
+            vec![CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.prism_token.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: cfg.gov.to_string(),
+                    amount: prism_asset.amount,
+                    msg: to_binary(&GovCw20HookMsg::MintXprism {
+                        receiver: Some(info.sender.to_string()),
+                    })?,
+                })?,
+                funds: vec![],
+            })]
+        }
+        ClaimType::Amps => {
+            // mint xprism from user's prism rewards and send xprism back to
+            // this contract, then issue a BondWithBoostContractHook which will
+            // bond the xprism balance difference with the xprism_boost contract.
+
+            // we should not have any xprism balance at this point, but safer
+            // to send this to the hook anyway.
+            let xprism_balance =
+                query_token_balance(&deps.querier, &cfg.xprism_token, &env.contract.address)?;
+
+            vec![
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: cfg.prism_token.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::Send {
+                        contract: cfg.gov.to_string(),
+                        amount: prism_asset.amount,
+                        msg: to_binary(&GovCw20HookMsg::MintXprism {
+                            receiver: Some(env.contract.address.to_string()),
+                        })?,
+                    })?,
+                    funds: vec![],
+                }),
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: env.contract.address.to_string(),
+                    msg: to_binary(&ExecuteMsg::BondWithBoostContractHook {
+                        receiver: info.sender.clone(),
+                        prev_xprism_balance: xprism_balance,
+                    })?,
+                    funds: vec![],
+                }),
+            ]
+        }
+    };
+
+    // reset pending withraw to zero
     PENDING_WITHDRAW.save(
         deps.storage,
         info.sender.to_string().as_bytes(),
         &Uint128::zero(),
     )?;
-    let to_withdraw = Asset {
-        info: AssetInfo::Cw20(cfg.prism_token),
-        amount,
+
+    Ok(Response::new()
+        .add_messages(msgs)
+        .add_attribute("action", "claim_withdrawn_rewards")
+        .add_attribute("claim_type", claim_type.to_string())
+        .add_attribute("prism_reward_claimed", amount))
+}
+
+/// Hook to bond xprism with the boost contract.  This hook is invoked
+/// when a user calls ClaimWithdrawnRewards with ClaimType=Amps.  For the
+/// amount to bond, we use our xprism balance minus any previous balance
+/// computed from the ClaimWithdrawnRewards method.  We bond with the
+/// boost contract on behalf of the original claimer.  
+/// Only contract can execute
+pub fn bond_with_boost_contract_hook(
+    deps: DepsMut,
+    info: MessageInfo,
+    env: Env,
+    receiver: Addr,
+    prev_xprism_balance: Uint128,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // there's no reason for anyone else to call this
+    if info.sender != env.contract.address {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    // query our xprism balance and subtract previous balance
+    let xprism_reward =
+        query_token_balance(&deps.querier, &cfg.xprism_token, &env.contract.address)?
+            .checked_sub(prev_xprism_balance)
+            .map_err(|e| StdError::Overflow { source: e })?;
+
+    // don't send any messages if xprism balance is zero, but not throwing
+    // an error here since I guess it's plausible that a user has a single
+    // prism as a reward and the MintXPrism doesn't yield any xprism
+    let messages = if xprism_reward != Uint128::zero() {
+        // send prism balance to boost contract and issue a bond call with
+        // user set to the receiver as configured inside claim_withdraw_rewards
+        vec![CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: cfg.xprism_token.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: cfg.boost_contract.to_string(),
+                amount: xprism_reward,
+                msg: to_binary(&BoostContractCw20HookMsg::Bond {
+                    user: Some(receiver.to_string()),
+                })?,
+            })?,
+            funds: vec![],
+        })]
+    } else {
+        vec![]
     };
-    Ok(Response::new().add_message(to_withdraw.transfer_msg(info.sender)?))
+
+    let res = Response::new()
+        .add_messages(messages)
+        .add_attribute("action", "bond_with_boost_contract_hook")
+        .add_attribute("bond_amount", xprism_reward);
+    Ok(res)
 }
