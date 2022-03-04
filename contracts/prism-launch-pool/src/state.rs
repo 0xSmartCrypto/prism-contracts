@@ -37,7 +37,8 @@ impl DistributionStatus {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
-    // Authorized to execute AdminWithdrawRewards. Usually a human.
+    // Authorized to execute AdminWithdrawRewards and UpdateConfig. Usually a
+    // human.
     pub owner: Addr,
     // Authorized to execute WithdrawRewardsBulk. Usually a bot.
     pub operator: Addr,
@@ -71,6 +72,7 @@ impl Config {
             boost_contract: self.boost_contract.to_string(),
             base_distribution_schedule: self.base_distribution_schedule,
             boost_distribution_schedule: self.boost_distribution_schedule,
+            min_bond_amount: self.min_bond_amount,
         }
     }
 }

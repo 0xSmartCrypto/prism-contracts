@@ -26,7 +26,7 @@ pub struct InstantiateMsg {
     pub boost_distribution_schedule: (u64, u64, Uint128),
     // Attempts to bond less than this amount will result in an error.
     // Units: µ-yLunas.
-    pub min_bonding_amount: Uint128,
+    pub min_bond_amount: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -69,7 +69,7 @@ pub enum ExecuteMsg {
     /// Claim rewards that have been previously withdrawn via WithdrawRewards
     /// or WithdrawRewardsBulk.  Only vested rewards are available to be
     /// withdrawn here.  The claim_type parameter specifies how the user
-    /// would like to receive those rewards.  
+    /// would like to receive those rewards.
     ClaimWithdrawnRewards {
         claim_type: ClaimType,
     },
@@ -82,6 +82,13 @@ pub enum ExecuteMsg {
         original_balances: Vec<Asset>,
     },
 
+    /// Allows admin to update contract's config.
+    UpdateConfig {
+        min_bond_amount: Option<Uint128>,
+    },
+
+    /// Hook to bond xprism with the boost contract.  This hook is invoked
+    /// when a user calls ClaimWithdrawnRewards with ClaimType=Amps.
     BondWithBoostContractHook {
         receiver: Addr,
         prev_xprism_balance: Uint128,
@@ -136,6 +143,7 @@ pub struct ConfigResponse {
     pub boost_contract: String,
     pub base_distribution_schedule: (u64, u64, Uint128),
     pub boost_distribution_schedule: (u64, u64, Uint128),
+    pub min_bond_amount: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

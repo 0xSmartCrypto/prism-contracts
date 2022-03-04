@@ -7,6 +7,7 @@
     "boost_contract",
     "boost_distribution_schedule",
     "gov",
+    "min_bond_amount",
     "operator",
     "owner",
     "prism_token",
@@ -61,6 +62,9 @@
     },
     "gov": {
       "type": "string"
+    },
+    "min_bond_amount": {
+      "$ref": "#/definitions/Uint128"
     },
     "operator": {
       "type": "string"

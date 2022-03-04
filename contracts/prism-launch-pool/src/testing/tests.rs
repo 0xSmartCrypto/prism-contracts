@@ -51,7 +51,7 @@ fn proper_initialization() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(1_000_u128),
+        min_bond_amount: Uint128::from(1_000_u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -71,7 +71,7 @@ fn proper_initialization() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(1_000_u128),
+        min_bond_amount: Uint128::from(1_000_u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -91,7 +91,7 @@ fn proper_initialization() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(1_000_u128),
+        min_bond_amount: Uint128::from(1_000u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -108,12 +108,13 @@ fn proper_initialization() {
             prism_token: "prism0000".to_string(),
             xprism_token: "xprism0000".to_string(),
             gov: "gov0000".to_string(),
-            base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
-            boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            base_distribution_schedule: (100u64, 200u64, Uint128::from(1_000_000u128)),
+            boost_distribution_schedule: (100u64, 200u64, Uint128::from(1_000_000u128)),
             boost_contract: "boost0000".to_string(),
             yluna_staking: "ylunastaking0000".to_string(),
             yluna_token: "ylunatoken0000".to_string(),
             vesting_period: DEFAULT_VESTING_PERIOD,
+            min_bond_amount: Uint128::from(1_000u128),
         }
     );
 }
@@ -134,7 +135,7 @@ fn withdraw_rewards() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::zero(),
+        min_bond_amount: Uint128::zero(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -252,7 +253,7 @@ fn withdraw_rewards_with_no_bond() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(1_u128),
+        min_bond_amount: Uint128::from(1_u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -385,7 +386,7 @@ fn withdraw_rewards_bulk_auth() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: 100u64,
-        min_bonding_amount: Uint128::from(1_000_u128),
+        min_bond_amount: Uint128::from(1_000_u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -433,7 +434,7 @@ fn withdraw_rewards_bulk() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: 21 * TIME_UNIT,
-        min_bonding_amount: Uint128::from(1_u128),
+        min_bond_amount: Uint128::from(1_u128),
     };
     let info = mock_info("addr0000", &[]);
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -635,7 +636,7 @@ fn bond() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100_u128),
+        min_bond_amount: Uint128::from(100_u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -740,7 +741,7 @@ fn unbond() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(99_u128),
+        min_bond_amount: Uint128::from(99_u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -954,7 +955,7 @@ fn claim_withdrawn_rewards() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100_u128),
+        min_bond_amount: Uint128::from(100_u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -1087,7 +1088,7 @@ fn admin_withdraw_rewards() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(1_000_u128),
+        min_bond_amount: Uint128::from(1_000_u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -1346,7 +1347,7 @@ fn rewards_index_from_hell() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: 21 * TIME_UNIT,
-        min_bonding_amount: Uint128::from(1_u128),
+        min_bond_amount: Uint128::from(1_u128),
     };
     let info = mock_info("addr0000", &[]);
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -1739,9 +1740,10 @@ fn rewards_index_from_hell() {
 }
 
 #[test]
-fn test_claim_withdrawn_rewards_as_xprism() {
+fn test_update_config() {
     let mut deps = mock_dependencies(&[]);
 
+    // successful init
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
         operator: "op0000".to_string(),
@@ -1754,7 +1756,119 @@ fn test_claim_withdrawn_rewards_as_xprism() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(1_000u128),
+    };
+
+    let info = mock_info("addr0000", &[]);
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    assert_eq!(
+        from_binary::<ConfigResponse>(
+            &query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()
+        )
+        .unwrap(),
+        ConfigResponse {
+            owner: "owner0000".to_string(),
+            operator: "op0000".to_string(),
+            prism_token: "prism0000".to_string(),
+            xprism_token: "xprism0000".to_string(),
+            gov: "gov0000".to_string(),
+            base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            boost_contract: "boost0000".to_string(),
+            yluna_staking: "ylunastaking0000".to_string(),
+            yluna_token: "ylunatoken0000".to_string(),
+            vesting_period: DEFAULT_VESTING_PERIOD,
+            min_bond_amount: Uint128::from(1_000u128),
+        }
+    );
+
+    // Sad path: Unauthorized.
+    let msg = ExecuteMsg::UpdateConfig {
+        min_bond_amount: Some(Uint128::from(222u128)),
+    };
+    let info = mock_info("eve0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::Unauthorized {});
+
+    // Happy path: Providing None as input doesn't mutate anything.
+    let msg = ExecuteMsg::UpdateConfig {
+        min_bond_amount: None,
+    };
+    let info = mock_info("owner0000", &[]);
+    assert_eq!(
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap(),
+        Response::new(),
+    );
+    assert_eq!(
+        from_binary::<ConfigResponse>(
+            &query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()
+        )
+        .unwrap(),
+        ConfigResponse {
+            owner: "owner0000".to_string(),
+            operator: "op0000".to_string(),
+            prism_token: "prism0000".to_string(),
+            xprism_token: "xprism0000".to_string(),
+            gov: "gov0000".to_string(),
+            base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            boost_contract: "boost0000".to_string(),
+            yluna_staking: "ylunastaking0000".to_string(),
+            yluna_token: "ylunatoken0000".to_string(),
+            vesting_period: DEFAULT_VESTING_PERIOD,
+            min_bond_amount: Uint128::from(1_000u128),
+        }
+    );
+
+    // // Happy path: Providing Some as input does mutate things.
+    let msg = ExecuteMsg::UpdateConfig {
+        min_bond_amount: Some(Uint128::from(222_u128)),
+    };
+    let info = mock_info("owner0000", &[]);
+    assert_eq!(
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap(),
+        Response::new(),
+    );
+    assert_eq!(
+        from_binary::<ConfigResponse>(
+            &query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()
+        )
+        .unwrap(),
+        ConfigResponse {
+            owner: "owner0000".to_string(),
+            operator: "op0000".to_string(),
+            prism_token: "prism0000".to_string(),
+            xprism_token: "xprism0000".to_string(),
+            gov: "gov0000".to_string(),
+            base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+            boost_contract: "boost0000".to_string(),
+            yluna_staking: "ylunastaking0000".to_string(),
+            yluna_token: "ylunatoken0000".to_string(),
+            vesting_period: DEFAULT_VESTING_PERIOD,
+            min_bond_amount: Uint128::from(222_u128),
+        }
+    );
+}
+
+#[test]
+fn test_claim_withdrawn_rewards_as_xprism() {
+    let mut deps = mock_dependencies(&[]);
+    // successful init
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        xprism_token: "xprism0000".to_string(),
+        gov: "gov0000".to_string(),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1000000u128)),
+        boost_contract: "boost0000".to_string(),
+        yluna_staking: "ylunastaking0000".to_string(),
+        yluna_token: "ylunatoken0000".to_string(),
+        vesting_period: DEFAULT_VESTING_PERIOD,
+        min_bond_amount: Uint128::from(100u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -1873,7 +1987,7 @@ fn test_claim_withdrawn_rewards_as_amps() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -2010,7 +2124,7 @@ fn test_claim_withdrawn_rewards_as_amps_with_xprism_balance() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -2146,7 +2260,7 @@ fn test_bond_with_boost_contract_hook() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -2270,7 +2384,7 @@ fn test_activate_boost_single_user() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -2383,7 +2497,7 @@ fn test_activate_boost_multi_user() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -2573,7 +2687,7 @@ fn test_activate_boost_multi_user_two_intervals() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -2797,7 +2911,7 @@ fn test_refresh_boost_unauthorized() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
     let info = mock_info("addr0000", &[]);
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -2851,7 +2965,7 @@ fn test_refresh_boost_authorized() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -3027,7 +3141,7 @@ fn test_activate_boost_for_user_without_anything_bonded() {
         yluna_staking: "ylunastaking0000".to_string(),
         yluna_token: "ylunatoken0000".to_string(),
         vesting_period: DEFAULT_VESTING_PERIOD,
-        min_bonding_amount: Uint128::from(100u128),
+        min_bond_amount: Uint128::from(100u128),
     };
     let info = mock_info("addr0000", &[]);
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();

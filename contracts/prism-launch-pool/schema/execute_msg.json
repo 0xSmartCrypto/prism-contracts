@@ -177,6 +177,32 @@
       "additionalProperties": false
     },
     {
+      "description": "Allows admin to update contract's config.",
+      "type": "object",
+      "required": [
+        "update_config"
+      ],
+      "properties": {
+        "update_config": {
+          "type": "object",
+          "properties": {
+            "min_bond_amount": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Hook to bond xprism with the boost contract.  This hook is invoked when a user calls ClaimWithdrawnRewards with ClaimType=Amps.",
       "type": "object",
       "required": [
         "bond_with_boost_contract_hook"

@@ -51,7 +51,7 @@ pub fn instantiate(
         boost_contract: deps.api.addr_validate(&msg.boost_contract)?,
         base_distribution_schedule: msg.base_distribution_schedule,
         boost_distribution_schedule: msg.boost_distribution_schedule,
-        min_bond_amount: msg.min_bonding_amount,
+        min_bond_amount: msg.min_bond_amount,
     };
 
     if msg.base_distribution_schedule.0 > msg.base_distribution_schedule.1 {
@@ -91,6 +91,9 @@ pub fn execute(
             limit,
             start_after_address,
         } => withdraw_rewards_bulk(deps, env, info, limit, start_after_address),
+        ExecuteMsg::UpdateConfig { min_bond_amount } => {
+            update_config(deps, env, info, min_bond_amount)
+        }
         ExecuteMsg::PrivilegedRefreshBoost { account } => {
             let account = deps.api.addr_validate(&account)?;
             privileged_refresh_boost(deps, env, info, account)
@@ -595,4 +598,26 @@ fn update_and_save_boost_weight_and_reward_info(
     REWARD_INFO.save(deps.storage, account.as_bytes(), &reward_info)?;
 
     Ok(boost_amount)
+}
+
+/// update_config updates some of the values stored in the config. Only owner
+/// can call this.
+fn update_config(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    min_bond_amount: Option<Uint128>,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+    // Only owner can call this.
+    if info.sender != cfg.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if let Some(new_min_bond_amount) = min_bond_amount {
+        cfg.min_bond_amount = new_min_bond_amount;
+    }
+
+    CONFIG.save(deps.storage, &cfg)?;
+    Ok(Response::new())
 }
