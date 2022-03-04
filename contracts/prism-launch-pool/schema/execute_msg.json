@@ -53,7 +53,29 @@
       "additionalProperties": false
     },
     {
-      "description": "Withdraw $PRISM rewards Starts 21 day vesting period",
+      "description": "Refreshes boost value for a specific user. Meant to be called by the Boost contract when somebody's AMPS go to 0.",
+      "type": "object",
+      "required": [
+        "privileged_refresh_boost"
+      ],
+      "properties": {
+        "privileged_refresh_boost": {
+          "type": "object",
+          "required": [
+            "account"
+          ],
+          "properties": {
+            "account": {
+              "description": "Address of account.",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Withdraw $PRISM rewards Starts 30 day vesting period",
       "type": "object",
       "required": [
         "withdraw_rewards"
@@ -97,6 +119,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Claim rewards that have been previously withdrawn via WithdrawRewards or WithdrawRewardsBulk.  Only vested rewards are available to be withdrawn here.  The claim_type parameter specifies how the user would like to receive those rewards.",
       "type": "object",
       "required": [
         "claim_withdrawn_rewards"

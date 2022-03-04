@@ -9,7 +9,7 @@ use cosmwasm_std::OwnedDeps;
 use cosmwasm_std::{
     from_binary,
     testing::{mock_env, mock_info},
-    to_binary, Addr, CosmosMsg, Decimal, SubMsg, Timestamp, Uint128, WasmMsg,
+    to_binary, Addr, CosmosMsg, Decimal, Response, SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
@@ -2778,6 +2778,290 @@ fn test_activate_boost_multi_user_two_intervals() {
             boost_index,
             boost_weight: Uint128::from(bob_boost_weight),
             active_boost: Uint128::from(bob_boost_value),
+        }
+    );
+}
+
+#[test]
+fn test_refresh_boost_unauthorized() {
+    let mut deps = mock_dependencies(&[]);
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        xprism_token: "xprism0000".to_string(),
+        gov: "gov0000".to_string(),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1_000_000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1_000_000u128)),
+        boost_contract: "boost0000".to_string(),
+        yluna_staking: "ylunastaking0000".to_string(),
+        yluna_token: "ylunatoken0000".to_string(),
+        vesting_period: DEFAULT_VESTING_PERIOD,
+        min_bonding_amount: Uint128::from(100u128),
+    };
+    let info = mock_info("addr0000", &[]);
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+    deps.querier.with_boost_querier(&Uint128::from(50u128));
+
+    // random contract can't call it
+    let msg = ExecuteMsg::PrivilegedRefreshBoost {
+        account: "alice0000".to_string(),
+    };
+    assert_eq!(
+        execute(deps.as_mut(), mock_env(), mock_info("eve0000", &[]), msg).unwrap_err(),
+        ContractError::Unauthorized {},
+    );
+
+    // boost contract can call it
+    let msg = ExecuteMsg::PrivilegedRefreshBoost {
+        account: "alice0000".to_string(),
+    };
+    assert_eq!(
+        execute(deps.as_mut(), mock_env(), mock_info("boost0000", &[]), msg).unwrap(),
+        Response::new().add_attributes(vec![
+            ("action", "privileged_refresh_boost"),
+            ("total_user_bonded", "0"),
+            ("boost_amount", "50"),
+        ]),
+    );
+}
+
+#[test]
+fn test_refresh_boost_authorized() {
+    // Summary of test:
+    //  T=0: - Set global boost to 50 AMPS.
+    //  T=90 - Alice bonds 100 ylunas
+    //  T=90 - Alice activates her boost (which is 50 AMPS)
+    //  T=100 - Event starts
+    //  T=110 - Alice withdraws her rewards
+    //  T=110 - Set global boost to 0 AMPS.
+    //  T=110 - Alice's boost becomes 0. xprism-boost contract calls PrivilegedRefreshBoost to notify us about that.
+    //  T=120 - Alice withdraws her rewards. This time they are lower due to her lower boost.
+    let mut deps = mock_dependencies(&[]);
+
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        xprism_token: "xprism0000".to_string(),
+        gov: "gov0000".to_string(),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1_000_000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1_000_000u128)),
+        boost_contract: "boost0000".to_string(),
+        yluna_staking: "ylunastaking0000".to_string(),
+        yluna_token: "ylunatoken0000".to_string(),
+        vesting_period: DEFAULT_VESTING_PERIOD,
+        min_bonding_amount: Uint128::from(100u128),
+    };
+
+    let info = mock_info("addr0000", &[]);
+
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Set global boost value to 50 AMPS.
+    deps.querier.with_boost_querier(&Uint128::from(50u128));
+
+    // T=90: Alice bonds 100.
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(90u64);
+    let info = mock_info("ylunatoken0000", &[]);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "alice0000".to_string(),
+        amount: Uint128::from(100u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    execute(deps.as_mut(), env, info, msg).unwrap();
+
+    // T=90: Alice activates boost immediately.
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(90u64);
+    let info = mock_info("alice0000", &[]);
+    let msg = ExecuteMsg::ActivateBoost {};
+    execute(deps.as_mut(), env, info, msg).unwrap();
+
+    // T=100: Event starts.
+
+    // T=110: alice withdraw rewards after 10 seconds, the entire boost pool is hers
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(110u64);
+    let user_info = mock_info("alice0000", &[]);
+    let msg = ExecuteMsg::WithdrawRewards {};
+    execute(deps.as_mut(), env.clone(), user_info, msg).unwrap();
+    let vested_time = compute_vested_time(env.block.time.seconds(), DEFAULT_VESTING_PERIOD);
+    // Verify her withdrawn rewards are as expected
+    let total_base_reward1 = 100_000u128;
+    let total_boost_reward1 = 100_000u128;
+    let alice_bonded = 100u128;
+    let alice_boost_value1 = 50u128;
+    let total_bonded = alice_bonded;
+    let alice_boost_weight1 = (alice_bonded * alice_boost_value1).integer_sqrt();
+    let total_boost_weight1 = alice_boost_weight1;
+    let alice_base_reward1 = Uint128::from(total_base_reward1) * Uint128::from(alice_bonded)
+        / Uint128::from(total_bonded);
+    let alice_boost_reward1 = Uint128::from(total_boost_reward1)
+        * Decimal::from_ratio(alice_boost_weight1, total_boost_weight1);
+    let alice_total_reward1 = alice_base_reward1 + alice_boost_reward1 - Uint128::from(1u128); // subtract 1 due to rounding
+    assert_eq!(
+        from_binary::<VestingStatusResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::VestingStatus {
+                    staker_addr: "alice0000".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        VestingStatusResponse {
+            scheduled_vests: vec![(vested_time, alice_total_reward1),],
+            withdrawable: Uint128::zero(),
+        }
+    );
+    assert_eq!(
+        from_binary::<RewardInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::RewardInfo {
+                    staker_addr: "alice0000".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        RewardInfoResponse {
+            bond_amount: Uint128::from(alice_bonded),
+            base_index: Decimal::from_ratio(total_base_reward1, total_bonded),
+            pending_reward: Uint128::zero(),
+            boost_index: Decimal::from_ratio(total_boost_reward1, total_boost_weight1),
+            boost_weight: Uint128::from(alice_boost_weight1),
+            active_boost: Uint128::from(alice_boost_value1),
+        }
+    );
+
+    // T=110: Set global boost value to 0 AMPS and call refresh_boost.
+    deps.querier.with_boost_querier(&Uint128::zero());
+
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(110u64);
+    let info = mock_info("boost0000", &[]);
+    let msg = ExecuteMsg::PrivilegedRefreshBoost {
+        account: "alice0000".to_string(),
+    };
+    assert_eq!(
+        execute(deps.as_mut(), env.clone(), info, msg).unwrap(),
+        Response::new().add_attributes(vec![
+            ("action", "privileged_refresh_boost"),
+            ("total_user_bonded", "100"),
+            ("boost_amount", "0"),
+        ]),
+    );
+
+    // T=120: alice withdraw rewards after another 10 seconds, but this time she gets no boost.
+    env.block.time = Timestamp::from_seconds(120u64);
+    let user_info = mock_info("alice0000", &[]);
+    let msg = ExecuteMsg::WithdrawRewards {};
+    execute(deps.as_mut(), env.clone(), user_info, msg).unwrap();
+    let vested_time = compute_vested_time(env.block.time.seconds(), DEFAULT_VESTING_PERIOD);
+    // Verify her withdrawn rewards are as expected. This time everything boost related should be zero.
+    let total_base_reward2 = 100_000u128;
+    let alice_base_reward2 = Uint128::from(total_base_reward2) * Uint128::from(alice_bonded)
+        / Uint128::from(total_bonded);
+    let alice_boost_reward2 = Uint128::zero();
+    let alice_total_reward2 = alice_base_reward2 + alice_boost_reward2;
+    assert_eq!(
+        from_binary::<VestingStatusResponse>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::VestingStatus {
+                    staker_addr: "alice0000".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        VestingStatusResponse {
+            scheduled_vests: vec![(vested_time, alice_total_reward1 + alice_total_reward2),],
+            withdrawable: Uint128::zero(),
+        }
+    );
+    assert_eq!(
+        from_binary::<RewardInfoResponse>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::RewardInfo {
+                    staker_addr: "alice0000".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        RewardInfoResponse {
+            bond_amount: Uint128::from(alice_bonded),
+            base_index: Decimal::from_ratio(total_base_reward1, total_bonded)
+                + Decimal::from_ratio(total_base_reward2, total_bonded),
+            pending_reward: Uint128::zero(),
+            boost_index: Decimal::from_ratio(total_boost_reward1, total_boost_weight1),
+            boost_weight: Uint128::zero(),
+            active_boost: Uint128::zero(),
+        }
+    );
+}
+
+#[test]
+fn test_activate_boost_for_user_without_anything_bonded() {
+    // Test what happens when a user who has never bonded anything calls activate_boost.
+    let mut deps = mock_dependencies(&[]);
+    let msg = InstantiateMsg {
+        owner: "owner0000".to_string(),
+        operator: "op0000".to_string(),
+        prism_token: "prism0000".to_string(),
+        xprism_token: "xprism0000".to_string(),
+        gov: "gov0000".to_string(),
+        base_distribution_schedule: (100u64, 200u64, Uint128::from(1_000_000u128)),
+        boost_distribution_schedule: (100u64, 200u64, Uint128::from(1_000_000u128)),
+        boost_contract: "boost0000".to_string(),
+        yluna_staking: "ylunastaking0000".to_string(),
+        yluna_token: "ylunatoken0000".to_string(),
+        vesting_period: DEFAULT_VESTING_PERIOD,
+        min_bonding_amount: Uint128::from(100u128),
+    };
+    let info = mock_info("addr0000", &[]);
+    instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+    deps.querier.with_boost_querier(&Uint128::from(50u128));
+
+    let msg = ExecuteMsg::ActivateBoost {};
+    let info = mock_info("alice0000", &[]);
+    assert_eq!(
+        execute(deps.as_mut(), mock_env(), info, msg).unwrap(),
+        Response::new().add_attributes(vec![
+            ("action", "activate_boost"),
+            ("total_user_bonded", "0"),
+            ("boost_amount", "50"),
+        ]),
+    );
+    assert_eq!(
+        from_binary::<RewardInfoResponse>(
+            &query(
+                deps.as_ref(),
+                mock_env(),
+                QueryMsg::RewardInfo {
+                    staker_addr: "alice0000".to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+        RewardInfoResponse {
+            bond_amount: Uint128::zero(),
+            base_index: Decimal::zero(),
+            pending_reward: Uint128::zero(),
+            boost_index: Decimal::zero(),
+            boost_weight: Uint128::zero(),
+            active_boost: Uint128::from(50_u128),
         }
     );
 }

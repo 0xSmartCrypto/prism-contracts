@@ -12,6 +12,12 @@
     "boost_per_hour": {
       "$ref": "#/definitions/Decimal"
     },
+    "launch_pool_contract": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "max_boost_per_xprism": {
       "$ref": "#/definitions/Uint128"
     },

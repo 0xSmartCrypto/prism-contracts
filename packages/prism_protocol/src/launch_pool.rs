@@ -44,6 +44,13 @@ pub enum ExecuteMsg {
     /// Updates the user's boost weight based on the current boost amount
     ActivateBoost {},
 
+    /// Refreshes boost value for a specific user. Meant to be called by the
+    /// Boost contract when somebody's AMPS go to 0.
+    PrivilegedRefreshBoost {
+        /// Address of account.
+        account: String,
+    },
+
     /// Withdraw $PRISM rewards
     /// Starts 30 day vesting period
     WithdrawRewards {},

@@ -33,6 +33,12 @@
                 }
               ]
             },
+            "launch_pool_contract": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "max_boost_per_xprism": {
               "anyOf": [
                 {

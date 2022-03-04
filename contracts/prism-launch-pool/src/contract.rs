@@ -91,6 +91,10 @@ pub fn execute(
             limit,
             start_after_address,
         } => withdraw_rewards_bulk(deps, env, info, limit, start_after_address),
+        ExecuteMsg::PrivilegedRefreshBoost { account } => {
+            let account = deps.api.addr_validate(&account)?;
+            privileged_refresh_boost(deps, env, info, account)
+        }
         ExecuteMsg::BondWithBoostContractHook {
             receiver,
             prev_xprism_balance,
@@ -235,7 +239,7 @@ pub fn bond(
     // update yluna bond amount
     let current_bond = BOND_AMOUNTS
         .load(deps.storage, sender.as_bytes())
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
     let new_bond_amount = current_bond + amount;
     BOND_AMOUNTS.save(deps.storage, sender.as_bytes(), &new_bond_amount)?;
 
@@ -333,6 +337,7 @@ pub fn unbond(
                     recipient: info.sender.to_string(),
                     amount: unbond_amt,
                 })?,
+
                 funds: vec![],
             }),
         ])
@@ -343,36 +348,64 @@ pub fn unbond(
         ]))
 }
 
+pub fn privileged_refresh_boost(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    human: Addr,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    // Only callable by boost_contract after somebody's AMPS go to 0.
+    if info.sender != cfg.boost_contract {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let (current_bond, boost_amount) = _refresh_boost(deps, env, human)?;
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "privileged_refresh_boost"),
+        attr("total_user_bonded", current_bond.to_string()),
+        attr("boost_amount", boost_amount.to_string()),
+    ]))
+}
+
 pub fn activate_boost(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?;
-    update_reward_indexes(deps.storage, &env, &cfg)?;
-
-    // accumulate accrued rewards
-    let reward_info = _pull_pending_rewards(deps.storage, &info.sender)?;
-
-    // update yluna bond amount
-    let current_bond = BOND_AMOUNTS
-        .load(deps.storage, info.sender.as_bytes())
-        .unwrap_or(Uint128::zero());
-
-    // update boost weight
-    let boost_amount = update_and_save_boost_weight_and_reward_info(
-        deps,
-        &cfg,
-        &info.sender,
-        &current_bond,
-        reward_info,
-    )?;
-
+    let (current_bond, boost_amount) = _refresh_boost(deps, env, info.sender)?;
     Ok(Response::new().add_attributes(vec![
         attr("action", "activate_boost"),
         attr("total_user_bonded", current_bond.to_string()),
         attr("boost_amount", boost_amount.to_string()),
     ]))
+}
+
+pub fn _refresh_boost(
+    deps: DepsMut,
+    env: Env,
+    account: Addr,
+) -> Result<(Uint128, Uint128), ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    update_reward_indexes(deps.storage, &env, &cfg)?;
+
+    // accumulate accrued rewards
+    let reward_info = _pull_pending_rewards(deps.storage, &account)?;
+
+    // update yluna bond amount
+    let current_bond = BOND_AMOUNTS
+        .load(deps.storage, account.as_bytes())
+        .unwrap_or_else(|_| Uint128::zero());
+
+    // update boost weight
+    let boost_amount = update_and_save_boost_weight_and_reward_info(
+        deps,
+        &cfg,
+        &account,
+        &current_bond,
+        reward_info,
+    )?;
+    Ok((current_bond, boost_amount))
 }
 
 pub fn _pull_pending_rewards(storage: &dyn Storage, address: &Addr) -> StdResult<RewardInfo> {
@@ -538,13 +571,13 @@ pub fn query_vesting_status(
 fn update_and_save_boost_weight_and_reward_info(
     deps: DepsMut,
     cfg: &Config,
-    sender: &Addr,
+    account: &Addr,
     current_bound_amount: &Uint128,
     mut reward_info: RewardInfo,
 ) -> Result<Uint128, ContractError> {
     // update boost weight
-    let boost_amount =
-        query_boost_amount(&deps.querier, &cfg.boost_contract, sender).unwrap_or(Uint128::zero());
+    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, account)
+        .unwrap_or_else(|_| Uint128::zero());
     let new_boost_weight =
         Uint128::from((current_bound_amount.u128() * boost_amount.u128()).integer_sqrt());
 
@@ -559,7 +592,7 @@ fn update_and_save_boost_weight_and_reward_info(
 
     reward_info.boost_weight = new_boost_weight;
     reward_info.active_boost = boost_amount;
-    REWARD_INFO.save(deps.storage, sender.as_bytes(), &reward_info)?;
+    REWARD_INFO.save(deps.storage, account.as_bytes(), &reward_info)?;
 
     Ok(boost_amount)
 }
