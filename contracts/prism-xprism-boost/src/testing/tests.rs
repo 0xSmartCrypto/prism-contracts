@@ -20,7 +20,21 @@ use prism_protocol::xprism_boost::{
 #[test]
 fn test_config_updates() {
     let mut deps = mock_dependencies(&[]);
-    // 10 boost per hour
+
+    // invalid boost interval
+    let msg = InstantiateMsg {
+        owner: "owner".to_string(),
+        xprism_token: "xprism".to_string(),
+        boost_per_hour: Decimal::from_ratio(11u128, 10u128),
+        max_boost_per_xprism: Uint128::from(100u128),
+        launch_pool_contract: None,
+    };
+
+    let info = mock_info("addr", &[]);
+    let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidBoostInterval {});
+
+    // 1 boost per hour
     let msg = InstantiateMsg {
         owner: "owner".to_string(),
         xprism_token: "xprism".to_string(),
@@ -67,6 +81,19 @@ fn test_config_updates() {
 
     let err = execute(deps.as_mut(), mock_env(), evil, msg).unwrap_err();
     assert_eq!(err, ContractError::Unauthorized {});
+
+    // try updating config with invalid max boost, we're not allowed to decrease
+    // this value
+    let owner = mock_info("owner", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        boost_per_hour: None,
+        max_boost_per_xprism: Some(Uint128::from(99u128)),
+        launch_pool_contract: None,
+    };
+
+    let err = execute(deps.as_mut(), mock_env(), owner, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidMaxBoost {});
 
     // try updating config with real user
     let good = mock_info("owner", &[]);
@@ -166,7 +193,18 @@ fn test_basic_bonding() {
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(err, ContractError::Unauthorized {});
 
-    // Happy path: bond and check query shows that amount as bonded.
+    // invalid amount, can't send 0
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "not xprism".to_string(),
+        amount: Uint128::zero(),
+        msg: to_binary(&Cw20HookMsg::Bond { user: None }).unwrap(),
+    });
+
+    let info = mock_info("xprism", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidBond {});
+
+    // check bond works
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(100u64);
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {

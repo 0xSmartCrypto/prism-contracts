@@ -24,6 +24,7 @@ use prism_protocol::xprism_boost::Cw20HookMsg as BoostCw20HookMsg;
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg,
 };
+use std::collections::HashMap;
 
 pub const DEFAULT_VESTING_PERIOD: u64 = 30 * TIME_UNIT;
 
@@ -2397,8 +2398,10 @@ fn test_activate_boost_single_user() {
         msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
 
-    // set global boost value to 50
-    deps.querier.with_boost_querier(&Uint128::from(50u128));
+    // set alice's boost
+    let mut boost_map = HashMap::new();
+    boost_map.insert("alice0000".to_string(), Uint128::from(50u128));
+    deps.querier.with_boost_querier(boost_map);
 
     // alice bonds 100
     let mut env = mock_env();
@@ -2504,8 +2507,11 @@ fn test_activate_boost_multi_user() {
 
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    // set global boost value to 50
-    deps.querier.with_boost_querier(&Uint128::from(50u128));
+    // set alice's and bob's boost
+    let mut boost_map = HashMap::new();
+    boost_map.insert("alice0000".to_string(), Uint128::from(50u128));
+    boost_map.insert("bob0000".to_string(), Uint128::from(50u128));
+    deps.querier.with_boost_querier(boost_map);
 
     // alice bonds 100
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
@@ -2694,8 +2700,11 @@ fn test_activate_boost_multi_user_two_intervals() {
 
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    // set global boost value to 50
-    deps.querier.with_boost_querier(&Uint128::from(50u128));
+    // set alice's and bob's boost
+    let mut boost_map = HashMap::new();
+    boost_map.insert("alice0000".to_string(), Uint128::from(50u128));
+    boost_map.insert("bob0000".to_string(), Uint128::from(50u128));
+    deps.querier.with_boost_querier(boost_map.clone());
 
     // alice bonds 100
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
@@ -2744,8 +2753,9 @@ fn test_activate_boost_multi_user_two_intervals() {
     // for first withdraws, both alice and bob will vest at vested_time1
     let vested_time1 = compute_vested_time(env.block.time.seconds(), DEFAULT_VESTING_PERIOD);
 
-    // for the second half of the reward interval, change the boost value to 75
-    deps.querier.with_boost_querier(&Uint128::from(75u128));
+    // for the second half of the reward interval, change Alice's boost value to 75
+    boost_map.insert("alice0000".to_string(), Uint128::from(75u128));
+    deps.querier.with_boost_querier(boost_map);
 
     // only alice re-activates her boost
     env.block.time = Timestamp::from_seconds(150u64);
@@ -2915,7 +2925,9 @@ fn test_refresh_boost_unauthorized() {
     };
     let info = mock_info("addr0000", &[]);
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-    deps.querier.with_boost_querier(&Uint128::from(50u128));
+    let mut boost_map = HashMap::new();
+    boost_map.insert("alice0000".to_string(), Uint128::from(50u128));
+    deps.querier.with_boost_querier(boost_map);
 
     // random contract can't call it
     let msg = ExecuteMsg::PrivilegedRefreshBoost {
@@ -2972,8 +2984,10 @@ fn test_refresh_boost_authorized() {
 
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    // Set global boost value to 50 AMPS.
-    deps.querier.with_boost_querier(&Uint128::from(50u128));
+    // Set Alice boost value to 50 AMPS.
+    let mut boost_map = HashMap::new();
+    boost_map.insert("alice0000".to_string(), Uint128::from(50u128));
+    deps.querier.with_boost_querier(boost_map.clone());
 
     // T=90: Alice bonds 100.
     let mut env = mock_env();
@@ -3054,8 +3068,9 @@ fn test_refresh_boost_authorized() {
         }
     );
 
-    // T=110: Set global boost value to 0 AMPS and call refresh_boost.
-    deps.querier.with_boost_querier(&Uint128::zero());
+    // T=110: Set Alice boost value to 0 AMPS and call refresh_boost.
+    boost_map.insert("alice0000".to_string(), Uint128::from(0u128));
+    deps.querier.with_boost_querier(boost_map);
 
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(110u64);
@@ -3145,7 +3160,10 @@ fn test_activate_boost_for_user_without_anything_bonded() {
     };
     let info = mock_info("addr0000", &[]);
     instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-    deps.querier.with_boost_querier(&Uint128::from(50u128));
+
+    let mut boost_map = HashMap::new();
+    boost_map.insert("alice0000".to_string(), Uint128::from(50u128));
+    deps.querier.with_boost_querier(boost_map);
 
     let msg = ExecuteMsg::ActivateBoost {};
     let info = mock_info("alice0000", &[]);

@@ -260,15 +260,22 @@ impl WasmMockQuerier {
                                 .unwrap();
                             SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
                         }
-                        QueryMsg::GetBoost { user: _ } => SystemResult::Ok(ContractResult::Ok(
-                            to_binary(&UserInfo {
-                                amt_bonded: Uint128::from(100u128),
-                                total_boost: self.boost_querier.boost_amount,
-                                last_updated: 1000u64,
-                                boost_accrual_start_time: 0u64,
-                            })
-                            .unwrap(),
-                        )),
+                        QueryMsg::GetBoost { user } => {
+                            SystemResult::Ok(self.boost_querier.get_boost(&user).map_or_else(
+                                ContractResult::Err,
+                                |boost_amount| {
+                                    ContractResult::Ok(
+                                        to_binary(&UserInfo {
+                                            amt_bonded: Uint128::from(100u128),
+                                            total_boost: boost_amount,
+                                            last_updated: 1000u64,
+                                            boost_accrual_start_time: 0u64,
+                                        })
+                                        .unwrap(),
+                                    )
+                                },
+                            ))
+                        }
                     }
                 }
             }
@@ -357,13 +364,16 @@ impl VaultStateQuerier {
 
 #[derive(Clone, Default)]
 pub struct BoostQuerier {
-    boost_amount: Uint128,
+    /// address to boost amount
+    pub boost_map: HashMap<String, Uint128>,
 }
 
 impl BoostQuerier {
-    pub fn new(boost_amount: &Uint128) -> Self {
-        BoostQuerier {
-            boost_amount: *boost_amount,
+    pub fn get_boost(&self, addr: &Addr) -> Result<Uint128, String> {
+        let boost = self.boost_map.get(&addr.to_string());
+        match boost {
+            Some(boost) => Ok(*boost),
+            None => Err(format!("{} was not found", addr)),
         }
     }
 }
@@ -461,8 +471,8 @@ impl WasmMockQuerier {
         )
     }
 
-    pub fn with_boost_querier(&mut self, boost_amount: &Uint128) {
-        self.boost_querier = BoostQuerier::new(boost_amount);
+    pub fn with_boost_querier(&mut self, map: HashMap<String, Uint128>) {
+        self.boost_querier.boost_map = map;
     }
 }
 
