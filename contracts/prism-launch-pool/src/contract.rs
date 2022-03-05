@@ -558,7 +558,7 @@ pub fn query_vesting_status(
         let end_time = u64::from_be_bytes(key.try_into().unwrap());
         scheduled_vests.push((end_time, unlocked));
         if current_time < end_time {
-            break;
+            continue;
         }
         can_withdraw += unlocked;
     }
