@@ -579,8 +579,7 @@ fn update_and_save_boost_weight_and_reward_info(
     mut reward_info: RewardInfo,
 ) -> Result<Uint128, ContractError> {
     // update boost weight
-    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, account)
-        .unwrap_or_else(|_| Uint128::zero());
+    let boost_amount = query_boost_amount(&deps.querier, &cfg.boost_contract, account)?;
     let new_boost_weight =
         Uint128::from((current_bound_amount.u128() * boost_amount.u128()).integer_sqrt());
 

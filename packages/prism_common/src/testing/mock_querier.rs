@@ -370,11 +370,10 @@ pub struct BoostQuerier {
 
 impl BoostQuerier {
     pub fn get_boost(&self, addr: &Addr) -> Result<Uint128, String> {
-        let boost = self.boost_map.get(&addr.to_string());
-        match boost {
-            Some(boost) => Ok(*boost),
-            None => Err(format!("{} was not found", addr)),
-        }
+        Ok(self
+            .boost_map
+            .get(&addr.to_string())
+            .map_or(Uint128::zero(), |v| *v))
     }
 }
 

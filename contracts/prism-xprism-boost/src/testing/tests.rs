@@ -6,7 +6,7 @@ use cosmwasm_std::CosmosMsg;
 use cosmwasm_std::{
     from_binary,
     testing::{mock_env, mock_info},
-    to_binary, Addr, Decimal, Env, Response, StdError, Timestamp, Uint128, WasmMsg,
+    to_binary, Addr, Decimal, Env, Response, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use prism_common::testing::mock_querier::mock_dependencies;
@@ -274,16 +274,22 @@ fn test_basic_bonding() {
     let msg = ExecuteMsg::Unbond { amount: None };
     execute(deps.as_mut(), env.clone(), user_info, msg).unwrap();
     assert_eq!(
-        query(
-            deps.as_ref(),
-            env,
-            QueryMsg::GetBoost {
-                user: Addr::unchecked("user"),
-            },
+        from_binary::<UserInfo>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::GetBoost {
+                    user: Addr::unchecked("user"),
+                },
+            )
+            .unwrap()
         )
-        .unwrap_err(),
-        StdError::NotFound {
-            kind: "prism_protocol::xprism_boost::UserInfo".into()
+        .unwrap(),
+        UserInfo {
+            amt_bonded: Uint128::zero(),
+            boost_accrual_start_time: 0,
+            last_updated: 0,
+            total_boost: Uint128::zero(),
         }
     );
 }
@@ -430,16 +436,22 @@ fn test_boost_updates() {
     let msg = ExecuteMsg::Unbond { amount: None };
     execute(deps.as_mut(), env.clone(), user, msg).unwrap();
     assert_eq!(
-        query(
-            deps.as_ref(),
-            env,
-            QueryMsg::GetBoost {
-                user: Addr::unchecked("user000"),
-            },
+        from_binary::<UserInfo>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::GetBoost {
+                    user: Addr::unchecked("user000"),
+                },
+            )
+            .unwrap()
         )
-        .unwrap_err(),
-        StdError::NotFound {
-            kind: "prism_protocol::xprism_boost::UserInfo".into()
+        .unwrap(),
+        UserInfo {
+            amt_bonded: Uint128::zero(),
+            boost_accrual_start_time: 0,
+            last_updated: 0,
+            total_boost: Uint128::zero(),
         }
     );
 }
@@ -599,17 +611,18 @@ fn test_bonding_from_different_user() {
     let xprism_info = mock_info("xprism", &[]);
     execute(deps.as_mut(), env.clone(), xprism_info, msg).unwrap();
 
-    let res = query(
-        deps.as_ref(),
-        env,
-        QueryMsg::GetBoost {
-            user: Addr::unchecked("user0001"),
-        },
-    )
-    .unwrap();
-    let user_info: UserInfo = from_binary(&res).unwrap();
     assert_eq!(
-        user_info,
+        from_binary::<UserInfo>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::GetBoost {
+                    user: Addr::unchecked("user0001"),
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
         UserInfo {
             amt_bonded: Uint128::from(100u128),
             total_boost: Uint128::zero(),
@@ -634,17 +647,18 @@ fn test_bonding_from_different_user() {
     execute(deps.as_mut(), env.clone(), xprism_info, msg).unwrap();
 
     // query user0001, verify 200 bonded
-    let res = query(
-        deps.as_ref(),
-        env.clone(),
-        QueryMsg::GetBoost {
-            user: Addr::unchecked("user0001"),
-        },
-    )
-    .unwrap();
-    let user_info: UserInfo = from_binary(&res).unwrap();
     assert_eq!(
-        user_info,
+        from_binary::<UserInfo>(
+            &query(
+                deps.as_ref(),
+                env.clone(),
+                QueryMsg::GetBoost {
+                    user: Addr::unchecked("user0001"),
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
         UserInfo {
             amt_bonded: Uint128::from(200u128),
             total_boost: Uint128::from(2u128),
@@ -654,15 +668,25 @@ fn test_bonding_from_different_user() {
     );
 
     // query user0002, verify nothing bonded
-    let err = query(
-        deps.as_ref(),
-        env,
-        QueryMsg::GetBoost {
-            user: Addr::unchecked("user0002"),
-        },
-    )
-    .unwrap_err();
-    assert!(matches!(err, StdError::NotFound { .. }));
+    assert_eq!(
+        from_binary::<UserInfo>(
+            &query(
+                deps.as_ref(),
+                env,
+                QueryMsg::GetBoost {
+                    user: Addr::unchecked("user0002"),
+                },
+            )
+            .unwrap()
+        )
+        .unwrap(),
+        UserInfo {
+            amt_bonded: Uint128::zero(),
+            boost_accrual_start_time: 0,
+            last_updated: 0,
+            total_boost: Uint128::zero(),
+        }
+    );
 }
 
 #[test]

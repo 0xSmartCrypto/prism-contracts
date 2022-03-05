@@ -100,8 +100,16 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
         QueryMsg::GetBoost { user } => {
-            let info = USER_INFO.load(deps.storage, &user)?;
-            to_binary(&_accumulate_boost(deps.storage, env, info)?)
+            // Returns:
+            //  - User's data if user exists;
+            //  - default UserInfo if user doesn't exist;
+            //  - error if unparseable data is stored.
+            let info = USER_INFO.may_load(deps.storage, &user)?;
+            to_binary(&_accumulate_boost(
+                deps.storage,
+                env,
+                info.unwrap_or_default(),
+            )?)
         }
     }
 }
