@@ -9,7 +9,8 @@ use cosmwasm_std::OwnedDeps;
 use cosmwasm_std::{
     from_binary,
     testing::{mock_env, mock_info},
-    to_binary, Addr, CosmosMsg, Decimal, Response, SubMsg, Timestamp, Uint128, WasmMsg,
+    to_binary, Addr, CosmosMsg, Decimal, OverflowError, OverflowOperation, Response, StdError,
+    SubMsg, Timestamp, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
@@ -2017,7 +2018,7 @@ fn test_claim_withdrawn_rewards_as_amps() {
     // claim as amps after vesting period
     // we create two messages:
     // 1 - gov MintXprism using contract address as receiver
-    // 2 - BondWithBoostConractHook
+    // 2 - BondWithBoostContractHook
     let msg = ExecuteMsg::ClaimWithdrawnRewards {
         claim_type: ClaimType::Amps,
     };
@@ -2154,7 +2155,7 @@ fn test_claim_withdrawn_rewards_as_amps_with_xprism_balance() {
     // add some xprism balance and claim as amps after vesting period
     // we create two messages:
     // 1 - gov MintXprism using contract address as receiver
-    // 2 - BondWithBoostConractHook
+    // 2 - BondWithBoostContractHook
     deps.querier.with_token_balances(&[(
         &"xprism0000".to_string(),
         &[(&MOCK_CONTRACT_ADDR.to_string(), &Uint128::from(1000u128))],
@@ -2341,6 +2342,23 @@ fn test_bond_with_boost_contract_hook() {
             attr("action", "bond_with_boost_contract_hook"),
             attr("bond_amount", 750u128.to_string()),
         ]
+    );
+
+    // call hook with prev balance of >1000, which should fail.
+    let msg = ExecuteMsg::BondWithBoostContractHook {
+        receiver: Addr::unchecked("addr0000"),
+        prev_xprism_balance: Uint128::from(1500u128),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::from(StdError::Overflow {
+            source: OverflowError {
+                operation: OverflowOperation::Sub,
+                operand1: "1000".to_string(),
+                operand2: "1500".to_string()
+            }
+        })
     );
 
     // reset balance to 0
