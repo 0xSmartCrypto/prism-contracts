@@ -22,8 +22,8 @@ pub struct InstantiateMsg {
     pub boost_contract: String,
     // start, end, amount of $PRISM to distribute
     // distribute linearly
-    pub base_distribution_schedule: (u64, u64, Uint128),
-    pub boost_distribution_schedule: (u64, u64, Uint128),
+    pub distribution_schedule: (u64, u64, Uint128),
+    pub base_pool_ratio: Decimal,
     // Attempts to bond less than this amount will result in an error.
     // Units: µ-yLunas.
     pub min_bond_amount: Uint128,
@@ -85,6 +85,7 @@ pub enum ExecuteMsg {
     /// Allows admin to update contract's config.
     UpdateConfig {
         min_bond_amount: Option<Uint128>,
+        base_pool_ratio: Option<Decimal>,
     },
 
     /// Hook to bond xprism with the boost contract.  This hook is invoked
@@ -141,8 +142,8 @@ pub struct ConfigResponse {
     pub yluna_token: String,
     pub vesting_period: u64,
     pub boost_contract: String,
-    pub base_distribution_schedule: (u64, u64, Uint128),
-    pub boost_distribution_schedule: (u64, u64, Uint128),
+    pub distribution_schedule: (u64, u64, Uint128),
+    pub base_pool_ratio: Decimal,
     pub min_bond_amount: Uint128,
 }
 

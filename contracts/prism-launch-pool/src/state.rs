@@ -50,8 +50,8 @@ pub struct Config {
     // How long rewards take to vest, in seconds.
     pub vesting_period: u64,
     pub boost_contract: Addr,
-    pub base_distribution_schedule: (u64, u64, Uint128),
-    pub boost_distribution_schedule: (u64, u64, Uint128),
+    pub distribution_schedule: (u64, u64, Uint128),
+    pub base_pool_ratio: Decimal,
     /// An attempt to bond less than this amount will return an error. Useful
     /// to disallow trolls from creating 1 million addresses with 1 µ-yLuna each
     /// just to make `withdraw_rewards_bulk` more expensive.
@@ -70,8 +70,8 @@ impl Config {
             yluna_token: self.yluna_token.to_string(),
             vesting_period: self.vesting_period,
             boost_contract: self.boost_contract.to_string(),
-            base_distribution_schedule: self.base_distribution_schedule,
-            boost_distribution_schedule: self.boost_distribution_schedule,
+            distribution_schedule: self.distribution_schedule,
+            base_pool_ratio: self.base_pool_ratio,
             min_bond_amount: self.min_bond_amount,
         }
     }

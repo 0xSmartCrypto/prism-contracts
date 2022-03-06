@@ -8,8 +8,8 @@ use crate::vest::{
     bond_with_boost_contract_hook, claim_withdrawn_rewards, withdraw_rewards, withdraw_rewards_bulk,
 };
 use cosmwasm_std::{
-    attr, entry_point, from_binary, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut,
-    Env, MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg,
+    attr, entry_point, from_binary, to_binary, Addr, Attribute, Binary, CosmosMsg, Decimal, Deps,
+    DepsMut, Env, MessageInfo, Order, QueryRequest, Response, StdResult, Storage, Uint128, WasmMsg,
     WasmQuery,
 };
 use cw2::set_contract_version;
@@ -49,16 +49,17 @@ pub fn instantiate(
         yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
         vesting_period: msg.vesting_period,
         boost_contract: deps.api.addr_validate(&msg.boost_contract)?,
-        base_distribution_schedule: msg.base_distribution_schedule,
-        boost_distribution_schedule: msg.boost_distribution_schedule,
+        distribution_schedule: msg.distribution_schedule,
+        base_pool_ratio: msg.base_pool_ratio,
         min_bond_amount: msg.min_bond_amount,
     };
 
-    if msg.base_distribution_schedule.0 > msg.base_distribution_schedule.1 {
+    if msg.distribution_schedule.0 > msg.distribution_schedule.1 {
         return Err(ContractError::InvalidDistributionSchedule {});
     }
-    if msg.boost_distribution_schedule.0 > msg.boost_distribution_schedule.1 {
-        return Err(ContractError::InvalidDistributionSchedule {});
+
+    if msg.base_pool_ratio > Decimal::one() {
+        return Err(ContractError::InvalidBasePoolRatio {});
     }
 
     CONFIG.save(deps.storage, &cfg)?;
@@ -91,9 +92,10 @@ pub fn execute(
             limit,
             start_after_address,
         } => withdraw_rewards_bulk(deps, env, info, limit, start_after_address),
-        ExecuteMsg::UpdateConfig { min_bond_amount } => {
-            update_config(deps, env, info, min_bond_amount)
-        }
+        ExecuteMsg::UpdateConfig {
+            min_bond_amount,
+            base_pool_ratio,
+        } => update_config(deps, env, info, min_bond_amount, base_pool_ratio),
         ExecuteMsg::PrivilegedRefreshBoost { account } => {
             let account = deps.api.addr_validate(&account)?;
             privileged_refresh_boost(deps, env, info, account)
@@ -447,14 +449,16 @@ pub fn _update_reward_index(
     env: &Env,
     distribution_status: &mut DistributionStatus,
     distribution_schedule: (u64, u64, Uint128),
+    distribution_ratio: Decimal,
 ) -> StdResult<()> {
     let (start, end, amount) = distribution_schedule;
     if env.block.time.seconds() < start {
         return Ok(());
     };
     let denom = end - start;
-    let total_distribute =
-        amount.multiply_ratio(min(env.block.time.seconds() - start, denom), denom);
+    let total_distribute = amount
+        .multiply_ratio(min(env.block.time.seconds() - start, denom), denom)
+        * distribution_ratio;
     let mut distribute_here = total_distribute - distribution_status.total_distributed;
     distribution_status.total_distributed = total_distribute;
 
@@ -479,14 +483,16 @@ pub fn update_reward_indexes(storage: &mut dyn Storage, env: &Env, cfg: &Config)
     _update_reward_index(
         env,
         &mut base_distribution_status,
-        cfg.base_distribution_schedule,
+        cfg.distribution_schedule,
+        cfg.base_pool_ratio,
     )?;
     BASE_DISTRIBUTION_STATUS.save(storage, &base_distribution_status)?;
     // update boost global index
     _update_reward_index(
         env,
         &mut boost_distribution_status,
-        cfg.boost_distribution_schedule,
+        cfg.distribution_schedule,
+        Decimal::one() - cfg.base_pool_ratio,
     )?;
     BOOST_DISTRIBUTION_STATUS.save(storage, &boost_distribution_status)?;
 
@@ -508,13 +514,15 @@ pub fn query_distribution_status(deps: Deps, env: Env) -> StdResult<Distribution
     _update_reward_index(
         &env,
         &mut base_distribution_status,
-        cfg.base_distribution_schedule,
+        cfg.distribution_schedule,
+        cfg.base_pool_ratio,
     )?;
     // update boost global index
     _update_reward_index(
         &env,
         &mut boost_distribution_status,
-        cfg.boost_distribution_schedule,
+        cfg.distribution_schedule,
+        Decimal::one() - cfg.base_pool_ratio,
     )?;
 
     Ok(DistributionStatusResponse {
@@ -603,9 +611,10 @@ fn update_and_save_boost_weight_and_reward_info(
 /// can call this.
 fn update_config(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     min_bond_amount: Option<Uint128>,
+    base_pool_ratio: Option<Decimal>,
 ) -> Result<Response, ContractError> {
     let mut cfg = CONFIG.load(deps.storage)?;
     // Only owner can call this.
@@ -613,10 +622,55 @@ fn update_config(
         return Err(ContractError::Unauthorized {});
     }
 
+    let mut attributes: Vec<Attribute> = vec![attr("action", "update_config")];
+
     if let Some(new_min_bond_amount) = min_bond_amount {
         cfg.min_bond_amount = new_min_bond_amount;
+        attributes.push(attr("min_bond_amount", new_min_bond_amount));
+    }
+
+    if let Some(base_pool_ratio) = base_pool_ratio {
+        if base_pool_ratio > Decimal::one() {
+            return Err(ContractError::InvalidBasePoolRatio {});
+        }
+
+        // update the reward indexes one final time using old pool ratios
+        update_reward_indexes(deps.storage, &env, &cfg)?;
+
+        let (start, end, total_distribution_amount) = cfg.distribution_schedule;
+
+        if env.block.time.seconds() > start && env.block.time.seconds() < end {
+            let mut base_distribution_status = BASE_DISTRIBUTION_STATUS.load(deps.storage)?;
+            let mut boost_distribution_status = BOOST_DISTRIBUTION_STATUS.load(deps.storage)?;
+
+            let total_distributed = base_distribution_status.total_distributed
+                + boost_distribution_status.total_distributed;
+
+            let remaining_distribution =
+                total_distribution_amount.checked_sub(total_distributed)?;
+
+            // start a new distribution schedule from the current time to the end
+            // using the remaining distribution
+            cfg.distribution_schedule = (env.block.time.seconds(), end, remaining_distribution);
+
+            // we need to reset total_distributed to zero because this field is
+            // used to determine how much we've already distributed from the
+            // distriubtion schedule interval.  we started a new interval so
+            // nothing distributed out of that yet.
+            base_distribution_status.total_distributed = Uint128::zero();
+            boost_distribution_status.total_distributed = Uint128::zero();
+            BASE_DISTRIBUTION_STATUS.save(deps.storage, &base_distribution_status)?;
+            BOOST_DISTRIBUTION_STATUS.save(deps.storage, &boost_distribution_status)?;
+
+            let (start, end, dist_amount) = cfg.distribution_schedule;
+            attributes.push(attr("base_pool_ratio", base_pool_ratio.to_string()));
+            attributes.push(attr("distribution_start", start.to_string()));
+            attributes.push(attr("distribution_end", end.to_string()));
+            attributes.push(attr("distribution_amount", dist_amount.to_string()));
+        }
+        cfg.base_pool_ratio = base_pool_ratio;
     }
 
     CONFIG.save(deps.storage, &cfg)?;
-    Ok(Response::new())
+    Ok(Response::new().add_attributes(attributes))
 }
