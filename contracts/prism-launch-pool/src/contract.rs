@@ -155,6 +155,7 @@ pub fn to_asset_balance(
     })
 }
 
+/// Only admin can execute
 pub fn admin_withdraw_rewards(
     deps: DepsMut,
     env: Env,
@@ -192,6 +193,7 @@ pub fn admin_withdraw_rewards(
     ]))
 }
 
+/// Hook, can only can be called from self
 pub fn admin_send_withdrawn_rewards(
     deps: DepsMut,
     env: Env,
@@ -369,6 +371,7 @@ pub fn unbond(
         ]))
 }
 
+/// Called by boost contract when the user unbonds xPRISM to reset the BOOST
 pub fn privileged_refresh_boost(
     deps: DepsMut,
     env: Env,
@@ -381,7 +384,7 @@ pub fn privileged_refresh_boost(
         return Err(ContractError::Unauthorized {});
     }
 
-    let (current_bond, boost_amount) = _refresh_boost(deps, env, human)?;
+    let (current_bond, boost_amount) = refresh_boost(deps, env, human)?;
     Ok(Response::new().add_attributes(vec![
         attr("action", "privileged_refresh_boost"),
         attr("total_user_bonded", current_bond.to_string()),
@@ -389,12 +392,13 @@ pub fn privileged_refresh_boost(
     ]))
 }
 
+/// Called by users to update their boost weight
 pub fn activate_boost(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let (current_bond, boost_amount) = _refresh_boost(deps, env, info.sender)?;
+    let (current_bond, boost_amount) = refresh_boost(deps, env, info.sender)?;
 
     // don't allow users to activate boost with zero bonded amount,
     // otherwise we'll need to store a REWARD_INFO record for them
@@ -410,7 +414,8 @@ pub fn activate_boost(
     ]))
 }
 
-pub fn _refresh_boost(
+/// Helper function that updates global and user indexes and updates the users's boost weight
+pub fn refresh_boost(
     deps: DepsMut,
     env: Env,
     account: Addr,
@@ -437,6 +442,8 @@ pub fn _refresh_boost(
     Ok((current_bond, boost_amount))
 }
 
+/// Accumulates accrued rewards into `reward_info.pending_reward`
+/// Does not update state
 pub fn _pull_pending_rewards(storage: &dyn Storage, address: &Addr) -> StdResult<RewardInfo> {
     let base_distribution_status = BASE_DISTRIBUTION_STATUS.load(storage)?;
     let boost_distribution_status = BOOST_DISTRIBUTION_STATUS.load(storage)?;
@@ -469,6 +476,8 @@ pub fn _pull_pending_rewards(storage: &dyn Storage, address: &Addr) -> StdResult
     Ok(reward_info)
 }
 
+/// Updates the given `DistributionStatus`
+/// Does not update state
 pub fn _update_reward_index(
     env: &Env,
     distribution_status: &mut DistributionStatus,
@@ -499,6 +508,7 @@ pub fn _update_reward_index(
     Ok(())
 }
 
+/// Updates global indexes and updates state
 pub fn update_reward_indexes(storage: &mut dyn Storage, env: &Env, cfg: &Config) -> StdResult<()> {
     let mut base_distribution_status = BASE_DISTRIBUTION_STATUS.load(storage)?;
     let mut boost_distribution_status = BOOST_DISTRIBUTION_STATUS.load(storage)?;
@@ -558,8 +568,8 @@ pub fn query_distribution_status(deps: Deps, env: Env) -> StdResult<Distribution
 pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInfoResponse> {
     let staker_addr = deps.api.addr_validate(&staker_addr)?;
 
-    // TODO: we should consider updating the distribution status to get more accurate result
-
+    // Since we are not updating global index, the reward info might now be always up to date
+    
     let bond_amount = BOND_AMOUNTS
         .load(deps.storage, staker_addr.as_bytes())
         .unwrap_or_else(|_| Uint128::zero());
