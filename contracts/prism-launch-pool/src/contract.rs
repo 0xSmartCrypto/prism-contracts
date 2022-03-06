@@ -569,7 +569,7 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInf
     let staker_addr = deps.api.addr_validate(&staker_addr)?;
 
     // Since we are not updating global index, the reward info might now be always up to date
-    
+
     let bond_amount = BOND_AMOUNTS
         .load(deps.storage, staker_addr.as_bytes())
         .unwrap_or_else(|_| Uint128::zero());
