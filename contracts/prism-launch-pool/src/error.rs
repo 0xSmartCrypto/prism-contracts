@@ -24,6 +24,9 @@ pub enum ContractError {
     #[error("Invalid claim withdrawn rewards: {reason}")]
     InvalidClaimWithdrawnRewards { reason: String },
 
+    #[error("InvalidActivateBoost: {reason}")]
+    InvalidActivateBoost { reason: String },
+
     #[error("Invalid base pool ratio")]
     InvalidBasePoolRatio {},
 }

@@ -311,13 +311,29 @@ pub fn unbond(
     };
 
     let new_bond_amount = current_bond - unbond_amt;
-    BOND_AMOUNTS.save(deps.storage, info.sender.as_bytes(), &new_bond_amount)?;
+
+    // when doing a partial unbond, require new_bond_amount to be >= min_bond_amount
+    if new_bond_amount > Uint128::zero() && new_bond_amount < cfg.min_bond_amount {
+        return Err(ContractError::InvalidUnbond {
+            reason: format!(
+                "invalid unbond, remaining amount: {}, min_bond_amount: {}",
+                new_bond_amount, cfg.min_bond_amount
+            ),
+        });
+    }
 
     BASE_DISTRIBUTION_STATUS.update(deps.storage, |mut item| -> StdResult<DistributionStatus> {
         item.total_weight -= unbond_amt;
 
         Ok(item)
     })?;
+
+    // always remove BOND_AMOUNTS record if new bond amount is zero
+    if new_bond_amount.is_zero() {
+        BOND_AMOUNTS.remove(deps.storage, info.sender.as_bytes());
+    } else {
+        BOND_AMOUNTS.save(deps.storage, info.sender.as_bytes(), &new_bond_amount)?;
+    }
 
     let boost_amount = update_and_save_boost_weight_and_reward_info(
         deps,
@@ -379,6 +395,14 @@ pub fn activate_boost(
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let (current_bond, boost_amount) = _refresh_boost(deps, env, info.sender)?;
+
+    // don't allow users to activate boost with zero bonded amount,
+    // otherwise we'll need to store a REWARD_INFO record for them
+    if current_bond.is_zero() {
+        return Err(ContractError::InvalidActivateBoost {
+            reason: "Nothing bonded".to_string(),
+        });
+    }
     Ok(Response::new().add_attributes(vec![
         attr("action", "activate_boost"),
         attr("total_user_bonded", current_bond.to_string()),
@@ -577,8 +601,10 @@ pub fn query_vesting_status(
     })
 }
 
-// Computes up-to-date values for BOOST_DISTRIBUTION_STATUS.total_weight as well as user's REWARD_INFO entry, and saves
-// both to storage. Returns user's boost amount, which is freshly queried from the Boost contract.
+// Computes up-to-date values for BOOST_DISTRIBUTION_STATUS.total_weight and writes
+// to storage.  if nothing is bonded and pending_reward is empty, we remove the
+// user's REWARD_INFO entry.  otherwise we update the user's REWARD_INFO record
+// with new active_boost and boost_weight values, and then write to storage.
 fn update_and_save_boost_weight_and_reward_info(
     deps: DepsMut,
     cfg: &Config,
@@ -600,10 +626,15 @@ fn update_and_save_boost_weight_and_reward_info(
         },
     )?;
 
-    reward_info.boost_weight = new_boost_weight;
-    reward_info.active_boost = boost_amount;
-    REWARD_INFO.save(deps.storage, account.as_bytes(), &reward_info)?;
-
+    // we can remove the reward_info record if both the current bond amount is
+    // zero and the pending reward is zero.
+    if current_bound_amount.is_zero() && reward_info.pending_reward.is_zero() {
+        REWARD_INFO.remove(deps.storage, account.as_bytes());
+    } else {
+        reward_info.boost_weight = new_boost_weight;
+        reward_info.active_boost = boost_amount;
+        REWARD_INFO.save(deps.storage, account.as_bytes(), &reward_info)?;
+    }
     Ok(boost_amount)
 }
 

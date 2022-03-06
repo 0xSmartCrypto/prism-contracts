@@ -1,6 +1,6 @@
 use crate::contract::{_pull_pending_rewards, update_reward_indexes};
 use crate::error::ContractError;
-use crate::state::{Config, CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
+use crate::state::{Config, BOND_AMOUNTS, CONFIG, PENDING_WITHDRAW, REWARD_INFO, SCHEDULED_VEST};
 use cosmwasm_std::Addr;
 use cosmwasm_std::{
     to_binary, CosmosMsg, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Storage,
@@ -47,7 +47,14 @@ pub fn update_vest(storage: &mut dyn Storage, current_time: u64, address: &str) 
     for t in to_delete {
         SCHEDULED_VEST.remove(storage, (address.as_bytes(), &t.to_be_bytes()))
     }
-    PENDING_WITHDRAW.save(storage, address.as_bytes(), &can_withdraw)
+
+    // no point in storing an empty PENDING_WITHDRAW record
+    if can_withdraw.is_zero() {
+        PENDING_WITHDRAW.remove(storage, address.as_bytes());
+        Ok(())
+    } else {
+        PENDING_WITHDRAW.save(storage, address.as_bytes(), &can_withdraw)
+    }
 }
 
 pub fn withdraw_rewards(
@@ -70,7 +77,17 @@ fn _withdraw_rewards_single(
 
     let to_withdraw = reward_info.pending_reward;
     reward_info.pending_reward = Uint128::zero();
-    REWARD_INFO.save(deps.storage, human_address.as_bytes(), &reward_info)?;
+
+    // if bonded amount is missing or 0, we can remove the REWARD_INFO record.
+    // although note that bonded amount should never be 0, as it should
+    // always be removed inside unbond when zero.
+    let bonded_amount = BOND_AMOUNTS.may_load(deps.storage, human_address.as_bytes())?;
+    if bonded_amount.is_none() || bonded_amount.unwrap().is_zero() {
+        // This is only safe to remove because at this point we are sure that reward_info.pending_reward is zero! (we set it to zero above).
+        REWARD_INFO.remove(deps.storage, human_address.as_bytes());
+    } else {
+        REWARD_INFO.save(deps.storage, human_address.as_bytes(), &reward_info)?;
+    }
 
     update_vest(
         deps.storage,
@@ -168,7 +185,10 @@ pub fn claim_withdrawn_rewards(
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     update_vest(deps.storage, env.block.time.seconds(), info.sender.as_str())?;
-    let amount = PENDING_WITHDRAW.load(deps.storage, info.sender.to_string().as_bytes())?;
+    let amount = PENDING_WITHDRAW
+        .may_load(deps.storage, info.sender.to_string().as_bytes())?
+        .unwrap_or_default();
+
     if amount.is_zero() {
         return Err(ContractError::InvalidClaimWithdrawnRewards {
             reason: "There are no claimable rewards".to_string(),
@@ -233,12 +253,8 @@ pub fn claim_withdrawn_rewards(
         }
     };
 
-    // reset pending withraw to zero
-    PENDING_WITHDRAW.save(
-        deps.storage,
-        info.sender.to_string().as_bytes(),
-        &Uint128::zero(),
-    )?;
+    // remove pending withdraw record
+    PENDING_WITHDRAW.remove(deps.storage, info.sender.to_string().as_bytes());
 
     Ok(Response::new()
         .add_messages(msgs)
