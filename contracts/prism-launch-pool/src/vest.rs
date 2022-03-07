@@ -83,7 +83,8 @@ fn _withdraw_rewards_single(
     // always be removed inside unbond when zero.
     let bonded_amount = BOND_AMOUNTS.may_load(deps.storage, human_address.as_bytes())?;
     if bonded_amount.is_none() || bonded_amount.unwrap().is_zero() {
-        // This is only safe to remove because at this point we are sure that reward_info.pending_reward is zero! (we set it to zero above).
+        // This is only safe to remove because at this point we are sure that
+        // reward_info.pending_reward is zero! (we set it to zero above).
         REWARD_INFO.remove(deps.storage, human_address.as_bytes());
     } else {
         REWARD_INFO.save(deps.storage, human_address.as_bytes(), &reward_info)?;
@@ -111,7 +112,10 @@ fn _withdraw_rewards_single(
             &(orig_vest + to_withdraw),
         )?;
     }
-    Ok(Response::new().add_attribute("withdraw_amount", to_withdraw.to_string()))
+    Ok(Response::new().add_attributes(vec![
+        ("action", "withdraw_rewards_single"),
+        ("withdraw_amount", &to_withdraw.to_string()),
+    ]))
 }
 
 /// withdraw_rewards_bulk starts the vesting period for many accounts in a
@@ -143,9 +147,9 @@ pub fn withdraw_rewards_bulk(
     update_reward_indexes(deps.storage, &env, &cfg)?;
 
     let start = match start_after_address {
-        Some(address) => {
-            deps.api.addr_validate(&address)?;
-            Some(Bound::exclusive(address.as_bytes()))
+        Some(ref address) => {
+            deps.api.addr_validate(address)?;
+            Some(Bound::exclusive(address.clone().as_bytes()))
         }
         None => None,
     };
@@ -170,7 +174,14 @@ pub fn withdraw_rewards_bulk(
     };
 
     // return last address to indicate the next start_after_address
-    Ok(Response::new().add_attribute("last_address", last_address))
+    Ok(Response::new().add_attributes(vec![
+        ("action", "withdraw_rewards_bulk"),
+        (
+            "start_after_address",
+            &start_after_address.unwrap_or_default(),
+        ),
+        ("last_address", &last_address),
+    ]))
 }
 
 /// Claim rewards as specified by the claim type, where the claim type can be
@@ -267,7 +278,7 @@ pub fn claim_withdrawn_rewards(
 /// when a user calls ClaimWithdrawnRewards with ClaimType=Amps.  For the
 /// amount to bond, we use our xprism balance minus any previous balance
 /// computed from the ClaimWithdrawnRewards method.  We bond with the
-/// boost contract on behalf of the original claimer.  
+/// boost contract on behalf of the original claimer.
 /// Only contract can execute
 pub fn bond_with_boost_contract_hook(
     deps: DepsMut,

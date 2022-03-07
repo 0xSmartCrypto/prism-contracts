@@ -475,7 +475,14 @@ fn withdraw_rewards_bulk() {
     };
     let res = execute(deps.as_mut(), env.clone(), user_info, msg).unwrap();
     assert_eq!(res.messages, vec![],);
-    assert_eq!(res.attributes, vec![attr("last_address", "carol")]);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "withdraw_rewards_bulk"),
+            attr("start_after_address", "alice"),
+            attr("last_address", "carol")
+        ]
+    );
     for (person, want_scheduled_vests) in vec![
         ("alice", vec![]),
         ("bob", vec![(1814400, Uint128::from(20u128))]),
@@ -526,7 +533,14 @@ fn withdraw_rewards_bulk() {
     };
     let res = execute(deps.as_mut(), env.clone(), user_info, msg).unwrap();
     assert_eq!(res.messages, vec![],);
-    assert_eq!(res.attributes, vec![attr("last_address", "erika")]);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "withdraw_rewards_bulk"),
+            attr("start_after_address", "carol"),
+            attr("last_address", "erika")
+        ]
+    );
     for (person, want_scheduled_vests) in vec![
         ("alice", vec![]),
         ("bob", vec![(1814400, Uint128::from(20u128))]),
@@ -577,7 +591,14 @@ fn withdraw_rewards_bulk() {
     };
     let res = execute(deps.as_mut(), env.clone(), user_info, msg).unwrap();
     assert_eq!(res.messages, vec![],);
-    assert_eq!(res.attributes, vec![attr("last_address", "alice")]);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "withdraw_rewards_bulk"),
+            attr("start_after_address", ""),
+            attr("last_address", "alice")
+        ]
+    );
     for (person, want_scheduled_vests) in vec![
         ("alice", vec![(1814400, Uint128::from(10u128))]),
         ("bob", vec![(1814400, Uint128::from(20u128))]),
