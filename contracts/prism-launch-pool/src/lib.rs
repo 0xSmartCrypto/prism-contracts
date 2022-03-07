@@ -1,5 +1,6 @@
 pub mod contract;
 mod error;
+mod querier;
 mod state;
 mod vest;
 

@@ -9,7 +9,15 @@
       ],
       "properties": {
         "bond": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "user": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
         }
       },
       "additionalProperties": false

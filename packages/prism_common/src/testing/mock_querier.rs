@@ -5,6 +5,7 @@ use cosmwasm_std::{
     WasmQuery,
 };
 use cw20::TokenInfoResponse;
+use prism_protocol::xprism_boost::UserInfo;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -70,6 +71,7 @@ pub struct WasmMockQuerier {
     astro_factory_querier: FactoryQuerier,
     vault_state_querier: VaultStateQuerier,
     simulation_querier: SimulationQuerier,
+    boost_querier: BoostQuerier,
 }
 
 impl Querier for WasmMockQuerier {
@@ -98,6 +100,7 @@ pub enum QueryMsg {
     RewardAssetWhitelist {},
     Simulation { offer_asset: Asset },
     ReverseSimulation { ask_asset: Asset },
+    GetBoost { user: Addr },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -257,6 +260,22 @@ impl WasmMockQuerier {
                                 .unwrap();
                             SystemResult::Ok(ContractResult::Ok(to_binary(&res).unwrap()))
                         }
+                        QueryMsg::GetBoost { user } => {
+                            SystemResult::Ok(self.boost_querier.get_boost(&user).map_or_else(
+                                ContractResult::Err,
+                                |boost_amount| {
+                                    ContractResult::Ok(
+                                        to_binary(&UserInfo {
+                                            amt_bonded: Uint128::from(100u128),
+                                            total_boost: boost_amount,
+                                            last_updated: 1000u64,
+                                            boost_accrual_start_time: 0u64,
+                                        })
+                                        .unwrap(),
+                                    )
+                                },
+                            ))
+                        }
                     }
                 }
             }
@@ -344,6 +363,21 @@ impl VaultStateQuerier {
 }
 
 #[derive(Clone, Default)]
+pub struct BoostQuerier {
+    /// address to boost amount
+    pub boost_map: HashMap<String, Uint128>,
+}
+
+impl BoostQuerier {
+    pub fn get_boost(&self, addr: &Addr) -> Result<Uint128, String> {
+        Ok(self
+            .boost_map
+            .get(&addr.to_string())
+            .map_or(Uint128::zero(), |v| *v))
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct SimulationQuerier {
     // (pair_addr, asset) -> SimulationResponse
     sim_responses: HashMap<(String, String), SimulationResponse>,
@@ -383,6 +417,7 @@ impl WasmMockQuerier {
             astro_factory_querier: FactoryQuerier::default(),
             vault_state_querier: VaultStateQuerier::default(),
             simulation_querier: SimulationQuerier::default(),
+            boost_querier: BoostQuerier::default(),
         }
     }
 
@@ -433,6 +468,10 @@ impl WasmMockQuerier {
             ask_asset,
             reverse_sim_response,
         )
+    }
+
+    pub fn with_boost_querier(&mut self, map: HashMap<String, Uint128>) {
+        self.boost_querier.boost_map = map;
     }
 }
 

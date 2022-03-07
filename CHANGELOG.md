@@ -1,5 +1,5 @@
-## v1.2.0 RC1
+## v1.3.0 RC1
 
-Release of `xprism-boost` contract for AMPS farming.
+Release of `launch_pool` contract (yLuna Farming)
 
-Only affects `prism-xprism-boost` module.
+`xprism_boost` also modified to notify `launch_pool` contract when user unbonds xPRISM

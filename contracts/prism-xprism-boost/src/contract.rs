@@ -6,8 +6,9 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use prism_protocol::launch_pool::ExecuteMsg as LaunchPoolExecuteMsg;
 use prism_protocol::xprism_boost::{
-    Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, UserInfo,
+    Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, UserInfo,
 };
 use std::cmp::min;
 use std::str::FromStr;
@@ -30,11 +31,18 @@ pub fn instantiate(
         return Err(ContractError::InvalidBoostInterval {});
     }
 
+    // Not setting launch_pool_contract is fine, but if it's set, it should be a valid address.
+    let launch_pool_contract = match msg.launch_pool_contract {
+        Some(addr_string) => Some(deps.api.addr_validate(&addr_string)?),
+        None => None,
+    };
+
     let cfg = Config {
         owner: deps.api.addr_validate(&msg.owner)?,
         xprism_token: deps.api.addr_validate(&msg.xprism_token)?,
         boost_per_hour: msg.boost_per_hour,
         max_boost_per_xprism: msg.max_boost_per_xprism,
+        launch_pool_contract,
     };
 
     CONFIG.save(deps.storage, &cfg)?;
@@ -64,18 +72,50 @@ pub fn execute(
                     owner,
                     boost_per_hour,
                     max_boost_per_xprism,
+                    launch_pool_contract,
                 } => {
                     // only owner
                     if config.owner != info.sender {
                         return Err(ContractError::Unauthorized {});
                     }
 
-                    update_config(deps, info, owner, boost_per_hour, max_boost_per_xprism)
+                    update_config(
+                        deps,
+                        info,
+                        owner,
+                        boost_per_hour,
+                        max_boost_per_xprism,
+                        launch_pool_contract,
+                    )
                 }
                 _ => Err(ContractError::Unauthorized {}),
             }
         }
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
+        QueryMsg::GetBoost { user } => {
+            // Returns:
+            //  - User's data if user exists;
+            //  - default UserInfo if user doesn't exist;
+            //  - error if unparseable data is stored.
+            let info = USER_INFO.may_load(deps.storage, &user)?;
+            to_binary(&_accumulate_boost(
+                deps.storage,
+                env,
+                info.unwrap_or_default(),
+            )?)
+        }
+    }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    Ok(Response::default())
 }
 
 pub fn receive_cw20(
@@ -87,17 +127,14 @@ pub fn receive_cw20(
     let msg = cw20_msg.msg;
 
     match from_binary(&msg)? {
-        Cw20HookMsg::Bond {} => bond(deps, env, &cw20_msg.sender, cw20_msg.amount),
-    }
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
-        QueryMsg::GetBoost { user } => {
-            let info = USER_INFO.load(deps.storage, &user)?;
-            to_binary(&_accumulate_boost(deps.storage, env, info)?)
+        // if a user is specified in the Bond message, then we bond the
+        // received amount with that user.  otherwise we bond with the
+        // original cw20 sender.  This allows users/contracts to bond on
+        // behalf of another user.  An example this is inside the prism-launch
+        // pool contract when claiming rewards, we allow users to auto-bond
+        // their xprism with this contract.
+        Cw20HookMsg::Bond { user } => {
+            bond(deps, env, &user.unwrap_or(cw20_msg.sender), cw20_msg.amount)
         }
     }
 }
@@ -109,6 +146,7 @@ pub fn update_config(
     owner: Option<String>,
     boost_per_hour: Option<Decimal>,
     max_boost_per_xprism: Option<Uint128>,
+    launch_pool_contract: Option<String>,
 ) -> Result<Response, ContractError> {
     let mut cfg = CONFIG.load(deps.storage)?;
 
@@ -134,6 +172,21 @@ pub fn update_config(
         }
         cfg.max_boost_per_xprism = max_boost_per_xprism;
     }
+
+    // None means "do NOT update cfg.launch_pool_contract; Leave existing value untouched."
+    // Some("") means "DO update cfg.launch_pool_contract; its new value is None."
+    // Some(x != "") means "DO update cfg.launch_pool_contract; its new value is Some(x)."
+    match launch_pool_contract {
+        None => {}
+        Some(empty_string) if empty_string.is_empty() => {
+            // Clear launch_pool_contract completely. This is useful to stop
+            // calling this contract once the farming event ends.
+            cfg.launch_pool_contract = None;
+        }
+        Some(non_empty_string) => {
+            cfg.launch_pool_contract = Some(deps.api.addr_validate(&non_empty_string)?);
+        }
+    };
 
     CONFIG.save(deps.storage, &cfg)?;
 
@@ -193,7 +246,7 @@ pub fn unbond(
     }
 
     let cfg = CONFIG.load(deps.storage)?;
-    let messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
+    let mut messages = vec![CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: cfg.xprism_token.to_string(),
         msg: to_binary(&Cw20ExecuteMsg::Transfer {
             recipient: info.sender.to_string(),
@@ -201,6 +254,16 @@ pub fn unbond(
         })?,
         funds: vec![],
     })];
+
+    if let Some(address) = cfg.launch_pool_contract {
+        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: address.to_string(),
+            msg: to_binary(&LaunchPoolExecuteMsg::PrivilegedRefreshBoost {
+                account: info.sender.to_string(),
+            })?,
+            funds: vec![],
+        }));
+    }
 
     Ok(Response::new()
         .add_messages(messages)

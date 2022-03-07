@@ -4,7 +4,7 @@
   "type": "object",
   "required": [
     "amt_bonded",
-    "initial_bond",
+    "boost_accrual_start_time",
     "last_updated",
     "total_boost"
   ],
@@ -12,7 +12,7 @@
     "amt_bonded": {
       "$ref": "#/definitions/Uint128"
     },
-    "initial_bond": {
+    "boost_accrual_start_time": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0

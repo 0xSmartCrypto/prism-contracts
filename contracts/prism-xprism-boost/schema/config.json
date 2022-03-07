@@ -10,10 +10,31 @@
   ],
   "properties": {
     "boost_per_hour": {
-      "$ref": "#/definitions/Decimal"
+      "description": "boost_per_hour represents the amount of AMPS a user will accumulate per bound xPRISM per hour. 1 boost/hr = Decimal(1_000_000)",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Decimal"
+        }
+      ]
+    },
+    "launch_pool_contract": {
+      "description": "Address of the launch-pool contract. If set, this contract will be called when a user's AMPS go to zero to make sure the launch-pool contract stops accruing boosted rewards for this user.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Addr"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "max_boost_per_xprism": {
-      "$ref": "#/definitions/Uint128"
+      "description": "max amount of boost per xprism for a user, 6 decimal places (1 boost = 1_000_000)",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ]
     },
     "owner": {
       "$ref": "#/definitions/Addr"
