@@ -304,7 +304,7 @@ pub fn bond_with_boost_contract_hook(
     // an error here since I guess it's plausible that a user has a single
     // prism as a reward and the MintXPrism doesn't yield any xprism
     let messages = if xprism_reward != Uint128::zero() {
-        // send prism balance to boost contract and issue a bond call with
+        // send xprism balance to boost contract and issue a bond call with
         // user set to the receiver as configured inside claim_withdraw_rewards
         vec![CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.xprism_token.to_string(),

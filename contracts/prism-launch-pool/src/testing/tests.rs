@@ -3516,7 +3516,8 @@ fn test_change_pool_ratio() {
     //  Reward results below.  Key detail is that the base rewards went from
     //    800K to 500K between first and second interval, and boost rewards
     //    went from 200K to 500K.  Also note that Alice has a larger percentage
-    //    of the total rewards in both intervals due to her larger boost (despite having the same bonded amount as Bob).
+    //    of the total rewards in both intervals due to her larger boost (despite
+    //    having the same bonded amount as Bob).
     //
     /*  Results from print statements below:
         Interval 1:
@@ -3931,9 +3932,10 @@ fn test_change_pool_ratio_2() {
     //  Alice and bob both withdraw at end of second day
     //
     //  Reward results below.  Key detail is that the base rewards went from
-    //    800K to 500K between first and second interval, and boost rewards
-    //    went from 200K to 500K.  Also note that Alice has a larger percentage
-    //    of the total rewards in the second interval due to her larger boost.
+    //    400K to 900K between first and second interval, and boost rewards
+    //    went from 100K to 600K.  Also note that Alice has a larger percentage
+    //    of the total rewards in both intervals due to her larger boost (despite
+    //    having the same bonded amount as Bob).
     //
     /*  Results from print statements below:
         Interval 1:
