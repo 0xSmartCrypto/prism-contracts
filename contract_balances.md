@@ -28,11 +28,6 @@ This page contains a listing of the balances stored within each contract
 | prism | reward distribution pool |
 | yluna | staked from yield farmers |
 
-## prism-limit-order
-| Denom | Description |
-| - | - |
-| TODO | - |
-
 ## prism-lp-staking
 
 | Denom | Description |

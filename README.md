@@ -13,7 +13,6 @@ This repository contains the source code for the first version of Prism Protocol
 | [`lp-staking`](./contracts/prism-lp-staking)             | [doc]()   | Staking contract for PRISM LP tokens                                                        |
 | [`vault`](./contracts/prism-vault)                       | [doc]()   | Manages luna delegations and yLuna/pLuna minting                                            |
 | [`yasset-staking`](./contracts/prism-yasset-staking)     | [doc]()   | Staking contract for yLuna tokens, stakers receiver all delegated luna rewards and airdrops |
-| [`limit-order`](./contracts/prism-limit-order)           | [doc]()   | Allows users to submit swap orders that can be filled by executors                          |
 | [`xprism-boost`](./contracts/prism-xprism-boost)         | [doc]()   | Allows users to lock xPRISM to farm AMPS                                                    |
 
 ## Development
