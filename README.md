@@ -15,6 +15,10 @@ This repository contains the source code for the first version of Prism Protocol
 | [`yasset-staking`](./contracts/prism-yasset-staking)     | [doc]()   | Staking contract for yLuna tokens, stakers receiver all delegated luna rewards and airdrops |
 | [`xprism-boost`](./contracts/prism-xprism-boost)         | [doc]()   | Allows users to lock xPRISM to farm AMPS                                                    |
 
+## Bug Bounty
+
+There is an active bug bounty program for Prism Smart Contracts on [Inmunefi](https://immunefi.com/bounty/prismprotocol/).
+
 ## Development
 
 ### Environment Setup
