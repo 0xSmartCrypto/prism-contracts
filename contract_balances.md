@@ -6,6 +6,13 @@ This page contains a listing of the balances stored within each contract
 | - | - |
 | NONE | - |
 
+## prism-basset-vault
+
+| Denom | Description |
+| - | - |
+| basset | all bassets currently bonded |
+| casset |  the vault holds all cAssets obtained from user's splitting their cAsset into pAsset/yAsset |
+
 ## prism-collector
 
 | Denom | Description |
@@ -35,6 +42,12 @@ This page contains a listing of the balances stored within each contract
 | prism | reward distribution pool |
 | lp tokens (any supported lp token) | staked tokens from yield farmers |
 
+## prism-reward-distribution
+
+| Denom | Description |
+| - | - |
+| NONE | - |
+
 ## prism-vault
 | Denom | Description |
 | - | - |
@@ -49,7 +62,12 @@ This page contains a listing of the balances stored within each contract
 | native coins |  delegator rewards that have not yet been converted to pluna/yluna.  when we bond/unbond with any validator, delegator rewards are automatically pulled from that validator and sent to yasset-staking.  These are not converted to pluna/yluna until UpdateGlobalIndex is called |
 | airdrops |  Deposited from vault |
 
-## xprism-boost
+## prism-yasset-staking-x
+| Denom | Description |
+| - | - |
+| yAsset | staked by protocol users and accumulated from reward deposits that are immediately converted to yAssets |
+
+## prism-xprism-boost
 | Denom | Description |
 | - | - |
 | xprism | the contract holds the xprism locked by all users farming amps |

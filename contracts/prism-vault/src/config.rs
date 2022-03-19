@@ -120,7 +120,7 @@ pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
-    yluna_staking: Option<String>,
+    reward_distribution_contract: Option<String>,
     airdrop_registry_contract: Option<String>,
     manager: Option<String>,
 ) -> StdResult<Response> {
@@ -136,13 +136,13 @@ pub fn execute_update_config(
         config.owner = deps.api.addr_validate(&owner)?;
     }
 
-    if let Some(yluna_staking) = yluna_staking {
-        config.yluna_staking = deps.api.addr_validate(&yluna_staking)?;
+    if let Some(reward_distribution_contract) = reward_distribution_contract {
+        config.reward_distribution_contract = deps.api.addr_validate(&reward_distribution_contract)?;
 
         // register the reward contract for automated reward withdrawal.
         messages.push(SubMsg::new(CosmosMsg::Distribution(
             DistributionMsg::SetWithdrawAddress {
-                address: yluna_staking,
+                address: reward_distribution_contract,
             },
         )));
     }
@@ -157,7 +157,7 @@ pub fn execute_update_config(
 
     let placeholder_addr = Addr::unchecked("");
     if !config.initialized
-        && config.yluna_staking.ne(&placeholder_addr)
+        && config.reward_distribution_contract.ne(&placeholder_addr)
         && config.airdrop_registry_contract.ne(&placeholder_addr)
     {
         config.initialized = true;

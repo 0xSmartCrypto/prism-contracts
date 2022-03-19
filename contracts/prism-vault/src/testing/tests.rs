@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::testing::{mock_env, mock_info};
-use cw_asset::{Asset, AssetInfo};
+use cw_asset::AssetInfo;
 
 use crate::config::MAX_VALIDATORS;
 use crate::contract::{execute, instantiate, query, reply};
@@ -33,12 +33,13 @@ use crate::state::{
 };
 use prism_common::testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use prism_protocol::airdrop_registry::ExecuteMsg::FabricateClaim;
+use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
 use std::borrow::BorrowMut;
 
 const OWNER: &str = "owner";
-const YLUNA_STAKING: &str = "ylunastaking";
+const REWARD_DISTRIBUTION_CONTRACT: &str = "reward_distribution_contract";
 const CLUNA_CONTRACT: &str = "cluna";
 const YLUNA_CONTRACT: &str = "yluna";
 const PLUNA_CONTRACT: &str = "pluna";
@@ -75,7 +76,7 @@ fn set_validator_mock(querier: &mut WasmMockQuerier) {
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut OwnedDeps<S, A, Q>,
     owner: &str,
-    yluna_staking: &str,
+    reward_distribution_contract: &str,
     validator: String,
 ) {
     let msg = InstantiateMsg {
@@ -123,7 +124,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 
     let register_msg = ExecuteMsg::UpdateConfig {
         owner: None,
-        yluna_staking: Some(yluna_staking.to_string()),
+        reward_distribution_contract: Some(reward_distribution_contract.to_string()),
         airdrop_registry_contract: Some("airdrop_registry".to_string()),
         manager: None,
     };
@@ -403,7 +404,7 @@ fn proper_initialization() {
         from_binary(&query(deps.as_ref(), mock_env(), conf).unwrap()).unwrap();
     let expected_conf = ConfigResponse {
         owner: OWNER.to_string(),
-        yluna_staking: "".to_string(),
+        reward_distribution_contract: "".to_string(),
         yluna_contract: "yluna".to_string(),
         pluna_contract: "pluna".to_string(),
         cluna_contract: "cluna".to_string(),
@@ -440,7 +441,7 @@ fn proper_register_validator() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -539,7 +540,7 @@ fn proper_bond() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
     do_register_validator(deps.as_mut(), validator.clone());
@@ -691,7 +692,7 @@ fn proper_pick_bond_validator() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -839,7 +840,7 @@ fn proper_bond_split() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -919,7 +920,7 @@ fn proper_split() {
     let addr1 = "addr1000".to_string();
     let bond_amount = Uint128::new(10000);
 
-    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
+    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
 
     let split_msg = ExecuteMsg::Split {
         amount: bond_amount,
@@ -973,7 +974,7 @@ fn proper_merge() {
     let addr1 = "addr1000".to_string();
     let bond_amount = Uint128::new(10000);
 
-    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
+    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
 
     let split_msg = ExecuteMsg::Merge {
         amount: bond_amount,
@@ -1030,7 +1031,7 @@ fn proper_deregister() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1169,7 +1170,7 @@ pub fn proper_update_global_index() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1231,7 +1232,7 @@ pub fn proper_update_global_index() {
             msg,
             funds: _,
         }) => {
-            assert_eq!(contract_addr, YLUNA_STAKING);
+            assert_eq!(contract_addr, REWARD_DISTRIBUTION_CONTRACT);
             assert_eq!(
                 msg,
                 &to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap()
@@ -1255,7 +1256,7 @@ pub fn proper_update_global_index_two_validators() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1338,7 +1339,7 @@ pub fn proper_update_global_index_respect_one_registered_validator() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1405,7 +1406,7 @@ pub fn proper_receive() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1493,7 +1494,7 @@ pub fn proper_unbond() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1711,7 +1712,7 @@ pub fn proper_pick_validator() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1876,7 +1877,7 @@ pub fn proper_pick_validator_respect_distributed_delegation() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -1972,7 +1973,7 @@ pub fn proper_slashing() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2123,7 +2124,7 @@ pub fn proper_withdraw_unbonded() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2302,7 +2303,7 @@ pub fn proper_withdraw_unbonded_respect_slashing() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2449,7 +2450,7 @@ pub fn proper_withdraw_unbonded_respect_inactivity_slashing() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2631,7 +2632,7 @@ pub fn proper_withdraw_unbond_with_dummies() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -2772,7 +2773,7 @@ pub fn test_update_params() {
         er_threshold: None,
     };
 
-    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
+    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
 
     let invalid_info = mock_info("invalid", &[]);
     let res = execute(
@@ -2837,7 +2838,7 @@ pub fn proper_recovery_fee() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -3063,7 +3064,7 @@ pub fn proper_update_config() {
     // only the owner can call this message
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
-        yluna_staking: None,
+        reward_distribution_contract: None,
         airdrop_registry_contract: None,
         manager: None,
     };
@@ -3074,7 +3075,7 @@ pub fn proper_update_config() {
     // change the owner
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
-        yluna_staking: None,
+        reward_distribution_contract: None,
         airdrop_registry_contract: None,
         manager: None,
     };
@@ -3111,7 +3112,7 @@ pub fn proper_update_config() {
 
     let update_config = UpdateConfig {
         owner: None,
-        yluna_staking: Some("new reward".to_string()),
+        reward_distribution_contract: Some("new reward".to_string()),
         airdrop_registry_contract: None,
         manager: None,
     };
@@ -3129,13 +3130,13 @@ pub fn proper_update_config() {
     let config = QueryMsg::Config {};
     let config_query: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), config).unwrap()).unwrap();
-    assert_eq!(config_query.yluna_staking, "new reward".to_string());
+    assert_eq!(config_query.reward_distribution_contract, "new reward".to_string());
     // contract is not yet fully initialized
     assert!(!config_query.initialized);
 
     let update_config = UpdateConfig {
         owner: None,
-        yluna_staking: None,
+        reward_distribution_contract: None,
         airdrop_registry_contract: Some("new airdrop".to_string()),
         manager: None,
     };
@@ -3150,7 +3151,7 @@ pub fn proper_update_config() {
         config_query.airdrop_registry_contract,
         "new airdrop".to_string()
     );
-    // now the contract is initialized because yluna_staking and airdrop contract has been set
+    // now the contract is initialized because reward_distribution_contract and airdrop contract has been set
     assert!(config_query.initialized);
 }
 
@@ -3161,7 +3162,7 @@ fn proper_claim_airdrop() {
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
     set_validator_mock(&mut deps.querier);
 
-    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
+    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
 
     let claim_msg = ExecuteMsg::ClaimAirdrop {
         airdrop_token_contract: "airdrop_token".to_string(),
@@ -3206,7 +3207,7 @@ fn proper_deposit_airdrop_reward() {
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
     set_validator_mock(&mut deps.querier);
 
-    init(deps.borrow_mut(), OWNER, YLUNA_STAKING, validator.address);
+    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
 
     let airdrop_msg = ExecuteMsg::DepositAirdropReward {
         airdrop_token_contract: "airdrop_token".to_string(),
@@ -3232,23 +3233,13 @@ fn proper_deposit_airdrop_reward() {
         vec![
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "airdrop_token".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                    spender: YLUNA_STAKING.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: REWARD_DISTRIBUTION_CONTRACT.to_string(),
                     amount: Uint128::from(1000u128),
-                    expires: None,
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: YLUNA_STAKING.to_string(),
-                msg: to_binary(&StakingExecuteMsg::DepositRewards {
-                    assets: vec![Asset {
-                        info: AssetInfo::Cw20(Addr::unchecked("airdrop_token")),
-                        amount: Uint128::from(1000u128)
-                    }],
-                })
-                .unwrap(),
+                    msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {
+                        asset_infos: vec![AssetInfo::Cw20(Addr::unchecked("airdrop_token"))],
+                    }).unwrap()
+                }).unwrap(),
                 funds: vec![],
             })),
         ]
@@ -3284,7 +3275,7 @@ fn proper_update_global_index_with_airdrop() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         validator.address.clone(),
     );
 
@@ -3596,7 +3587,7 @@ fn test_redelegate() {
     init(
         deps.borrow_mut(),
         OWNER,
-        YLUNA_STAKING,
+        REWARD_DISTRIBUTION_CONTRACT,
         source_validator.address.clone(),
     );
 

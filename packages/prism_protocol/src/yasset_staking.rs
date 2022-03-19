@@ -95,6 +95,9 @@ pub enum QueryMsg {
     RewardInfo { staker_addr: String },
     RewardAssetWhitelist {},
     BondAmount {},
+    // State currently only contains BondAmount, so could just use BondAmount 
+    // query, but adding for consistency with vault and yasset-staking-x
+    State {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -127,4 +130,9 @@ pub struct RewardInfoResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardAssetWhitelistResponse {
     pub assets: Vec<AssetInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct StateResponse {
+    pub total_bond_amount: Uint128,
 }

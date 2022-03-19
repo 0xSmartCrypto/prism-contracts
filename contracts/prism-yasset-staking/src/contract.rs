@@ -10,7 +10,7 @@ use cosmwasm_std::{
 
 use prism_protocol::yasset_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardAssetWhitelistResponse, MAX_PROTOCOL_FEE,
+    RewardAssetWhitelistResponse, MAX_PROTOCOL_FEE, StateResponse,
 };
 
 use crate::rewards::{
@@ -178,6 +178,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::RewardAssetWhitelist {} => to_binary(&query_whitelist(deps)?),
         QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
         QueryMsg::BondAmount {} => to_binary(&query_bond_amount(deps)?),
+        QueryMsg::State {} => to_binary(&query_state(deps)?),
     }
 }
 
@@ -228,6 +229,13 @@ fn validate_protocol_fee(fee: Decimal) -> StdResult<Decimal> {
     }
 
     Ok(fee)
+}
+
+pub fn query_state(deps: Deps) -> StdResult<StateResponse> {
+    let res = StateResponse {
+        total_bond_amount: query_bond_amount(deps)?,
+    };
+    Ok(res)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

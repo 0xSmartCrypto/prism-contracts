@@ -24,13 +24,13 @@ use cw0::must_pay;
 use cw20::{
     Cw20Coin, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, MinterResponse, TokenInfoResponse,
 };
-use cw_asset::{Asset, AssetInfo};
+use cw_asset::AssetInfo;
 use prism_protocol::vault::{
     AllHistoryResponse, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
     InstantiateMsg, QueryMsg, StateResponse, UnbondRequestsResponse, WhitelistedValidatorsResponse,
-    WithdrawableUnbondedResponse,
+    WithdrawableUnbondedResponse, BondedAmountResponse,
 };
-use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
+use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 use prismswap::querier::query_token_balance;
 use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
 
@@ -57,12 +57,14 @@ pub fn instantiate(
     // set placeholder addresses
     let config = Config {
         owner: sender,
-        yluna_staking: Addr::unchecked(""),
+        reward_distribution_contract: Addr::unchecked(""),
         cluna_contract: Addr::unchecked(""),
         yluna_contract: Addr::unchecked(""),
         airdrop_registry_contract: Addr::unchecked(""),
         pluna_contract: Addr::unchecked(""),
-        initialized: false, // will be set to true once yluna_staking and airdrop registry addresses are set
+        // initialized will be set to true once reward_distribution_contract
+        // and airdrop registry addresses are set
+        initialized: false, 
         token_code_id: msg.token_code_id,
         token_admin: deps.api.addr_validate(&msg.token_admin)?,
         manager: deps.api.addr_validate(&msg.manager)?,
@@ -190,14 +192,14 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ),
         ExecuteMsg::UpdateConfig {
             owner,
-            yluna_staking,
+            reward_distribution_contract,
             airdrop_registry_contract,
             manager,
         } => execute_update_config(
             deps,
             info,
             owner,
-            yluna_staking,
+            reward_distribution_contract,
             airdrop_registry_contract,
             manager,
         ),
@@ -279,8 +281,8 @@ pub fn execute_update_global(
     // Ask yasset-staking contract to process rewards. It should swap those rewards
     // into yLuna and pLuna.
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.yluna_staking.to_string(),
-        msg: to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap(),
+        contract_addr: config.reward_distribution_contract.to_string(),
+        msg: to_binary(&RewardDistributionExecuteMsg::ProcessDelegatorRewards {}).unwrap(),
         funds: vec![],
     })));
 
@@ -402,29 +404,19 @@ pub fn deposit_airdrop_rewards(
 
     let amount = query_token_balance(&deps.querier, &airdrop_token_addr, &env.contract.address)?;
 
-    let airdrop_reward = Asset {
-        info: AssetInfo::Cw20(airdrop_token_addr.clone()),
-        amount,
-    };
-
-    Ok(Response::new().add_messages(vec![
-        CosmosMsg::Wasm(WasmMsg::Execute {
+    Ok(
+        Response::new().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: airdrop_token_addr.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                spender: conf.yluna_staking.to_string(),
-                amount,
-                expires: None,
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: conf.reward_distribution_contract.to_string(),
+                amount: amount,
+                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {
+                    asset_infos: vec![AssetInfo::Cw20(airdrop_token_addr)],
+                })?,
             })?,
             funds: vec![],
-        }),
-        CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: conf.yluna_staking.to_string(),
-            msg: to_binary(&StakingExecuteMsg::DepositRewards {
-                assets: vec![airdrop_reward],
-            })?,
-            funds: vec![],
-        }),
-    ]))
+        })),
+    )
 }
 
 /// Handler for tracking slashing
@@ -459,6 +451,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::AllHistory { start_from, limit } => {
             to_binary(&query_unbond_requests_limitation(deps, start_from, limit)?)
         }
+        QueryMsg::BondedAmount {} => to_binary(&query_bonded_amount(deps)?),
     }
 }
 
@@ -559,4 +552,12 @@ pub fn validate_rate(rate: Decimal) -> StdResult<Decimal> {
     }
 
     Ok(rate)
+}
+
+fn query_bonded_amount(deps: Deps) -> StdResult<BondedAmountResponse> {
+    let state = STATE.load(deps.storage)?;
+    let res = BondedAmountResponse {
+        total_bond_amount: state.total_bond_amount,
+    };
+    Ok(res)
 }

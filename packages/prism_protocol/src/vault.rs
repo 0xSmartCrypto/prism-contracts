@@ -26,7 +26,7 @@ pub enum ExecuteMsg {
     /// Update Vault global config.
     UpdateConfig {
         owner: Option<String>,
-        yluna_staking: Option<String>,
+        reward_distribution_contract: Option<String>,
         airdrop_registry_contract: Option<String>,
         manager: Option<String>,
     },
@@ -127,6 +127,7 @@ pub enum QueryMsg {
         start_from: Option<u64>,
         limit: Option<u32>,
     },
+    BondedAmount {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -138,7 +139,7 @@ pub enum Cw20HookMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub yluna_staking: String,
+    pub reward_distribution_contract: String,
     pub cluna_contract: String,
     pub pluna_contract: String,
     pub yluna_contract: String,
@@ -195,4 +196,9 @@ pub struct UnbondHistoryResponse {
     pub applied_exchange_rate: Decimal,
     pub withdraw_rate: Decimal,
     pub released: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct BondedAmountResponse {
+    pub total_bond_amount: Uint128,
 }

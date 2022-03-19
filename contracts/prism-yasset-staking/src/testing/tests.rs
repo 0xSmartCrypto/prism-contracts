@@ -11,7 +11,7 @@ use terra_cosmwasm::create_swap_msg;
 
 use crate::contract::{execute, instantiate, query};
 use crate::state::CONFIG;
-use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
+use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier, VAULT};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
 use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
@@ -20,10 +20,11 @@ use prism_protocol::yasset_staking::{
     RewardAssetWhitelistResponse, RewardInfoResponse,
 };
 
+
 pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     let msg = InstantiateMsg {
         owner: "owner0000".to_string(),
-        vault: "vault0000".to_string(),
+        vault: VAULT.to_string(),
         gov: "gov0000".to_string(),
         collector: "collector0000".to_string(),
         protocol_fee: Decimal::from_ratio(1u128, 10u128),
@@ -52,7 +53,7 @@ fn test_init() {
         res,
         ConfigResponse {
             owner: "owner0000".to_string(),
-            vault: "vault0000".to_string(),
+            vault: VAULT.to_string(),
             gov: "gov0000".to_string(),
             collector: "collector0000".to_string(),
             protocol_fee: Decimal::from_ratio(1u128, 10u128),
@@ -222,7 +223,7 @@ pub fn test_process_delegator_rewards() {
 
     init(&mut deps);
 
-    let info = mock_info("vault0000", &[]);
+    let info = mock_info(VAULT, &[]);
     let msg = ExecuteMsg::ProcessDelegatorRewards {};
 
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -276,7 +277,7 @@ fn test_luna_to_cluna_hook() {
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "vault0000".to_string(),
+                contract_addr: VAULT.to_string(),
                 msg: to_binary(&VaultExecuteMsg::BondSplit { validator: None }).unwrap(),
                 funds: vec![Coin {
                     denom: "uluna".to_string(),
