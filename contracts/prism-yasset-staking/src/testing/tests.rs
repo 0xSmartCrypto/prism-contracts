@@ -1,7 +1,7 @@
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Addr, CosmosMsg, MemoryStorage, OwnedDeps,
-    StdError, SubMsg, Uint128, WasmMsg, Decimal, BankMsg, Coin
+    attr, from_binary, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, MemoryStorage,
+    OwnedDeps, StdError, SubMsg, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use cw_asset::{Asset, AssetInfo};
@@ -13,8 +13,8 @@ use prism_common::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
 use prism_protocol::yasset_staking::{
-    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg,
-    RewardInfoResponse, PoolInfoResponse,
+    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
+    RewardInfoResponse,
 };
 
 const OWNER: &str = "owner0000";
@@ -225,12 +225,12 @@ fn test_deposit_rewards() {
             Asset {
                 amount: Uint128::from(500u128),
                 info: AssetInfo::Native("uusd".to_string()),
-            },            
+            },
         ],
     };
 
     // bonded amount is zero
-    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(err, StdError::generic_err("zero bonded amount"));
 
     // bond yluna
@@ -241,7 +241,7 @@ fn test_deposit_rewards() {
     });
     let yluna_info = mock_info("yluna0000", &[]);
     execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
-    
+
     // deposit reward again
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![
@@ -252,13 +252,16 @@ fn test_deposit_rewards() {
             Asset {
                 amount: Uint128::from(500u128),
                 info: AssetInfo::Native("uusd".to_string()),
-            },            
+            },
         ],
     };
-    let info = mock_info(REWARD_DISTRIBUTION, &[Coin{
-        denom: "uusd".to_string(),
-        amount: Uint128::from(500u128)
-    }]);
+    let info = mock_info(
+        REWARD_DISTRIBUTION,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(500u128),
+        }],
+    );
 
     let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
@@ -272,8 +275,7 @@ fn test_deposit_rewards() {
             })
             .unwrap(),
             funds: vec![],
-        })),
-       ]
+        })),]
     );
 
     let res: PoolInfoResponse = from_binary(
@@ -321,17 +323,20 @@ fn test_claim_rewards() {
             Asset {
                 amount: Uint128::from(100u128),
                 info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
-            },            
+            },
             Asset {
                 amount: Uint128::from(500u128),
                 info: AssetInfo::Native("uusd".to_string()),
-            },            
+            },
         ],
     };
-    let info = mock_info(REWARD_DISTRIBUTION, &[Coin{
-        denom: "uusd".to_string(),
-        amount: Uint128::from(500u128)
-    }]);
+    let info = mock_info(
+        REWARD_DISTRIBUTION,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(500u128),
+        }],
+    );
     execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let res: RewardInfoResponse = from_binary(
@@ -1044,7 +1049,10 @@ fn test_convert_and_claim_rewards_invalid_claim() {
     };
     let info = mock_info("alice0000", &[]);
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
-    assert_eq!(err, StdError::generic_err("claim asset not supported: cw20:anc0000"));
+    assert_eq!(
+        err,
+        StdError::generic_err("claim asset not supported: cw20:anc0000")
+    );
 }
 
 #[test]
@@ -1066,9 +1074,7 @@ fn test_update_config() {
 
     // Authorized user with blank input updates nothing.
     {
-        let blank_msg = ExecuteMsg::UpdateConfig {
-            owner: None,
-        };
+        let blank_msg = ExecuteMsg::UpdateConfig { owner: None };
         let info = mock_info("owner0000", &[]);
         execute(deps.as_mut(), mock_env(), info, blank_msg).unwrap();
         let config = CONFIG.load(&deps.storage).unwrap();

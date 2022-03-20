@@ -7,8 +7,8 @@ use cosmwasm_std::{
     WasmMsg, WasmQuery,
 };
 
-use prism_protocol::internal::parse_reply_instantiate_data;
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
+use prism_protocol::internal::parse_reply_instantiate_data;
 use prism_protocol::yasset_staking_x::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, StateResponse,
 };
@@ -16,12 +16,12 @@ use prism_protocol::yasset_staking_x::{
 use crate::error::{ContractError, ContractResult};
 use crate::state::{Config, CONFIG};
 
-use cw_asset::{Asset, AssetInfo};
-use prismswap::querier::{query_supply, query_token_balance};
-use prismswap::asset::{PrismSwapAsset};
 use cw2::set_contract_version;
 use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, MinterResponse, TokenInfoResponse};
 use cw20_base::msg::InstantiateMsg as TokenInstantiateMsg;
+use cw_asset::{Asset, AssetInfo};
+use prismswap::asset::PrismSwapAsset;
+use prismswap::querier::{query_supply, query_token_balance};
 
 const INSTANTIATE_REPLY_ID: u64 = 1;
 
@@ -251,9 +251,7 @@ pub fn deposit_rewards(
     let assets_to_swap: Vec<Asset> = assets
         .into_iter()
         .filter(|asset| match asset.info.clone() {
-            AssetInfo::Cw20(contract_addr) => {
-                contract_addr != cfg.yasset_token
-            }
+            AssetInfo::Cw20(contract_addr) => contract_addr != cfg.yasset_token,
             _ => true,
         })
         .collect();
@@ -303,11 +301,8 @@ pub fn query_state(deps: Deps, env: Env) -> StdResult<StateResponse> {
 }
 
 pub fn _query_state(deps: Deps, env: Env, cfg: &Config) -> StdResult<StateResponse> {
-    let yasset_balance = query_token_balance(
-        &deps.querier,
-        &cfg.yasset_token,
-        &env.contract.address,
-    )?;
+    let yasset_balance =
+        query_token_balance(&deps.querier, &cfg.yasset_token, &env.contract.address)?;
     let xyasset_supply = query_supply(&deps.querier, &cfg.xyasset_token)?;
     let exchange_rate = if yasset_balance.is_zero() {
         Decimal::one()

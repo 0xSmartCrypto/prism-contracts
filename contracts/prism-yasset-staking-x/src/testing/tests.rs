@@ -1,10 +1,10 @@
-use cw_asset::{Asset, AssetInfo};
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     attr, from_binary, to_binary, Addr, Coin, ContractResult, CosmosMsg, Decimal, MemoryStorage,
     OwnedDeps, Reply, ReplyOn, SubMsg, SubMsgExecutionResponse, Uint128, WasmMsg,
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, MinterResponse};
+use cw_asset::{Asset, AssetInfo};
 
 use crate::contract::{execute, instantiate, query, reply};
 use cw20_base::msg::InstantiateMsg as TokenInstantiateMsg;
@@ -35,7 +35,7 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
     };
 
     let owner_info = mock_info(OWNER, &[]);
-    instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
+    instantiate(deps.as_mut(), mock_env(), owner_info, msg).unwrap();
 
     let reply_msg = get_token_instantiate_reply_msg();
     reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
@@ -44,7 +44,7 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
         reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
     };
     let info = mock_info(OWNER, &[]);
-    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 }
 
 fn get_token_instantiate_reply_msg() -> Reply {
@@ -144,7 +144,7 @@ fn test_init() {
         reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
     };
     let info = mock_info("alice0000", &[]);
-    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(err, ContractError::Unauthorized {});
 
     // successful post-initialize as owner
@@ -152,7 +152,7 @@ fn test_init() {
         reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
     };
     let info = mock_info(OWNER, &[]);
-    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // query config after post-initialize
     let res: ConfigResponse =
@@ -173,7 +173,7 @@ fn test_init() {
         reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
     };
     let info = mock_info(OWNER, &[]);
-    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(err, ContractError::DuplicatePostInitialize {});
 }
 
@@ -187,7 +187,7 @@ fn test_bond() {
     let res: StateResponse =
         from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::State {}).unwrap()).unwrap();
     assert_eq!(
-        res.clone(),
+        res,
         StateResponse {
             total_bond_amount: Uint128::zero(),
             xyasset_supply: Uint128::zero(),
@@ -215,7 +215,7 @@ fn test_bond() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &bond_amount)],
     )]);
     let info = mock_info(YASSET_TOKEN, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     let expected_mint_amount = bond_amount;
     assert_eq!(
         res.messages,
@@ -255,7 +255,7 @@ fn test_bond() {
     let res: StateResponse =
         from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::State {}).unwrap()).unwrap();
     assert_eq!(
-        res.clone(),
+        res,
         StateResponse {
             total_bond_amount: bond_amount,
             xyasset_supply: expected_mint_amount,
@@ -286,7 +286,7 @@ fn test_bond_exchange_rate() {
         &[(&MOCK_CONTRACT_ADDR.to_string(), &bond_amount)],
     )]);
     let info = mock_info(YASSET_TOKEN, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
     let expected_mint_amount = bond_amount;
     assert_eq!(
         res.messages,
@@ -329,7 +329,7 @@ fn test_bond_exchange_rate() {
     let res: StateResponse =
         from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::State {}).unwrap()).unwrap();
     assert_eq!(
-        res.clone(),
+        res,
         StateResponse {
             total_bond_amount: yasset_balance_with_reward,
             xyasset_supply: expected_mint_amount,
@@ -354,7 +354,7 @@ fn test_bond_exchange_rate() {
     ]);
 
     let info = mock_info(YASSET_TOKEN, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     let expected_mint_amount = Uint128::from(666u128); // ensure we round down
     assert_eq!(
         res.messages,
@@ -415,7 +415,7 @@ fn test_unbond() {
     assert_eq!(err, ContractError::Unauthorized {});
 
     let info = mock_info(XYASSET_TOKEN, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let expected_redeem_amount = Uint128::from(262u128); // ensure we round down
     assert_eq!(
@@ -470,12 +470,12 @@ fn test_deposit_rewards_native() {
     let msg = ExecuteMsg::DepositRewards {
         assets: reward_assets.clone(),
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::Unauthorized {});
 
     // Invalid native funds - nothing sent
     let info = mock_info(REWARD_DISTRIBUTION, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::InvalidNativeFunds {});
 
     // Invalid native funds - denom mismatch
@@ -484,7 +484,7 @@ fn test_deposit_rewards_native() {
         amount: Uint128::from(1000u128),
     };
     let info = mock_info(REWARD_DISTRIBUTION, &[sent_coin]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::InvalidNativeFunds {});
 
     // Invalid native funds - amount mismatch
@@ -493,7 +493,7 @@ fn test_deposit_rewards_native() {
         amount: Uint128::from(1001u128),
     };
     let info = mock_info(REWARD_DISTRIBUTION, &[sent_coin]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::InvalidNativeFunds {});
 
     // successful deposit
@@ -502,21 +502,19 @@ fn test_deposit_rewards_native() {
         amount: Uint128::from(1000u128),
     };
     let info = mock_info(REWARD_DISTRIBUTION, &[sent_coin]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: COLLECTOR.to_string(),
-                msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
-                    assets: reward_assets,
-                    receiver: None,
-                    dest_asset_info: AssetInfo::Cw20(Addr::unchecked(YASSET_TOKEN)),
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-        ]
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: COLLECTOR.to_string(),
+            msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
+                assets: reward_assets,
+                receiver: None,
+                dest_asset_info: AssetInfo::Cw20(Addr::unchecked(YASSET_TOKEN)),
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
     );
 
     // two native tokens - Invalid native funds
@@ -544,7 +542,7 @@ fn test_deposit_rewards_native() {
     let msg = ExecuteMsg::DepositRewards {
         assets: reward_assets.clone(),
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(res, ContractError::InvalidNativeFunds {});
 
     // two native tokens - success
@@ -562,22 +560,20 @@ fn test_deposit_rewards_native() {
     let msg = ExecuteMsg::DepositRewards {
         assets: reward_assets.clone(),
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     assert_eq!(
         res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: COLLECTOR.to_string(),
-                msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
-                    assets: reward_assets,
-                    receiver: None,
-                    dest_asset_info: AssetInfo::Cw20(Addr::unchecked(YASSET_TOKEN)),
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-        ]
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: COLLECTOR.to_string(),
+            msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
+                assets: reward_assets,
+                receiver: None,
+                dest_asset_info: AssetInfo::Cw20(Addr::unchecked(YASSET_TOKEN)),
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
     )
 }
 
@@ -588,7 +584,7 @@ fn test_deposit_rewards_token() {
 
     let reward_assets = vec![Asset {
         info: AssetInfo::Cw20(Addr::unchecked("ANC")),
-       amount: Uint128::from(1000u128),
+        amount: Uint128::from(1000u128),
     }];
 
     // successful deposit
@@ -596,7 +592,7 @@ fn test_deposit_rewards_token() {
         assets: reward_assets.clone(),
     };
     let info = mock_info(REWARD_DISTRIBUTION, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.messages,
         vec![
@@ -638,7 +634,7 @@ fn test_deposit_rewards_token() {
         assets: reward_assets.clone(),
     };
     let info = mock_info(REWARD_DISTRIBUTION, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.messages,
         vec![
@@ -697,7 +693,7 @@ fn test_deposit_rewards_native_and_token() {
     let msg = ExecuteMsg::DepositRewards {
         assets: reward_assets.clone(),
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::InvalidNativeFunds {});
 
     // success
@@ -706,7 +702,7 @@ fn test_deposit_rewards_native_and_token() {
         amount: Uint128::from(2000u128),
     };
     let info = mock_info(REWARD_DISTRIBUTION, &[sent_coin]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.messages,
         vec![
@@ -750,20 +746,18 @@ fn test_deposit_rewards_no_convert() {
     let msg = ExecuteMsg::DepositRewards {
         assets: reward_assets.clone(),
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     assert_eq!(
         res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: YASSET_TOKEN.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: info.sender.to_string(),
-                    recipient: mock_env().contract.address.to_string(),
-                    amount: reward_assets[0].amount,
-                })
-                .unwrap(),
-                funds: vec![],
-            })),
-        ]
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: YASSET_TOKEN.to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                owner: info.sender.to_string(),
+                recipient: mock_env().contract.address.to_string(),
+                amount: reward_assets[0].amount,
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
     );
 }

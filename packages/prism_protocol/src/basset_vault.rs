@@ -1,8 +1,8 @@
-use cosmwasm_std::{Uint128};
+use crate::vault::BondedAmountResponse as VaultBondedAmountResponse;
+use cosmwasm_std::Uint128;
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::vault::{BondedAmountResponse as VaultBondedAmountResponse};
 
 pub type UnbondRequest = Vec<(u64, Uint128)>;
 
@@ -23,7 +23,7 @@ pub struct State {
 pub struct Config {
     pub creator: String,
     pub asset_contract: String, // todo: change to basset_contract?
-    pub asset_reward_contract: String, 
+    pub asset_reward_contract: String,
     pub asset_reward_denom: String,
     pub casset_contract: Option<String>,
     pub yasset_contract: Option<String>,
@@ -99,6 +99,6 @@ pub struct StateResponse {
 }
 
 // we want same interface as vault for querying the bonded amount, necessary
-// because this is queried by prism-reward-distribution contract, and it 
+// because this is queried by prism-reward-distribution contract, and it
 // needs to work with either vault type
 pub type BondedAmountResponse = VaultBondedAmountResponse;

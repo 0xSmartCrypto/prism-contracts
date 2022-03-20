@@ -1,24 +1,22 @@
 use cosmwasm_std::{
-    attr, to_binary, Addr, BankMsg,CosmosMsg, Coin, Decimal, 
-    Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    QuerierWrapper, StdResult, Storage, Uint128, WasmMsg, WasmQuery, QueryRequest
+    attr, to_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    QuerierWrapper, QueryRequest, Response, StdError, StdResult, Storage, Uint128, WasmMsg,
+    WasmQuery,
 };
 
-use crate::state::{
-    RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT,
-};
+use crate::state::{RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT};
 
 use cw20::Cw20ExecuteMsg;
 use cw_asset::{Asset, AssetInfo};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
+use prism_protocol::reward_distribution::{
+    QueryMsg as RewardDistributionQueryMsg, RewardAssetWhitelistResponse,
+};
 use prism_protocol::yasset_staking::{ExecuteMsg, RewardInfoResponse};
 use prismswap::asset::{PrismSwapAsset, PrismSwapAssetInfo};
 use prismswap::querier::query_token_balance;
 use terra_cosmwasm::TerraMsgWrapper;
-use prism_protocol::reward_distribution::{
-    QueryMsg as RewardDistributionQueryMsg, RewardAssetWhitelistResponse,
-};
 
 // deposit whitelisted reward assets
 pub fn deposit_rewards(
@@ -39,7 +37,7 @@ pub fn deposit_rewards(
     if total_bond_amount == Uint128::zero() {
         return Err(StdError::generic_err("zero bonded amount"));
     }
-   
+
     let mut messages = vec![];
     for asset in assets {
         let pool_key = match &asset.info {
@@ -162,8 +160,10 @@ pub fn convert_and_claim_rewards(
 
     // verify that the claim asset is supported
     if !cfg.claim_assets.contains(&claim_asset_info) {
-        return Err(StdError::generic_err(
-            format!("claim asset not supported: {}", claim_asset_info.to_string())))
+        return Err(StdError::generic_err(format!(
+            "claim asset not supported: {}",
+            claim_asset_info
+        )));
     }
 
     // for xprism claim token, we first swap to prism and then mint xprism with gov
@@ -171,15 +171,11 @@ pub fn convert_and_claim_rewards(
     // contract address as receiver.  otherwise we swap to claim token using
     // sender/claimer as receiver
     let (swap_dest_asset_info, swap_receiver) = match claim_asset_info.clone() {
-        AssetInfo::Cw20(addr) if addr == cfg.xprism_token => {
-            (
-                AssetInfo::Cw20(cfg.prism_token.clone()),
-                env.contract.address.clone(),
-            )
-        },
-        _ => {
-            (claim_asset_info.clone(), info.sender.clone())
-        }
+        AssetInfo::Cw20(addr) if addr == cfg.xprism_token => (
+            AssetInfo::Cw20(cfg.prism_token.clone()),
+            env.contract.address.clone(),
+        ),
+        _ => (claim_asset_info.clone(), info.sender.clone()),
     };
 
     for asset_info in whitelisted_assets {
@@ -234,13 +230,11 @@ pub fn convert_and_claim_rewards(
                     })?,
                     funds: vec![],
                 }));
-            },
-            AssetInfo::Native(denom) => {
-                funds.push(Coin {
-                    denom: denom.clone(),
-                    amount: reward_asset.amount,
-                })
             }
+            AssetInfo::Native(denom) => funds.push(Coin {
+                denom: denom.clone(),
+                amount: reward_asset.amount,
+            }),
         }
         // add reward asset to swap assets
         swap_assets.push(reward_asset);
@@ -374,14 +368,14 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInf
         .iter()
         .filter_map(|wlasset| {
             let reward_info =
-                compute_asset_rewards(deps.storage, &staker_addr, bond_info.bond_amount, wlasset).unwrap();
+                compute_asset_rewards(deps.storage, &staker_addr, bond_info.bond_amount, wlasset)
+                    .unwrap();
             if reward_info.pending_reward != Uint128::zero() {
                 Some(Asset {
                     info: wlasset.clone(),
                     amount: reward_info.pending_reward,
                 })
-            }
-            else {
+            } else {
                 None
             }
         })
@@ -408,20 +402,16 @@ pub fn query_whitelist(
     Ok(res.assets)
 }
 
-pub fn get_transfer_msg(asset: &Asset, to: &Addr) 
-    -> StdResult<CosmosMsg<TerraMsgWrapper>> {
-
+pub fn get_transfer_msg(asset: &Asset, to: &Addr) -> StdResult<CosmosMsg<TerraMsgWrapper>> {
     match &asset.info {
-        AssetInfo::Cw20(contract_addr) => {
-            Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: contract_addr.into(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: to.into(),
-                    amount: asset.amount,
-                })?,
-                funds: vec![],
-            })
-        )},
+        AssetInfo::Cw20(contract_addr) => Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: contract_addr.into(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: to.into(),
+                amount: asset.amount,
+            })?,
+            funds: vec![],
+        })),
         AssetInfo::Native(denom) => Ok(CosmosMsg::Bank(BankMsg::Send {
             to_address: to.into(),
             amount: vec![Coin {

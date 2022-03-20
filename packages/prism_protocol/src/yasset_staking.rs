@@ -14,7 +14,7 @@ pub struct InstantiateMsg {
     pub prism_token: String,
     pub xprism_token: String,
     pub reward_distribution: String,
-    pub claim_assets: Vec<AssetInfo> 
+    pub claim_assets: Vec<AssetInfo>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -31,7 +31,7 @@ pub enum ExecuteMsg {
     /// Withdraw pending rewards
     ClaimRewards {},
 
-    /// Withdraw pending rewards and convert to the claim_asset 
+    /// Withdraw pending rewards and convert to the claim_asset
     ConvertAndClaimRewards {
         claim_asset: AssetInfo,
     },
@@ -59,8 +59,6 @@ pub enum ExecuteMsg {
     RemoveClaimAsset {
         asset: AssetInfo,
     },
-
-
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -77,7 +75,7 @@ pub enum QueryMsg {
     PoolInfo { asset_token: String },
     RewardInfo { staker_addr: String },
     BondAmount {},
-    // State currently only contains BondAmount, so could just use BondAmount 
+    // State currently only contains BondAmount, so could just use BondAmount
     // query, but adding for consistency with vault and yasset-staking-x
     State {},
 }
@@ -91,7 +89,7 @@ pub struct ConfigResponse {
     pub prism_token: String,
     pub xprism_token: String,
     pub reward_distribution: String,
-    pub claim_assets: Vec<AssetInfo> 
+    pub claim_assets: Vec<AssetInfo>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

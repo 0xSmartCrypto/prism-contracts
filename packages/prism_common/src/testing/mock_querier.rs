@@ -13,11 +13,13 @@ use astroport::asset::{AssetInfo as AstroAssetInfo, PairInfo as AstroPairInfo};
 use astroport::factory::PairType;
 use cw20::BalanceResponse as Cw20BalanceResponse;
 use cw_asset::{Asset, AssetInfo};
-use prism_protocol::vault::{StateResponse as VaultStateResponse, BondedAmountResponse as VaultBondedAmountResponse};
-use prism_protocol::basset_vault::{StateResponse as BassetVaultStateResponse};
+use prism_protocol::basset_vault::StateResponse as BassetVaultStateResponse;
 use prism_protocol::reward_distribution::RewardAssetWhitelistResponse;
-use prism_protocol::yasset_staking::{StateResponse as YassetStakingStateResponse}; 
-use prism_protocol::yasset_staking_x::{StateResponse as YassetStakingXStateResponse}; 
+use prism_protocol::vault::{
+    BondedAmountResponse as VaultBondedAmountResponse, StateResponse as VaultStateResponse,
+};
+use prism_protocol::yasset_staking::StateResponse as YassetStakingStateResponse;
+use prism_protocol::yasset_staking_x::StateResponse as YassetStakingXStateResponse;
 use prismswap::asset::{PairInfo, PrismSwapAssetInfo};
 use prismswap::pair::{ReverseSimulationResponse, SimulationResponse};
 use schemars::JsonSchema;
@@ -233,59 +235,59 @@ impl WasmMockQuerier {
                                 to_binary(&Cw20BalanceResponse { balance }).unwrap(),
                             ))
                         }
-                        QueryMsg::State {} => 
-                            match contract_addr.as_str() {
-                                VAULT => {
-                                    SystemResult::Ok(ContractResult::Ok(
-                                        to_binary(&VaultStateResponse {
-                                            exchange_rate: Decimal::one(),
-                                            total_bond_amount: self.vault_state_querier.total_bond_amount,
-                                            last_index_modification: 0u64,
-                                            prev_vault_balance: Uint128::zero(),
-                                            actual_unbonded_amount: Uint128::zero(),
-                                            last_unbonded_time: 0u64,
-                                            last_processed_batch: 0u64,
-                                        })
-                                        .unwrap(),
-                                ))}
-                                BASSET_VAULT => {
-                                    SystemResult::Ok(ContractResult::Ok(
-                                        to_binary(&BassetVaultStateResponse {
-                                            total_bond_amount: self.vault_state_querier.total_bond_amount,
-                                            last_index_modification: 0u64,
-                                        })
-                                        .unwrap(),
-                                ))}
-                                YASSET_STAKING => {
-                                    SystemResult::Ok(ContractResult::Ok(
-                                        to_binary(&YassetStakingStateResponse {
-                                            total_bond_amount: self.yasset_staking_state_querier.total_bond_amount,
-                                        })
-                                        .unwrap(),
-                                ))}
-                                YASSET_STAKING_X => {
-                                    SystemResult::Ok(ContractResult::Ok(
-                                        to_binary(&YassetStakingXStateResponse {
-                                            total_bond_amount: self.yasset_staking_x_state_querier.total_bond_amount,
-                                            xyasset_supply: Uint128::zero(),
-                                            exchange_rate: Decimal::zero(),
-                                        })
-                                        .unwrap(),
-                                ))}
-                                _ => {
-                                    return SystemResult::Err(SystemError::InvalidRequest {
-                                        error: format!(
-                                            "No state info exists for the contract {}",
-                                            contract_addr
-                                        ),
-                                        request: msg.as_slice().into(),
-                                    })
-                                } 
-                            },
+                        QueryMsg::State {} => match contract_addr.as_str() {
+                            VAULT => SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&VaultStateResponse {
+                                    exchange_rate: Decimal::one(),
+                                    total_bond_amount: self.vault_state_querier.total_bond_amount,
+                                    last_index_modification: 0u64,
+                                    prev_vault_balance: Uint128::zero(),
+                                    actual_unbonded_amount: Uint128::zero(),
+                                    last_unbonded_time: 0u64,
+                                    last_processed_batch: 0u64,
+                                })
+                                .unwrap(),
+                            )),
+                            BASSET_VAULT => SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&BassetVaultStateResponse {
+                                    total_bond_amount: self.vault_state_querier.total_bond_amount,
+                                    last_index_modification: 0u64,
+                                })
+                                .unwrap(),
+                            )),
+                            YASSET_STAKING => SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&YassetStakingStateResponse {
+                                    total_bond_amount: self
+                                        .yasset_staking_state_querier
+                                        .total_bond_amount,
+                                })
+                                .unwrap(),
+                            )),
+                            YASSET_STAKING_X => SystemResult::Ok(ContractResult::Ok(
+                                to_binary(&YassetStakingXStateResponse {
+                                    total_bond_amount: self
+                                        .yasset_staking_x_state_querier
+                                        .total_bond_amount,
+                                    xyasset_supply: Uint128::zero(),
+                                    exchange_rate: Decimal::zero(),
+                                })
+                                .unwrap(),
+                            )),
+                            _ => {
+                                return SystemResult::Err(SystemError::InvalidRequest {
+                                    error: format!(
+                                        "No state info exists for the contract {}",
+                                        contract_addr
+                                    ),
+                                    request: msg.as_slice().into(),
+                                })
+                            }
+                        },
                         QueryMsg::RewardAssetWhitelist {} => SystemResult::Ok(ContractResult::Ok(
                             to_binary(&RewardAssetWhitelistResponse {
-                                    assets: self.reward_asset_querier.assets.clone()
-                            }).unwrap()
+                                assets: self.reward_asset_querier.assets.clone(),
+                            })
+                            .unwrap(),
                         )),
                         QueryMsg::Simulation { offer_asset } => {
                             let res = self
@@ -319,13 +321,12 @@ impl WasmMockQuerier {
                                 },
                             ))
                         }
-                        QueryMsg::BondedAmount {} => {
-                            SystemResult::Ok(ContractResult::Ok(
+                        QueryMsg::BondedAmount {} => SystemResult::Ok(ContractResult::Ok(
                             to_binary(&VaultBondedAmountResponse {
                                 total_bond_amount: self.vault_state_querier.total_bond_amount,
                             })
                             .unwrap(),
-                        ))}    
+                        )),
                     }
                 }
             }
@@ -438,7 +439,6 @@ impl YassetStakingXStateQuerier {
     }
 }
 
-
 #[derive(Clone, Default)]
 pub struct RewardAssetQuerier {
     assets: Vec<AssetInfo>,
@@ -535,7 +535,7 @@ impl WasmMockQuerier {
     pub fn with_yasset_staking_state(&mut self, total_bond_amount: &Uint128) {
         self.yasset_staking_state_querier = YassetStakingStateQuerier::new(total_bond_amount);
     }
-    
+
     pub fn with_yasset_staking_x_state(&mut self, total_bond_amount: &Uint128) {
         self.yasset_staking_x_state_querier = YassetStakingXStateQuerier::new(total_bond_amount);
     }
@@ -568,11 +568,8 @@ impl WasmMockQuerier {
     }
 
     pub fn with_reward_assets(&mut self, assets: Vec<AssetInfo>) {
-        self.reward_asset_querier = RewardAssetQuerier{
-            assets
-        }
+        self.reward_asset_querier = RewardAssetQuerier { assets }
     }
-
 }
 
 pub fn astro_pair_key(asset_infos: &[AstroAssetInfo; 2]) -> String {

@@ -24,13 +24,13 @@ use cw0::must_pay;
 use cw20::{
     Cw20Coin, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, MinterResponse, TokenInfoResponse,
 };
-use prism_protocol::vault::{
-    AllHistoryResponse, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
-    InstantiateMsg, QueryMsg, StateResponse, UnbondRequestsResponse, WhitelistedValidatorsResponse,
-    WithdrawableUnbondedResponse, BondedAmountResponse,
-};
-use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 use prism_protocol::delegator_rewards::ExecuteMsg as DelegatorRewardsExecuteMsg;
+use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
+use prism_protocol::vault::{
+    AllHistoryResponse, BondedAmountResponse, ConfigResponse, CurrentBatchResponse, Cw20HookMsg,
+    ExecuteMsg, InstantiateMsg, QueryMsg, StateResponse, UnbondRequestsResponse,
+    WhitelistedValidatorsResponse, WithdrawableUnbondedResponse,
+};
 use prismswap::querier::query_token_balance;
 use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
 
@@ -65,7 +65,7 @@ pub fn instantiate(
         pluna_contract: Addr::unchecked(""),
         // initialized will be set to true once reward_distribution_contract
         // and airdrop registry addresses are set
-        initialized: false, 
+        initialized: false,
         token_code_id: msg.token_code_id,
         token_admin: deps.api.addr_validate(&msg.token_admin)?,
         manager: deps.api.addr_validate(&msg.manager)?,
@@ -412,7 +412,7 @@ pub fn deposit_airdrop_rewards(
             contract_addr: airdrop_token_addr.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: conf.reward_distribution_contract.to_string(),
-                amount: amount,
+                amount,
                 msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})?,
             })?,
             funds: vec![],

@@ -3,8 +3,8 @@ use cosmwasm_std::{
     Storage, SubMsg, Uint128, WasmMsg,
 };
 
-use cw_asset::{Asset, AssetInfo};
 use cosmwasm_std::testing::{mock_env, mock_info};
+use cw_asset::{Asset, AssetInfo};
 
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
@@ -37,7 +37,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(deps: &mut OwnedDeps<S, A, Q>) {
     };
 
     let owner_info = mock_info(OWNER, &[]);
-    instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
+    instantiate(deps.as_mut(), mock_env(), owner_info, msg).unwrap();
 }
 
 #[test]
@@ -57,11 +57,8 @@ fn test_initialization() {
     };
 
     let owner_info = mock_info(OWNER, &[]);
-    let res = instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap_err();
-    assert_eq!(
-        res,
-        ContractError::InvalidProtocolFee {}
-    );
+    let res = instantiate(deps.as_mut(), mock_env(), owner_info, msg).unwrap_err();
+    assert_eq!(res, ContractError::InvalidProtocolFee {});
 
     // valid init
     init(&mut deps);
@@ -107,7 +104,7 @@ fn test_distribute_rewards_native() {
     let msg = ExecuteMsg::DistributeRewards {};
 
     // unauthorized error - only vault can distribute rewards
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::Unauthorized {});
 
     // empty vault err
@@ -185,14 +182,14 @@ fn test_distribute_rewards_native() {
         .with_yasset_staking_state(&Uint128::from(300u128));
     deps.querier
         .with_yasset_staking_x_state(&Uint128::from(500u128));
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
                 to_address: COLLECTOR.to_string(),
                 amount: vec![Coin {
-                    denom: reward_denom.to_string().to_string(),
+                    denom: reward_denom.to_string(),
                     amount: Uint128::from(28u128),
                 },]
             })),
@@ -215,7 +212,7 @@ fn test_distribute_rewards_native() {
                 msg: to_binary(&StakingExecuteMsg::DepositRewards {
                     assets: vec![Asset {
                         amount: Uint128::from(45u128),
-                        ..reward_asset.clone()
+                        ..reward_asset
                     }],
                 })
                 .unwrap(),
@@ -253,7 +250,7 @@ fn test_distribute_rewards_token() {
         asset: AssetInfo::Cw20(Addr::unchecked("ANC".to_string())),
     };
     let info = mock_info(OWNER, &[]);
-    execute(deps.as_mut(), mock_env(), info.clone(), whitelist_msg).unwrap();
+    execute(deps.as_mut(), mock_env(), info, whitelist_msg).unwrap();
 
     // vault = 1000
     // yasset_bonded = 0
@@ -337,7 +334,7 @@ fn test_distribute_rewards_token() {
         .with_yasset_staking_state(&Uint128::from(300u128));
     deps.querier
         .with_yasset_staking_x_state(&Uint128::from(500u128));
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
         res.messages,
         vec![
@@ -414,7 +411,7 @@ fn test_whitelist() {
 
     // whitelist one more
     let msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::Cw20(Addr::unchecked("mir0000".to_string()))
+        asset: AssetInfo::Cw20(Addr::unchecked("mir0000".to_string())),
     };
 
     // unauth attempt
@@ -448,7 +445,7 @@ fn test_whitelist() {
 
     // whitelist native asset
     let msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::Native("uusd".to_string())
+        asset: AssetInfo::Native("uusd".to_string()),
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
     assert_eq!(
@@ -486,10 +483,10 @@ fn test_whitelist() {
     )]);
     // whitelist anc0000
     let whitelist_msg = ExecuteMsg::WhitelistRewardAsset {
-        asset: AssetInfo::Cw20(Addr::unchecked("anc0000".to_string()))
+        asset: AssetInfo::Cw20(Addr::unchecked("anc0000".to_string())),
     };
     let info = mock_info(OWNER, &[]);
-    execute(deps.as_mut(), mock_env(), info.clone(), whitelist_msg).unwrap();
+    execute(deps.as_mut(), mock_env(), info, whitelist_msg).unwrap();
 
     // verify anc0000 added
     let res: RewardAssetWhitelistResponse =
@@ -513,8 +510,7 @@ fn test_whitelist() {
     // successful distribute rewards for anc0000
     let msg = ExecuteMsg::DistributeRewards {};
     let info = mock_info(VAULT, &[]);
-    execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
-
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // remove mir0000 from whitelist
     let msg = ExecuteMsg::RemoveRewardAsset {
@@ -557,10 +553,10 @@ fn test_whitelist() {
         asset: AssetInfo::Cw20(Addr::unchecked("random0000")),
     };
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
-    assert_eq!(err, 
+    assert_eq!(
+        err,
         ContractError::RewardAssetNotWhitelisted {
             asset: "cw20:random0000".to_string()
         }
     );
-
 }

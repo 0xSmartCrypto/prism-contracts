@@ -46,7 +46,7 @@ pub fn instantiate(
             prism_token: deps.api.addr_validate(&msg.prism_token)?,
             xprism_token: deps.api.addr_validate(&msg.xprism_token)?,
             reward_distribution: deps.api.addr_validate(&msg.reward_distribution)?,
-            claim_assets: msg.claim_assets, 
+            claim_assets: msg.claim_assets,
         },
     )?;
 
@@ -79,17 +79,15 @@ pub fn execute(
             }
             deposit_rewards(deps, env, info, assets)
         }
-        ExecuteMsg::UpdateConfig {
-            owner,
-        } => update_config(deps, info, owner),
-        ExecuteMsg::AddClaimAsset { asset } =>  {
+        ExecuteMsg::UpdateConfig { owner } => update_config(deps, info, owner),
+        ExecuteMsg::AddClaimAsset { asset } => {
             asset.check(deps.api)?;
             add_claim_asset(deps, info, asset)
-        } 
-        ExecuteMsg::RemoveClaimAsset { asset } =>  {
+        }
+        ExecuteMsg::RemoveClaimAsset { asset } => {
             asset.check(deps.api)?;
             remove_claim_asset(deps, info, asset)
-        } 
+        }
     }
 }
 
@@ -190,7 +188,6 @@ pub fn migrate(_deps: DepsMut, _env: Env, _msg: Empty) -> StdResult<Response> {
     Ok(Response::default())
 }
 
-
 pub fn add_claim_asset(
     deps: DepsMut,
     info: MessageInfo,
@@ -204,7 +201,7 @@ pub fn add_claim_asset(
     }
 
     if cfg.claim_assets.contains(&asset) {
-        return Err(StdError::generic_err("duplicate claim asset"))
+        return Err(StdError::generic_err("duplicate claim asset"));
     }
     cfg.claim_assets.push(asset.clone());
 
@@ -215,7 +212,6 @@ pub fn add_claim_asset(
         attr("claim_asset", asset.to_string()),
     ]))
 }
-
 
 pub fn remove_claim_asset(
     deps: DepsMut,
@@ -233,7 +229,7 @@ pub fn remove_claim_asset(
         Some(position) => {
             cfg.claim_assets.remove(position);
         }
-        None => return Err(StdError::generic_err("claim asset doesn't exist"))
+        None => return Err(StdError::generic_err("claim asset doesn't exist")),
     }
 
     CONFIG.save(deps.storage, &cfg)?;

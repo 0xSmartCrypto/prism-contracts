@@ -82,7 +82,7 @@ fn test_initialization() {
 
     // not payable error
     let owner_info = mock_info(OWNER, &[coin(1000000, "uluna")]);
-    let res = instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg.clone()).unwrap_err();
+    let res = instantiate(deps.as_mut(), mock_env(), owner_info, msg.clone()).unwrap_err();
     assert_eq!(res, ContractError::NonPayable {});
 
     // successful initialization
@@ -171,13 +171,7 @@ fn test_initialization() {
 
     // duplicate update config
     let owner_info = mock_info(OWNER2, &[]);
-    let res = execute(
-        deps.as_mut(),
-        mock_env(),
-        owner_info,
-        update_config_msg.clone(),
-    )
-    .unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), owner_info, update_config_msg).unwrap_err();
     assert_eq!(res, ContractError::DuplicateUpdateConfig {});
 }
 
@@ -200,7 +194,7 @@ fn test_bond() {
 
     // successful bond
     let info = mock_info(BASSET_CONTRACT, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, bond_msg).unwrap();
     assert_eq!(
         res.messages,
         vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -217,7 +211,7 @@ fn test_bond() {
     // query and verify state
     let query_msg = QueryMsg::State {};
     let res: StateResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), query_msg.clone()).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), mock_env(), query_msg).unwrap()).unwrap();
     let expected = StateResponse {
         total_bond_amount: bond_amount,
         last_index_modification: mock_env().block.time.seconds(),
@@ -227,7 +221,7 @@ fn test_bond() {
     // query and verify state
     let query_msg = QueryMsg::BondedAmount {};
     let res: BondedAmountResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), query_msg.clone()).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), mock_env(), query_msg).unwrap()).unwrap();
     let expected = BondedAmountResponse {
         total_bond_amount: bond_amount,
     };
@@ -253,7 +247,7 @@ fn test_bond_split() {
 
     // successful bond split
     let info = mock_info(BASSET_CONTRACT, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), bond_msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, bond_msg).unwrap();
     assert_eq!(
         res.messages,
         vec![
@@ -290,7 +284,7 @@ fn test_bond_split() {
     // query and verify state
     let query_msg = QueryMsg::State {};
     let res: StateResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), query_msg.clone()).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), mock_env(), query_msg).unwrap()).unwrap();
     let expected = StateResponse {
         total_bond_amount: bond_amount,
         last_index_modification: mock_env().block.time.seconds(),
@@ -329,7 +323,7 @@ fn test_unbond() {
 
     // successful unbond of half (500)
     let info = mock_info(CASSET_CONTRACT, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info, unbond_msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, unbond_msg).unwrap();
     assert_eq!(res.messages.len(), 2);
     assert_eq!(
         res.messages,
@@ -357,7 +351,7 @@ fn test_unbond() {
     // query and verify state
     let query_msg = QueryMsg::State {};
     let res: StateResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), query_msg.clone()).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), mock_env(), query_msg).unwrap()).unwrap();
     let expected = StateResponse {
         total_bond_amount: bond_amount - unbond_amount,
         last_index_modification: mock_env().block.time.seconds(),
@@ -372,7 +366,7 @@ fn test_unbond() {
         msg: to_binary(&Cw20HookMsg::Unbond {}).unwrap(),
     });
     let info = mock_info(CASSET_CONTRACT, &[]);
-    execute(deps.as_mut(), mock_env(), info, unbond_msg.clone()).unwrap();
+    execute(deps.as_mut(), mock_env(), info, unbond_msg).unwrap();
 }
 
 #[test]
@@ -388,7 +382,7 @@ fn test_bond_split_merge() {
         deps.as_mut(),
         BOB_ADDR.to_string(),
         mock_env(),
-        info.clone(),
+        info,
         bond_amount,
     );
 
@@ -436,7 +430,7 @@ fn test_bond_split_merge() {
     let split_msg = ExecuteMsg::Merge {
         amount: bond_amount,
     };
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), split_msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, split_msg).unwrap();
     assert_eq!(
         res.messages,
         vec![
@@ -495,8 +489,7 @@ pub fn test_update_global_index() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: REWARD_DISTRIBUTION_CONTRACT.to_string(),
-                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})
-                .unwrap(),
+                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {}).unwrap(),
                 funds: vec![]
             })),
         ]

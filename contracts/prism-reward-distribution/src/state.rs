@@ -1,8 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cw_asset::AssetInfo;
 use cosmwasm_std::{Addr, Decimal};
+use cw_asset::AssetInfo;
 use cw_storage_plus::Item;
 
 pub const CONFIG: Item<Config> = Item::new("config");

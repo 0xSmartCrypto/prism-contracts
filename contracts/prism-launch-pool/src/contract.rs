@@ -20,12 +20,11 @@ use prism_protocol::launch_pool::{
     ConfigResponse, Cw20HookMsg, DistributionStatusResponse, ExecuteMsg, InstantiateMsg, QueryMsg,
     RewardInfoResponse, VestingStatusResponse,
 };
+use prism_protocol::reward_distribution::{
+    QueryMsg as RewardDistributionQueryMsg, RewardAssetWhitelistResponse,
+};
 use prism_protocol::yasset_staking::{
     Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg,
-};
-use prism_protocol::reward_distribution::{
-    QueryMsg as RewardDistributionQueryMsg, 
-    RewardAssetWhitelistResponse
 };
 
 use std::cmp::min;

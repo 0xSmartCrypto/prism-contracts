@@ -2,22 +2,21 @@
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    attr, to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Env,
-    MessageInfo, Response, StdResult, WasmMsg,
+    attr, to_binary, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    WasmMsg,
 };
-
 
 use crate::error::{ContractError, ContractResult};
 use crate::state::{Config, CONFIG};
-use cw_asset::{Asset, AssetInfo};
 use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
+use cw_asset::{Asset, AssetInfo};
+use prismswap::querier::query_balance;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
-use prismswap::querier::{query_balance};
 
-use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
+use prism_protocol::delegator_rewards::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
-use prism_protocol::delegator_rewards::{ExecuteMsg, QueryMsg, InstantiateMsg, ConfigResponse};
+use prism_protocol::vault::ExecuteMsg as VaultExecuteMsg;
 
 const CONTRACT_NAME: &str = "prism-delegator-rewards";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -57,11 +56,8 @@ pub fn execute(
     match msg {
         ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
         ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, info, env),
-        ExecuteMsg::DistributeMintedPylunaHook {
-        } => distribute_minted_pyluna_hook(deps, info, env),
-        ExecuteMsg::UpdateConfig {
-            owner
-        } => update_config(deps, info, owner),
+        ExecuteMsg::DistributeMintedPylunaHook {} => distribute_minted_pyluna_hook(deps, info, env),
+        ExecuteMsg::UpdateConfig { owner } => update_config(deps, info, owner),
     }
 }
 
@@ -112,14 +108,14 @@ pub fn process_delegator_rewards(
 /// 1. Use the uluna to mint pluna and yluna
 /// 2. Deposit pluna and yluna as reward to stakers
 pub fn luna_to_pyluna_hook(
-    deps: DepsMut, 
+    deps: DepsMut,
     info: MessageInfo,
-    env: Env
+    env: Env,
 ) -> ContractResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
     if info.sender != env.contract.address {
-        return Err(ContractError::Unauthorized{});
+        return Err(ContractError::Unauthorized {});
     }
 
     let reward_denom = String::from(REWARD_DENOM);
@@ -153,7 +149,7 @@ pub fn distribute_minted_pyluna_hook(
     let cfg = CONFIG.load(deps.storage)?;
 
     if info.sender != env.contract.address {
-        return Err(ContractError::Unauthorized{});
+        return Err(ContractError::Unauthorized {});
     }
 
     let pluna_asset_info = AssetInfo::Cw20(cfg.pluna_token.clone());
@@ -165,34 +161,33 @@ pub fn distribute_minted_pyluna_hook(
     let yluna_asset_info = AssetInfo::Cw20(cfg.yluna_token.clone());
     let yluna_asset = Asset {
         info: yluna_asset_info.clone(),
-        amount: yluna_asset_info.query_balance(&deps.querier, env.contract.address.clone())?,
+        amount: yluna_asset_info.query_balance(&deps.querier, env.contract.address)?,
     };
 
     Ok(Response::new()
-        .add_messages(
-            vec![
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: cfg.pluna_token.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                        recipient: cfg.reward_distribution.to_string(),
-                        amount: pluna_asset.amount,
-                    })?,
-                    funds: vec![],
-                }),
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: cfg.yluna_token.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                        recipient: cfg.reward_distribution.to_string(),
-                        amount: yluna_asset.amount,
-                    })?,
-                    funds: vec![],
-                }),
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: cfg.reward_distribution.to_string(),
-                    msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})?,
-                    funds: vec![],
-                })
-            ])
+        .add_messages(vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.pluna_token.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: cfg.reward_distribution.to_string(),
+                    amount: pluna_asset.amount,
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.yluna_token.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: cfg.reward_distribution.to_string(),
+                    amount: yluna_asset.amount,
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.reward_distribution.to_string(),
+                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})?,
+                funds: vec![],
+            }),
+        ])
         .add_attributes(vec![attr("action", "distribute_minted_pyluna_hook")]))
 }
 
@@ -215,7 +210,6 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     })
 }
 
-
 fn update_config(
     deps: DepsMut,
     info: MessageInfo,
@@ -225,7 +219,7 @@ fn update_config(
 
     // can only be exeucted by owner
     if info.sender != cfg.owner {
-        return Err(ContractError::Unauthorized{});
+        return Err(ContractError::Unauthorized {});
     }
 
     if let Some(owner) = owner {

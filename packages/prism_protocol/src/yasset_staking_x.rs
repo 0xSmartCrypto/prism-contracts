@@ -17,7 +17,6 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-
     // Bond and Unbond operations, received token must be yasset
     Receive(Cw20ReceiveMsg),
 

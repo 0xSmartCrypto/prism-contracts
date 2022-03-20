@@ -156,11 +156,10 @@ pub fn execute_bond_split(
             contract_addr: conf.casset_contract.unwrap(),
             msg: to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: env.contract.address.to_string(), // mint and lock
-                amount: amount,
+                amount,
             })?,
             funds: vec![],
         })),
-
         // mint yasset for sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: conf.yasset_contract.unwrap(),
@@ -170,12 +169,11 @@ pub fn execute_bond_split(
             })?,
             funds: vec![],
         })),
-
         // mint passet for sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: conf.passet_contract.unwrap(),
             msg: to_binary(&Cw20ExecuteMsg::Mint {
-                recipient: sender.to_string(),
+                recipient: sender,
                 amount,
             })?,
             funds: vec![],
@@ -215,7 +213,6 @@ pub fn execute_unbond(
             msg: to_binary(&Cw20ExecuteMsg::Burn { amount })?,
             funds: vec![],
         })),
-
         // transfer basset to sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: conf.asset_contract,
@@ -264,7 +261,6 @@ pub fn execute_split(
             })?,
             funds: vec![],
         })),
-
         // mint yasset for sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.yasset_contract.unwrap(),
@@ -274,7 +270,6 @@ pub fn execute_split(
             })?,
             funds: vec![],
         })),
-
         // mint passet for sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.passet_contract.unwrap(),
@@ -311,7 +306,6 @@ pub fn execute_merge(
             })?,
             funds: vec![],
         })),
-
         // burn yasset from sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.yasset_contract.unwrap(),
@@ -321,7 +315,6 @@ pub fn execute_merge(
             })?,
             funds: vec![],
         })),
-
         // burn passet from sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.passet_contract.unwrap(),
@@ -358,8 +351,7 @@ pub fn execute_update_global(deps: DepsMut, env: Env) -> ContractResult<Response
         // instruct reward_distribution_contract to distribute rewards
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.reward_distribution_contract.unwrap(),
-            msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})
-            .unwrap(),
+            msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {}).unwrap(),
             funds: vec![],
         })),
     ];

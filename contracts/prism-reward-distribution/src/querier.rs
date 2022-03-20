@@ -22,11 +22,10 @@ pub fn query_yasset_staking_bond_amount(
     querier: &QuerierWrapper,
     yasset_staking: Addr,
 ) -> StdResult<Uint128> {
-    let res: YassetStakingStateResponse = 
-        querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: String::from(yasset_staking),
-            msg: to_binary(&YassetStakingQueryMsg::State {})?,
-        }))?;
+    let res: YassetStakingStateResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: String::from(yasset_staking),
+        msg: to_binary(&YassetStakingQueryMsg::State {})?,
+    }))?;
 
     Ok(res.total_bond_amount)
 }

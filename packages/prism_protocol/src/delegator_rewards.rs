@@ -13,19 +13,16 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-
     // Process delegator rewards, swap to luna
     ProcessDelegatorRewards {},
 
     // bond split luna with vault, receive pluna/yluna
     LunaToPylunaHook {},
 
-    // send pluna/yluna as rewards to reward distribution contract 
+    // send pluna/yluna as rewards to reward distribution contract
     DistributeMintedPylunaHook {},
 
-    UpdateConfig {
-        owner: Option<String>
-    }
+    UpdateConfig { owner: Option<String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -33,7 +30,6 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     Config {},
 }
-
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {

@@ -138,7 +138,8 @@ pub fn execute_update_config(
     }
 
     if let Some(reward_distribution_contract) = reward_distribution_contract {
-        config.reward_distribution_contract = deps.api.addr_validate(&reward_distribution_contract)?;
+        config.reward_distribution_contract =
+            deps.api.addr_validate(&reward_distribution_contract)?;
     }
 
     if let Some(delegator_rewards_contract) = delegator_rewards_contract {

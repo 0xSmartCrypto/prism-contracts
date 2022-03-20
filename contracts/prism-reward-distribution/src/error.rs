@@ -13,7 +13,7 @@ pub enum ContractError {
     RewardAssetNotWhitelisted { asset: String },
 
     #[error("Duplicate whitelist asset: {asset}")]
-    DuplicateWhitelistAsset{ asset: String },
+    DuplicateWhitelistAsset { asset: String },
 
     #[error("Invalid protocol fee")]
     InvalidProtocolFee {},

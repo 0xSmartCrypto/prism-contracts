@@ -32,8 +32,8 @@ use crate::state::{
 };
 use prism_common::testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use prism_protocol::airdrop_registry::ExecuteMsg::FabricateClaim;
-use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 use prism_protocol::delegator_rewards::ExecuteMsg as DelegatorRewardsExecuteMsg;
+use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
 use std::borrow::BorrowMut;
 
@@ -923,10 +923,10 @@ fn proper_split() {
     let bond_amount = Uint128::new(10000);
 
     init(
-        deps.borrow_mut(), 
-        OWNER, 
-        REWARD_DISTRIBUTION_CONTRACT,         
-        validator.address
+        deps.borrow_mut(),
+        OWNER,
+        REWARD_DISTRIBUTION_CONTRACT,
+        validator.address,
     );
 
     let split_msg = ExecuteMsg::Split {
@@ -981,7 +981,12 @@ fn proper_merge() {
     let addr1 = "addr1000".to_string();
     let bond_amount = Uint128::new(10000);
 
-    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
+    init(
+        deps.borrow_mut(),
+        OWNER,
+        REWARD_DISTRIBUTION_CONTRACT,
+        validator.address,
+    );
 
     let split_msg = ExecuteMsg::Merge {
         amount: bond_amount,
@@ -2780,7 +2785,12 @@ pub fn test_update_params() {
         er_threshold: None,
     };
 
-    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
+    init(
+        deps.borrow_mut(),
+        OWNER,
+        REWARD_DISTRIBUTION_CONTRACT,
+        validator.address,
+    );
 
     let invalid_info = mock_info("invalid", &[]);
     let res = execute(
@@ -3142,8 +3152,7 @@ pub fn proper_update_config() {
     let new_owner_info = mock_info(&new_owner, &[]);
     let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_config).unwrap();
     assert_eq!(res.messages.len(), 1);
-    
-    
+
     let msg: SubMsg = SubMsg::new(CosmosMsg::Distribution(
         DistributionMsg::SetWithdrawAddress {
             address: "new_delegator_rewards".to_string(),
@@ -3154,7 +3163,10 @@ pub fn proper_update_config() {
     let config = QueryMsg::Config {};
     let config_query: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), config).unwrap()).unwrap();
-    assert_eq!(config_query.reward_distribution_contract, "new reward".to_string());
+    assert_eq!(
+        config_query.reward_distribution_contract,
+        "new reward".to_string()
+    );
     // contract is not yet fully initialized
     assert!(!config_query.initialized);
 
@@ -3187,7 +3199,12 @@ fn proper_claim_airdrop() {
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
     set_validator_mock(&mut deps.querier);
 
-    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
+    init(
+        deps.borrow_mut(),
+        OWNER,
+        REWARD_DISTRIBUTION_CONTRACT,
+        validator.address,
+    );
 
     let claim_msg = ExecuteMsg::ClaimAirdrop {
         airdrop_token_contract: "airdrop_token".to_string(),
@@ -3232,7 +3249,12 @@ fn proper_deposit_airdrop_reward() {
     let validator = sample_validator(DEFAULT_VALIDATOR.to_string());
     set_validator_mock(&mut deps.querier);
 
-    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
+    init(
+        deps.borrow_mut(),
+        OWNER,
+        REWARD_DISTRIBUTION_CONTRACT,
+        validator.address,
+    );
 
     let airdrop_msg = ExecuteMsg::DepositAirdropReward {
         airdrop_token_contract: "airdrop_token".to_string(),
@@ -3255,17 +3277,16 @@ fn proper_deposit_airdrop_reward() {
     .unwrap();
     assert_eq!(
         res.messages,
-        vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: "airdrop_token".to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: REWARD_DISTRIBUTION_CONTRACT.to_string(),
-                    amount: Uint128::from(1000u128),
-                    msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {}).unwrap()
-                }).unwrap(),
-                funds: vec![],
-            })),
-        ]
+        vec![SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "airdrop_token".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::Send {
+                contract: REWARD_DISTRIBUTION_CONTRACT.to_string(),
+                amount: Uint128::from(1000u128),
+                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {}).unwrap()
+            })
+            .unwrap(),
+            funds: vec![],
+        })),]
     );
 
     // error - unauthorized

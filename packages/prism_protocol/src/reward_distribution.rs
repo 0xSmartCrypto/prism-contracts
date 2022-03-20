@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Decimal};
+use cosmwasm_std::Decimal;
 use cw_asset::AssetInfo;
 
 pub const MAX_PROTOCOL_FEE: &str = "0.5";
@@ -15,16 +15,15 @@ pub struct InstantiateMsg {
     pub yasset_staking: String,
     pub yasset_staking_x: String,
     pub protocol_fee: Decimal,
-    pub whitelisted_assets: Vec<AssetInfo> 
+    pub whitelisted_assets: Vec<AssetInfo>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-
     /// Distribute rewards to yasset_staking, yasset_staking_x, and collector.
     DistributeRewards {},
-    
+
     ////////////////////////
     /// Owner operations
     ////////////////////////
@@ -38,9 +37,8 @@ pub enum ExecuteMsg {
 
     UpdateConfig {
         owner: Option<String>,
-        protocol_fee: Option<Decimal>
+        protocol_fee: Option<Decimal>,
     },
-
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
