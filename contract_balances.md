@@ -21,6 +21,12 @@ This page contains a listing of the balances stored within each contract
 | pluna, yluna | protocol fees from yasset-staking |
 | airdrops (anc, vkr) | protocol fees from yasset-staking |
 
+## prism-delegator-rewards
+
+| Denom | Description |
+| - | - |
+| native coins |  delegator rewards that have not yet been converted to pluna/yluna.  when we bond/unbond with any validator, delegator rewards are automatically pulled from that validator and sent to prism-delegator-rewards.  These are not converted to pluna/yluna until UpdateGlobalIndex is called |
+
 ## prism-gov
 
 | Denom | Description |
@@ -46,7 +52,7 @@ This page contains a listing of the balances stored within each contract
 
 | Denom | Description |
 | - | - |
-| native coins |  delegator rewards that have not yet been converted to pluna/yluna.  when we bond/unbond with any validator, delegator rewards are automatically pulled from that validator and sent to this contract.  These are not converted to pluna/yluna until ProcessDelegatorRewards is called |
+| None | - |
 
 ## prism-vault
 | Denom | Description |
@@ -57,10 +63,9 @@ This page contains a listing of the balances stored within each contract
 ## prism-yasset-staking
 | Denom | Description |
 | - | - |
-| yluna | staked by protocol users |
-| yluna, pluna | delegator rewards that have already been converted to pluna/yluna via ProcessDelegatorRewards |
-| native coins |  delegator rewards that have not yet been converted to pluna/yluna.  when we bond/unbond with any validator, delegator rewards are automatically pulled from that validator and sent to yasset-staking.  These are not converted to pluna/yluna until UpdateGlobalIndex is called |
-| airdrops |  Deposited from vault |
+| yAsset, pAsset | delegator rewards that have already been converted to pluna/yluna via ProcessDelegatorRewards |
+| yAsset | staked by protocol users |
+| airdrops | deposited from vault |
 
 ## prism-yasset-staking-x
 | Denom | Description |

@@ -224,9 +224,6 @@ pub fn deposit_rewards(
         return Err(ContractError::Unauthorized {});
     }
 
-    // luna -> prism -> yasset
-    // UST -> prism -> yasset
-    // whitelisted airdrops: asset -> UST -> prism -> yasset
     let mut messages = vec![];
 
     for asset in &assets {
