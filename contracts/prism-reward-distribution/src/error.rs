@@ -12,8 +12,11 @@ pub enum ContractError {
     #[error("Reward asset not whitelisted: {asset}")]
     RewardAssetNotWhitelisted { asset: String },
 
-    #[error("Invalid config: {reason}")]
-    InvalidConfig { reason: String },
+    #[error("Duplicate whitelist asset: {asset}")]
+    DuplicateWhitelistAsset{ asset: String },
+
+    #[error("Invalid protocol fee")]
+    InvalidProtocolFee {},
 
     #[error("EmptyVault")]
     EmptyVault {},

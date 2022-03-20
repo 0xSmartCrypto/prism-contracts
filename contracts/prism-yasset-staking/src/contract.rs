@@ -1,26 +1,23 @@
-use std::str::FromStr;
-
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Empty, Env, MessageInfo, Response,
+    attr, from_binary, to_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response,
     StdError, StdResult, Uint128,
 };
 
 use prism_protocol::yasset_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardAssetWhitelistResponse, MAX_PROTOCOL_FEE, StateResponse,
+    StateResponse,
 };
 
 use crate::rewards::{
     claim_rewards, convert_and_claim_rewards, deposit_rewards, mint_xprism_claim_hook,
-    query_reward_info, remove_whitelisted_reward_asset, whitelist_reward_asset,
+    query_reward_info,
 };
 use crate::staking::{bond, unbond};
-use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
+use crate::state::{Config, CONFIG, POOL_INFO, TOTAL_BOND_AMOUNT};
 
-use crate::swaps::{deposit_minted_pyluna_hook, luna_to_pyluna_hook, process_delegator_rewards};
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
 use cw_asset::AssetInfo;
@@ -39,32 +36,21 @@ pub fn instantiate(
 ) -> StdResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    validate_protocol_fee(msg.protocol_fee)?;
-
     CONFIG.save(
         deps.storage,
         &Config {
             owner: deps.api.addr_validate(&msg.owner)?,
-            vault: deps.api.addr_validate(&msg.vault)?,
             gov: deps.api.addr_validate(&msg.gov)?,
             collector: deps.api.addr_validate(&msg.collector)?,
-            protocol_fee: msg.protocol_fee,
-            cluna_token: deps.api.addr_validate(&msg.cluna_token)?,
-            yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
-            pluna_token: deps.api.addr_validate(&msg.pluna_token)?,
+            yasset_token: deps.api.addr_validate(&msg.yasset_token)?,
             prism_token: deps.api.addr_validate(&msg.prism_token)?,
             xprism_token: deps.api.addr_validate(&msg.xprism_token)?,
+            reward_distribution: deps.api.addr_validate(&msg.reward_distribution)?,
+            claim_assets: msg.claim_assets, 
         },
     )?;
 
     TOTAL_BOND_AMOUNT.save(deps.storage, &Uint128::zero())?;
-    WHITELISTED_ASSETS.save(
-        deps.storage,
-        &vec![
-            AssetInfo::Cw20(deps.api.addr_validate(&msg.pluna_token)?),
-            AssetInfo::Cw20(deps.api.addr_validate(&msg.yluna_token)?),
-        ],
-    )?;
     Ok(Response::default())
 }
 
@@ -93,25 +79,17 @@ pub fn execute(
             }
             deposit_rewards(deps, env, info, assets)
         }
-        ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
-        ExecuteMsg::LunaToPylunaHook {} => luna_to_pyluna_hook(deps, env),
-        ExecuteMsg::DepositMintedPylunaHook {
-            prev_pluna_balance,
-            prev_yluna_balance,
-        } => deposit_minted_pyluna_hook(deps, info, env, prev_pluna_balance, prev_yluna_balance),
-        ExecuteMsg::WhitelistRewardAsset { asset } => {
-            asset.check(deps.api)?;
-            whitelist_reward_asset(deps, info, asset)
-        }
-        ExecuteMsg::RemoveRewardAsset { asset } => {
-            asset.check(deps.api)?;
-            remove_whitelisted_reward_asset(deps, info, asset)
-        }
         ExecuteMsg::UpdateConfig {
             owner,
-            collector,
-            protocol_fee,
-        } => update_config(deps, info, owner, collector, protocol_fee),
+        } => update_config(deps, info, owner),
+        ExecuteMsg::AddClaimAsset { asset } =>  {
+            asset.check(deps.api)?;
+            add_claim_asset(deps, info, asset)
+        } 
+        ExecuteMsg::RemoveClaimAsset { asset } =>  {
+            asset.check(deps.api)?;
+            remove_claim_asset(deps, info, asset)
+        } 
     }
 }
 
@@ -129,7 +107,7 @@ pub fn receive_cw20(
             let cfg = CONFIG.load(deps.storage)?;
 
             // only yluna token contract can execute this message
-            if cfg.yluna_token != info.sender {
+            if cfg.yasset_token != info.sender {
                 return Err(StdError::generic_err("unauthorized"));
             }
 
@@ -142,8 +120,6 @@ fn update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
-    collector: Option<String>,
-    protocol_fee: Option<Decimal>,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let mut cfg = CONFIG.load(deps.storage)?;
 
@@ -156,15 +132,6 @@ fn update_config(
         cfg.owner = deps.api.addr_validate(&owner)?;
     }
 
-    if let Some(collector) = collector {
-        cfg.collector = deps.api.addr_validate(&collector)?;
-    }
-
-    if let Some(protocol_fee) = protocol_fee {
-        validate_protocol_fee(protocol_fee)?;
-        cfg.protocol_fee = protocol_fee;
-    }
-
     CONFIG.save(deps.storage, &cfg)?;
 
     Ok(Response::new().add_attribute("action", "update_config"))
@@ -175,17 +142,10 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
         QueryMsg::PoolInfo { asset_token } => to_binary(&query_pool_info(deps, asset_token)?),
-        QueryMsg::RewardAssetWhitelist {} => to_binary(&query_whitelist(deps)?),
         QueryMsg::RewardInfo { staker_addr } => to_binary(&query_reward_info(deps, staker_addr)?),
         QueryMsg::BondAmount {} => to_binary(&query_bond_amount(deps)?),
         QueryMsg::State {} => to_binary(&query_state(deps)?),
     }
-}
-
-pub fn query_whitelist(deps: Deps) -> StdResult<RewardAssetWhitelistResponse> {
-    let whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
-
-    Ok(RewardAssetWhitelistResponse { assets: whitelist })
 }
 
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
@@ -193,15 +153,13 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 
     Ok(ConfigResponse {
         owner: cfg.owner.to_string(),
-        vault: cfg.vault.to_string(),
         gov: cfg.gov.to_string(),
         collector: cfg.collector.to_string(),
-        protocol_fee: cfg.protocol_fee,
-        cluna_token: cfg.cluna_token.to_string(),
-        yluna_token: cfg.yluna_token.to_string(),
-        pluna_token: cfg.pluna_token.to_string(),
+        yasset_token: cfg.yasset_token.to_string(),
         prism_token: cfg.prism_token.to_string(),
         xprism_token: cfg.xprism_token.to_string(),
+        reward_distribution: cfg.reward_distribution.to_string(),
+        claim_assets: cfg.claim_assets,
     })
 }
 
@@ -220,17 +178,6 @@ pub fn query_bond_amount(deps: Deps) -> StdResult<Uint128> {
     Ok(bond_amount)
 }
 
-fn validate_protocol_fee(fee: Decimal) -> StdResult<Decimal> {
-    if fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
-        return Err(StdError::generic_err(format!(
-            "fee can not be greater than {}",
-            MAX_PROTOCOL_FEE
-        )));
-    }
-
-    Ok(fee)
-}
-
 pub fn query_state(deps: Deps) -> StdResult<StateResponse> {
     let res = StateResponse {
         total_bond_amount: query_bond_amount(deps)?,
@@ -241,4 +188,58 @@ pub fn query_state(deps: Deps) -> StdResult<StateResponse> {
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: Empty) -> StdResult<Response> {
     Ok(Response::default())
+}
+
+
+pub fn add_claim_asset(
+    deps: DepsMut,
+    info: MessageInfo,
+    asset: AssetInfo,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+
+    // can only be exeucted by owner
+    if info.sender != cfg.owner {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    if cfg.claim_assets.contains(&asset) {
+        return Err(StdError::generic_err("duplicate claim asset"))
+    }
+    cfg.claim_assets.push(asset.clone());
+
+    CONFIG.save(deps.storage, &cfg)?;
+
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "add_claim_asset"),
+        attr("claim_asset", asset.to_string()),
+    ]))
+}
+
+
+pub fn remove_claim_asset(
+    deps: DepsMut,
+    info: MessageInfo,
+    asset: AssetInfo,
+) -> StdResult<Response<TerraMsgWrapper>> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+
+    // can only be executed by owner
+    if info.sender != cfg.owner {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    match cfg.claim_assets.iter().position(|item| item.eq(&asset)) {
+        Some(position) => {
+            cfg.claim_assets.remove(position);
+        }
+        None => return Err(StdError::generic_err("claim asset doesn't exist"))
+    }
+
+    CONFIG.save(deps.storage, &cfg)?;
+
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "remove_claim_asset"),
+        attr("removed_asset", asset.to_string()),
+    ]))
 }

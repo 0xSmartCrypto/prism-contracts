@@ -1,12 +1,11 @@
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError,
-    StdResult, Storage, Uint128, WasmMsg,
+    attr, to_binary, Addr, BankMsg,CosmosMsg, Coin, Decimal, 
+    Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    QuerierWrapper, StdResult, Storage, Uint128, WasmMsg, WasmQuery, QueryRequest
 };
 
-use crate::querier::query_vault_bond_amount;
 use crate::state::{
-    Config, RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT,
-    WHITELISTED_ASSETS,
+    RewardInfo, BOND_AMOUNTS, CONFIG, POOL_INFO, REWARDS, TOTAL_BOND_AMOUNT,
 };
 
 use cw20::Cw20ExecuteMsg;
@@ -14,9 +13,12 @@ use cw_asset::{Asset, AssetInfo};
 use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
 use prism_protocol::yasset_staking::{ExecuteMsg, RewardInfoResponse};
-use prismswap::asset::PrismSwapAssetInfo;
+use prismswap::asset::{PrismSwapAsset, PrismSwapAssetInfo};
 use prismswap::querier::query_token_balance;
 use terra_cosmwasm::TerraMsgWrapper;
+use prism_protocol::reward_distribution::{
+    QueryMsg as RewardDistributionQueryMsg, RewardAssetWhitelistResponse,
+};
 
 // deposit whitelisted reward assets
 pub fn deposit_rewards(
@@ -26,30 +28,22 @@ pub fn deposit_rewards(
     assets: Vec<Asset>,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
+
+    // only reward distribution contract can call this
+    if info.sender != cfg.reward_distribution {
+        return Err(StdError::generic_err("unauthorized"));
+    }
+
+    // if we have nothing bonded, we shouldn't be receiving any rewards
     let total_bond_amount = TOTAL_BOND_AMOUNT.load(deps.storage)?;
-    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
-
-    let vault_bond_amount = query_vault_bond_amount(&deps.querier, cfg.vault)?;
-    // if total_bond_amount is zero it means that all yLuna is circulating and not staked
-    // vault_bond amount can only be zero if total_bond_amount is also zero (no yLuna can exist with not luna on vault)
-    let stakers_portion = if total_bond_amount.is_zero() {
-        Decimal::zero()
-    } else {
-        Decimal::from_ratio(total_bond_amount, vault_bond_amount).min(Decimal::one())
-    };
-
+    if total_bond_amount == Uint128::zero() {
+        return Err(StdError::generic_err("zero bonded amount"));
+    }
+   
     let mut messages = vec![];
     for asset in assets {
-        if !whitelisted_assets.contains(&asset.info) {
-            return Err(StdError::generic_err(format!(
-                "asset {} is not whitelisted",
-                asset.info
-            )));
-        }
-
-        // no need to handle native tokens, because native tokens can not be whitelisted
-        if let AssetInfo::Cw20(token_addr) = &asset.info {
-            if env.contract.address != info.sender {
+        let pool_key = match &asset.info {
+            AssetInfo::Cw20(token_addr) => {
                 messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: token_addr.to_string(),
                     msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
@@ -59,33 +53,22 @@ pub fn deposit_rewards(
                     })?,
                     funds: vec![],
                 }));
+                token_addr.to_string()
             }
-
-            let mut pool_info = POOL_INFO
-                .load(deps.storage, asset.info.as_bytes())
-                .unwrap_or_default();
-
-            let stakers_portion_amount = asset.amount * stakers_portion;
-            let protocol_fee_amount = stakers_portion_amount * cfg.protocol_fee;
-            let reward_amount = stakers_portion_amount.checked_sub(protocol_fee_amount)?;
-
-            // send the difference to collector
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: token_addr.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: cfg.collector.to_string(),
-                    amount: asset.amount.checked_sub(reward_amount)?,
-                })?,
-                funds: vec![],
-            }));
-
-            if !total_bond_amount.is_zero() {
-                let normal_reward_per_bond = Decimal::from_ratio(reward_amount, total_bond_amount);
-                pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
-
-                POOL_INFO.save(deps.storage, asset.info.as_bytes(), &pool_info)?;
+            AssetInfo::Native(denom) => {
+                asset.assert_sent_native_token_balance(&info)?;
+                denom.clone()
             }
-        }
+        };
+
+        let mut pool_info = POOL_INFO
+            .load(deps.storage, pool_key.as_bytes())
+            .unwrap_or_default();
+
+        let normal_reward_per_bond = Decimal::from_ratio(asset.amount, total_bond_amount);
+        pool_info.reward_index = pool_info.reward_index + normal_reward_per_bond;
+        POOL_INFO.save(deps.storage, pool_key.as_bytes(), &pool_info)?;
+        println!("deposited {}", asset);
     }
 
     Ok(Response::new()
@@ -95,7 +78,7 @@ pub fn deposit_rewards(
 
 // claim all available rewards
 pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<TerraMsgWrapper>> {
-    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let whitelisted_assets = query_whitelist(deps.storage, &deps.querier)?;
     let bond_info = BOND_AMOUNTS
         .load(deps.storage, info.sender.to_string().as_bytes())
         .map_err(|_| StdError::generic_err("no tokens bonded"))?;
@@ -129,6 +112,8 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
             continue;
         }
 
+        messages.push(get_transfer_msg(&claim_asset, &info.sender)?);
+        /*
         if let AssetInfo::Cw20(contract_addr) = asset_info {
             // re-implement into_msg here because life is cruel
             messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -143,6 +128,7 @@ pub fn claim_rewards(deps: DepsMut, info: MessageInfo) -> StdResult<Response<Ter
             // this is a logic error in the code, native reward assets not allowed
             return Err(StdError::generic_err("Native reward assets not supported"));
         }
+        */
 
         attributes.push(attr("claimed_asset", format!("{}", &claim_asset)));
     }
@@ -164,7 +150,7 @@ pub fn convert_and_claim_rewards(
     claim_asset_info: AssetInfo,
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
-    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let whitelisted_assets = query_whitelist(deps.storage, &deps.querier)?;
     let bond_info = BOND_AMOUNTS
         .load(deps.storage, info.sender.to_string().as_bytes())
         .map_err(|_| StdError::generic_err("no tokens bonded"))?;
@@ -172,21 +158,28 @@ pub fn convert_and_claim_rewards(
     let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = vec![];
     let mut attributes = vec![];
     let mut swap_assets: Vec<Asset> = vec![];
+    let mut funds: Vec<Coin> = vec![];
 
-    // verify that the claim asset is supported, and return the underlying Addr
-    let claim_token = verify_claim_asset(&cfg, &claim_asset_info)?;
+    // verify that the claim asset is supported
+    if !cfg.claim_assets.contains(&claim_asset_info) {
+        return Err(StdError::generic_err(
+            format!("claim asset not supported: {}", claim_asset_info.to_string())))
+    }
 
     // for xprism claim token, we first swap to prism and then mint xprism with gov
     // as a second step.  so if claim token is xprism, we swap to prism using
     // contract address as receiver.  otherwise we swap to claim token using
     // sender/claimer as receiver
-    let (swap_dest_asset_info, swap_receiver) = if claim_token == cfg.xprism_token {
-        (
-            AssetInfo::Cw20(cfg.prism_token.clone()),
-            env.contract.address.clone(),
-        )
-    } else {
-        (AssetInfo::Cw20(claim_token.clone()), info.sender.clone())
+    let (swap_dest_asset_info, swap_receiver) = match claim_asset_info.clone() {
+        AssetInfo::Cw20(addr) if addr == cfg.xprism_token => {
+            (
+                AssetInfo::Cw20(cfg.prism_token.clone()),
+                env.contract.address.clone(),
+            )
+        },
+        _ => {
+            (claim_asset_info.clone(), info.sender.clone())
+        }
     };
 
     for asset_info in whitelisted_assets {
@@ -219,14 +212,7 @@ pub fn convert_and_claim_rewards(
 
         // if this asset is already in claim denom, send directly and continue
         if reward_asset.info == claim_asset_info {
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: claim_token.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: info.sender.to_string(),
-                    amount: reward_asset.amount,
-                })?,
-                funds: vec![],
-            }));
+            messages.push(get_transfer_msg(&reward_asset, &info.sender)?);
             continue;
         };
 
@@ -236,22 +222,26 @@ pub fn convert_and_claim_rewards(
             continue;
         };
 
-        // increase allowance for the collector
-        if let AssetInfo::Cw20(contract_addr) = &asset_info {
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: contract_addr.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                    spender: cfg.collector.to_string(),
+        // increase allowance for the collector or add to funds
+        match reward_asset.info.clone() {
+            AssetInfo::Cw20(contract_addr) => {
+                messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: contract_addr.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                        spender: cfg.collector.to_string(),
+                        amount: reward_asset.amount,
+                        expires: None,
+                    })?,
+                    funds: vec![],
+                }));
+            },
+            AssetInfo::Native(denom) => {
+                funds.push(Coin {
+                    denom: denom.clone(),
                     amount: reward_asset.amount,
-                    expires: None,
-                })?,
-                funds: vec![],
-            }));
-        } else {
-            // this is a logic error in the code, native reward assets not allowed
-            return Err(StdError::generic_err("Native reward assets not supported"));
+                })
+            }
         }
-
         // add reward asset to swap assets
         swap_assets.push(reward_asset);
     }
@@ -264,7 +254,7 @@ pub fn convert_and_claim_rewards(
                 receiver: Some(swap_receiver.to_string()),
                 dest_asset_info: swap_dest_asset_info,
             })?,
-            funds: vec![],
+            funds,
         }));
 
         // if we're the receiver, this means we need the mint xprism claim hook
@@ -373,66 +363,8 @@ pub fn compute_all_rewards(
     Ok(())
 }
 
-pub fn whitelist_reward_asset(
-    deps: DepsMut,
-    info: MessageInfo,
-    asset: AssetInfo,
-) -> StdResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-
-    // can only be executed by owner
-    if info.sender != cfg.owner {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
-    if asset.is_native_token() {
-        return Err(StdError::generic_err(
-            "only token assets can be whitelisted",
-        ));
-    }
-
-    let mut whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
-    whitelist.push(asset.clone());
-
-    WHITELISTED_ASSETS.save(deps.storage, &whitelist)?;
-
-    Ok(Response::new().add_attributes(vec![
-        attr("action", "whitelist_reward_asset"),
-        attr("whitelisted_asset", asset.to_string()),
-    ]))
-}
-
-pub fn remove_whitelisted_reward_asset(
-    deps: DepsMut,
-    info: MessageInfo,
-    asset: AssetInfo,
-) -> StdResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-
-    // can only be executed by owner
-    if info.sender != cfg.owner {
-        return Err(StdError::generic_err("unauthorized"));
-    }
-
-    let mut whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
-
-    match whitelist.iter().position(|item| item.eq(&asset)) {
-        Some(position) => {
-            whitelist.remove(position);
-        }
-        None => return Err(StdError::generic_err("this asset is not whitelisted")),
-    }
-
-    WHITELISTED_ASSETS.save(deps.storage, &whitelist)?;
-
-    Ok(Response::new().add_attributes(vec![
-        attr("action", "remove_whitelisted_reward_asset"),
-        attr("removed_asset", asset.to_string()),
-    ]))
-}
-
 pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInfoResponse> {
-    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let whitelisted_assets = query_whitelist(deps.storage, &deps.querier)?;
     let bond_info = BOND_AMOUNTS
         .load(deps.storage, staker_addr.as_bytes())
         .map_err(|_| StdError::generic_err("there is no reward info for this address"))?;
@@ -440,16 +372,20 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInf
     // update all rewards
     let rewards = whitelisted_assets
         .iter()
-        .map(|wlasset| {
+        .filter_map(|wlasset| {
             let reward_info =
-                compute_asset_rewards(deps.storage, &staker_addr, bond_info.bond_amount, wlasset)?;
-
-            Ok(Asset {
-                info: wlasset.clone(),
-                amount: reward_info.pending_reward,
-            })
+                compute_asset_rewards(deps.storage, &staker_addr, bond_info.bond_amount, wlasset).unwrap();
+            if reward_info.pending_reward != Uint128::zero() {
+                Some(Asset {
+                    info: wlasset.clone(),
+                    amount: reward_info.pending_reward,
+                })
+            }
+            else {
+                None
+            }
         })
-        .collect::<StdResult<Vec<Asset>>>()?;
+        .collect();
 
     Ok(RewardInfoResponse {
         staker_addr,
@@ -458,18 +394,40 @@ pub fn query_reward_info(deps: Deps, staker_addr: String) -> StdResult<RewardInf
     })
 }
 
-fn verify_claim_asset(cfg: &Config, claim_asset_info: &AssetInfo) -> StdResult<Addr> {
-    if let AssetInfo::Cw20(claim_addr) = claim_asset_info.clone() {
-        if claim_addr == cfg.prism_token
-            || claim_addr == cfg.xprism_token
-            || claim_addr == cfg.cluna_token
-            || claim_addr == cfg.yluna_token
-            || claim_addr == cfg.pluna_token
-        {
-            return Ok(claim_addr);
-        } else {
-            return Err(StdError::generic_err("Claim asset not supported"));
-        }
+pub fn query_whitelist(
+    storage: &dyn Storage,
+    querier: &QuerierWrapper,
+) -> StdResult<Vec<AssetInfo>> {
+    let cfg = CONFIG.load(storage)?;
+    let res: RewardAssetWhitelistResponse =
+        querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: cfg.reward_distribution.to_string(),
+            msg: to_binary(&RewardDistributionQueryMsg::RewardAssetWhitelist {})?,
+        }))?;
+
+    Ok(res.assets)
+}
+
+pub fn get_transfer_msg(asset: &Asset, to: &Addr) 
+    -> StdResult<CosmosMsg<TerraMsgWrapper>> {
+
+    match &asset.info {
+        AssetInfo::Cw20(contract_addr) => {
+            Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: contract_addr.into(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: to.into(),
+                    amount: asset.amount,
+                })?,
+                funds: vec![],
+            })
+        )},
+        AssetInfo::Native(denom) => Ok(CosmosMsg::Bank(BankMsg::Send {
+            to_address: to.into(),
+            amount: vec![Coin {
+                denom: denom.clone(),
+                amount: asset.amount,
+            }],
+        })),
     }
-    Err(StdError::generic_err("Native claim assets not supported"))
 }

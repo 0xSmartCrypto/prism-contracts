@@ -15,7 +15,7 @@ use cw20::BalanceResponse as Cw20BalanceResponse;
 use cw_asset::{Asset, AssetInfo};
 use prism_protocol::vault::{StateResponse as VaultStateResponse, BondedAmountResponse as VaultBondedAmountResponse};
 use prism_protocol::basset_vault::{StateResponse as BassetVaultStateResponse};
-use prism_protocol::yasset_staking::RewardAssetWhitelistResponse;
+use prism_protocol::reward_distribution::RewardAssetWhitelistResponse;
 use prism_protocol::yasset_staking::{StateResponse as YassetStakingStateResponse}; 
 use prism_protocol::yasset_staking_x::{StateResponse as YassetStakingXStateResponse}; 
 use prismswap::asset::{PairInfo, PrismSwapAssetInfo};
@@ -81,6 +81,7 @@ pub struct WasmMockQuerier {
     yasset_staking_x_state_querier: YassetStakingXStateQuerier,
     simulation_querier: SimulationQuerier,
     boost_querier: BoostQuerier,
+    reward_asset_querier: RewardAssetQuerier,
 }
 
 impl Querier for WasmMockQuerier {
@@ -283,13 +284,8 @@ impl WasmMockQuerier {
                             },
                         QueryMsg::RewardAssetWhitelist {} => SystemResult::Ok(ContractResult::Ok(
                             to_binary(&RewardAssetWhitelistResponse {
-                                assets: vec![
-                                    AssetInfo::Cw20(Addr::unchecked("yluna0000")),
-                                    AssetInfo::Cw20(Addr::unchecked("pluna0000")),
-                                    AssetInfo::Native("uluna".to_string()),
-                                ],
-                            })
-                            .unwrap(),
+                                    assets: self.reward_asset_querier.assets.clone()
+                            }).unwrap()
                         )),
                         QueryMsg::Simulation { offer_asset } => {
                             let res = self
@@ -442,6 +438,12 @@ impl YassetStakingXStateQuerier {
     }
 }
 
+
+#[derive(Clone, Default)]
+pub struct RewardAssetQuerier {
+    assets: Vec<AssetInfo>,
+}
+
 #[derive(Clone, Default)]
 pub struct BoostQuerier {
     /// address to boost amount
@@ -500,6 +502,7 @@ impl WasmMockQuerier {
             yasset_staking_x_state_querier: YassetStakingXStateQuerier::default(),
             simulation_querier: SimulationQuerier::default(),
             boost_querier: BoostQuerier::default(),
+            reward_asset_querier: RewardAssetQuerier::default(),
         }
     }
 
@@ -563,7 +566,13 @@ impl WasmMockQuerier {
     pub fn with_boost_querier(&mut self, map: HashMap<String, Uint128>) {
         self.boost_querier.boost_map = map;
     }
-        
+
+    pub fn with_reward_assets(&mut self, assets: Vec<AssetInfo>) {
+        self.reward_asset_querier = RewardAssetQuerier{
+            assets
+        }
+    }
+
 }
 
 pub fn astro_pair_key(asset_infos: &[AstroAssetInfo; 2]) -> String {

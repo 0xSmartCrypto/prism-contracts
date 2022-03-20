@@ -21,9 +21,13 @@ use prism_protocol::launch_pool::{
     RewardInfoResponse, VestingStatusResponse,
 };
 use prism_protocol::yasset_staking::{
-    Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg, QueryMsg as StakingQueryMsg,
-    RewardAssetWhitelistResponse,
+    Cw20HookMsg as StakingHookMsg, ExecuteMsg as StakingExecuteMsg,
 };
+use prism_protocol::reward_distribution::{
+    QueryMsg as RewardDistributionQueryMsg, 
+    RewardAssetWhitelistResponse
+};
+
 use std::cmp::min;
 use std::convert::TryInto;
 
@@ -49,6 +53,7 @@ pub fn instantiate(
         yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
         vesting_period: msg.vesting_period,
         boost_contract: deps.api.addr_validate(&msg.boost_contract)?,
+        reward_distribution_contract: deps.api.addr_validate(&msg.reward_distribution_contract)?,
         distribution_schedule: msg.distribution_schedule,
         base_pool_ratio: msg.base_pool_ratio,
         min_bond_amount: msg.min_bond_amount,
@@ -168,8 +173,8 @@ pub fn admin_withdraw_rewards(
 
     let whitelist_res: RewardAssetWhitelistResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: cfg.yluna_staking.to_string(),
-            msg: to_binary(&StakingQueryMsg::RewardAssetWhitelist {})?,
+            contract_addr: cfg.reward_distribution_contract.to_string(),
+            msg: to_binary(&RewardDistributionQueryMsg::RewardAssetWhitelist {})?,
         }))?;
 
     let mut balances = vec![];

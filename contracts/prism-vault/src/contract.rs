@@ -24,13 +24,13 @@ use cw0::must_pay;
 use cw20::{
     Cw20Coin, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg, MinterResponse, TokenInfoResponse,
 };
-use cw_asset::AssetInfo;
 use prism_protocol::vault::{
     AllHistoryResponse, ConfigResponse, CurrentBatchResponse, Cw20HookMsg, ExecuteMsg,
     InstantiateMsg, QueryMsg, StateResponse, UnbondRequestsResponse, WhitelistedValidatorsResponse,
     WithdrawableUnbondedResponse, BondedAmountResponse,
 };
 use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
+use prism_protocol::delegator_rewards::ExecuteMsg as DelegatorRewardsExecuteMsg;
 use prismswap::querier::query_token_balance;
 use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
 
@@ -58,6 +58,7 @@ pub fn instantiate(
     let config = Config {
         owner: sender,
         reward_distribution_contract: Addr::unchecked(""),
+        delegator_rewards_contract: Addr::unchecked(""),
         cluna_contract: Addr::unchecked(""),
         yluna_contract: Addr::unchecked(""),
         airdrop_registry_contract: Addr::unchecked(""),
@@ -193,6 +194,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::UpdateConfig {
             owner,
             reward_distribution_contract,
+            delegator_rewards_contract,
             airdrop_registry_contract,
             manager,
         } => execute_update_config(
@@ -200,6 +202,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             info,
             owner,
             reward_distribution_contract,
+            delegator_rewards_contract,
             airdrop_registry_contract,
             manager,
         ),
@@ -281,8 +284,8 @@ pub fn execute_update_global(
     // Ask yasset-staking contract to process rewards. It should swap those rewards
     // into yLuna and pLuna.
     messages.push(SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.reward_distribution_contract.to_string(),
-        msg: to_binary(&RewardDistributionExecuteMsg::ProcessDelegatorRewards {}).unwrap(),
+        contract_addr: config.delegator_rewards_contract.to_string(),
+        msg: to_binary(&DelegatorRewardsExecuteMsg::ProcessDelegatorRewards {}).unwrap(),
         funds: vec![],
     })));
 
@@ -410,9 +413,7 @@ pub fn deposit_airdrop_rewards(
             msg: to_binary(&Cw20ExecuteMsg::Send {
                 contract: conf.reward_distribution_contract.to_string(),
                 amount: amount,
-                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {
-                    asset_infos: vec![AssetInfo::Cw20(airdrop_token_addr)],
-                })?,
+                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})?,
             })?,
             funds: vec![],
         })),

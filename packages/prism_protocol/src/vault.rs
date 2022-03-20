@@ -27,6 +27,7 @@ pub enum ExecuteMsg {
     UpdateConfig {
         owner: Option<String>,
         reward_distribution_contract: Option<String>,
+        delegator_rewards_contract: Option<String>,
         airdrop_registry_contract: Option<String>,
         manager: Option<String>,
     },
@@ -140,6 +141,7 @@ pub enum Cw20HookMsg {
 pub struct ConfigResponse {
     pub owner: String,
     pub reward_distribution_contract: String,
+    pub delegator_rewards_contract: String,
     pub cluna_contract: String,
     pub pluna_contract: String,
     pub yluna_contract: String,

@@ -2,6 +2,7 @@ pub mod airdrop_registry;
 pub mod basset_vault;
 pub mod collector;
 pub mod common;
+pub mod delegator_rewards;
 pub mod fair_launch;
 pub mod gov;
 pub mod launch_pool;

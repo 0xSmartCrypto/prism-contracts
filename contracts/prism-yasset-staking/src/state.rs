@@ -7,11 +7,6 @@ use cw_storage_plus::{Item, Map};
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-/// WHITELISTED_ASSETS is a list of denominations that will be accepted as
-/// rewards by this contract. The DepositRewards method will reject any deposits
-/// that are not in one of these denominations.
-pub const WHITELISTED_ASSETS: Item<Vec<AssetInfo>> = Item::new("whitelisted_assets");
-
 /// TOTAL_BOND_AMOUNT holds the total amount of y-asset that has been staked by
 /// people in this contract. It starts at 0. It is incremented during Bond calls
 /// and decremented during Unbond calls.
@@ -32,15 +27,13 @@ pub const BOND_AMOUNTS: Map<&[u8], BondInfo> = Map::new("bond_amounts");
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: Addr,
-    pub vault: Addr,
     pub gov: Addr,
     pub collector: Addr,
-    pub protocol_fee: Decimal,
-    pub cluna_token: Addr,
-    pub yluna_token: Addr,
-    pub pluna_token: Addr,
+    pub yasset_token: Addr,
     pub prism_token: Addr,
     pub xprism_token: Addr,
+    pub reward_distribution: Addr,
+    pub claim_assets: Vec<AssetInfo>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]

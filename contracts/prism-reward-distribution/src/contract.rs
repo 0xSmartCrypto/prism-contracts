@@ -1,13 +1,16 @@
+use std::str::FromStr;
+
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     attr, to_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdError, StdResult, WasmMsg,
+    MessageInfo, Response, StdError, StdResult, WasmMsg, Uint128
 };
 
 use prism_protocol::reward_distribution::{
     ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, RewardAssetWhitelistResponse,
+    MAX_PROTOCOL_FEE
 };
 
 use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
@@ -20,7 +23,8 @@ use crate::state::{Config, CONFIG, WHITELISTED_ASSETS};
 use cw_asset::{Asset, AssetInfo};
 use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
-use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
+use prismswap::asset::PrismSwapAssetInfo;
+use terra_cosmwasm::{ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
 
 const CONTRACT_NAME: &str = "prism-reward-distribution";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -36,27 +40,17 @@ pub fn instantiate(
 ) -> ContractResult<Response> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    if msg.protocol_fee > Decimal::one() {
-        return Err(ContractError::InvalidConfig {
-            reason: "invalid protocol fee".to_string(),
-        });
-    }
-
-    if msg.whitelisted_assets.is_empty() {
-        return Err(ContractError::InvalidConfig {
-            reason: "whitelisted assets cannot be empty".to_string(),
-        });
-    }
+    validate_protocol_fee(msg.protocol_fee)?;
 
     CONFIG.save(
         deps.storage,
         &Config {
+            owner: deps.api.addr_validate(&msg.owner)?,
             vault: deps.api.addr_validate(&msg.vault)?,
-            gov: deps.api.addr_validate(&msg.gov)?,
+            collector: deps.api.addr_validate(&msg.collector)?,
             yasset_token: deps.api.addr_validate(&msg.yasset_token)?,
             yasset_staking: deps.api.addr_validate(&msg.yasset_staking)?,
             yasset_staking_x: deps.api.addr_validate(&msg.yasset_staking_x)?,
-            collector: deps.api.addr_validate(&msg.collector)?,
             protocol_fee: msg.protocol_fee,
         },
     )?;
@@ -74,68 +68,30 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> ContractResult<Response<TerraMsgWrapper>> {
     match msg {
-        ExecuteMsg::ProcessDelegatorRewards {} => process_delegator_rewards(deps, env, info),
-        ExecuteMsg::DistributeRewards { asset_infos } => {
-            distribute_rewards(deps, env, info, asset_infos)
+        ExecuteMsg::DistributeRewards {} => {
+            distribute_rewards(deps, env, info)
         }
-        ExecuteMsg::WhitelistRewardAsset { asset } => whitelist_reward_asset(deps, info, asset),
-    }
-}
-
-pub fn process_delegator_rewards(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-) -> ContractResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
-    if info.sender != cfg.vault {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    // Find all native denoms for which we have a balance.
-    let balances = deps.querier.query_all_balances(&env.contract.address)?;
-    let denoms: Vec<String> = balances.iter().map(|item| item.denom.clone()).collect();
-
-    let reward_denom = String::from(REWARD_DENOM);
-    let exchange_rates = query_exchange_rates(&deps, reward_denom.clone(), denoms)?;
-
-    let mut messages: Vec<CosmosMsg<TerraMsgWrapper>> = Vec::new();
-    for coin in balances {
-        if coin.denom == reward_denom
-            || !exchange_rates
-                .exchange_rates
-                .iter()
-                .any(|x| x.quote_denom == coin.denom)
-        {
-            // ignore luna and any other denom that's not convertible to luna.
-            continue;
+        ExecuteMsg::WhitelistRewardAsset { asset } => {
+            asset.check(deps.api)?;
+            whitelist_reward_asset(deps, info, asset)
         }
-
-        messages.push(create_swap_msg(coin, reward_denom.to_string()));
+        ExecuteMsg::RemoveRewardAsset { asset } => {
+            asset.check(deps.api)?;
+            remove_whitelisted_reward_asset(deps, info, asset)
+        }
+        ExecuteMsg::UpdateConfig {owner, protocol_fee } =>  {
+            update_config(deps, info, owner, protocol_fee)
+        }
     }
-
-    let res = Response::new()
-        .add_messages(messages)
-        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: env.contract.address.to_string(),
-            msg: to_binary(&ExecuteMsg::DistributeRewards {
-                asset_infos: vec![AssetInfo::Native(reward_denom)],
-            })?,
-            funds: vec![],
-        })])
-        .add_attribute("action", "distribute");
-
-    Ok(res)
 }
 
 pub fn distribute_rewards(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    asset_infos: Vec<AssetInfo>,
 ) -> ContractResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
-    if info.sender != cfg.vault {
+    if info.sender != cfg.vault && info.sender != env.contract.address {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -144,7 +100,7 @@ pub fn distribute_rewards(
         query_yasset_staking_bond_amount(&deps.querier, cfg.yasset_staking.clone())?;
     let yasset_staking_x_bonded =
         query_yasset_staking_x_bond_amount(&deps.querier, cfg.yasset_staking_x.clone())?;
-    let whitelisted_assets = query_whitelist(deps.as_ref())?.assets;
+    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
     let total_bond_amount = yasset_staking_bonded + yasset_staking_x_bonded;
 
     if vault_bond_amount.is_zero() {
@@ -153,14 +109,12 @@ pub fn distribute_rewards(
 
     let mut messages = vec![];
     let stakers_portion = Decimal::from_ratio(total_bond_amount, vault_bond_amount);
-    for asset_info in asset_infos {
-        if !whitelisted_assets.contains(&asset_info) {
-            return Err(ContractError::RewardAssetNotWhitelisted {
-                asset: asset_info.to_string(),
-            });
+    for asset_info in &whitelisted_assets {        
+        let balance = asset_info.query_balance(&deps.querier, env.contract.address.clone())?;
+        if balance == Uint128::zero() {
+            continue
         }
         
-        let balance = asset_info.query_balance(&deps.querier, env.contract.address.clone())?; 
         let stakers_portion_amount = balance * stakers_portion;
         let protocol_fee_amount = stakers_portion_amount * cfg.protocol_fee;
         let reward_amount = stakers_portion_amount
@@ -188,7 +142,7 @@ pub fn distribute_rewards(
                     * Decimal::from_ratio(yasset_staking_bonded, total_bond_amount),
             };
             let yasset_staking_x_asset = Asset {
-                info: asset_info,
+                info: asset_info.clone(),
                 amount: reward_amount - yasset_staking_asset.amount,
             };
 
@@ -217,12 +171,17 @@ pub fn whitelist_reward_asset(
 ) -> ContractResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // can only be exeucted by gov
-    if info.sender.as_str() != cfg.gov.as_str() {
+    // can only be exeucted by owner
+    if info.sender != cfg.owner {
         return Err(ContractError::Unauthorized {});
     }
 
     let mut whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
+    if whitelist.contains(&asset) {
+        return Err(ContractError::DuplicateWhitelistAsset { 
+            asset: asset.to_string() 
+        })
+    }
     whitelist.push(asset.clone());
 
     WHITELISTED_ASSETS.save(deps.storage, &whitelist)?;
@@ -230,6 +189,38 @@ pub fn whitelist_reward_asset(
     Ok(Response::new().add_attributes(vec![
         attr("action", "whitelist_reward_asset"),
         attr("whitelisted_asset", asset.to_string()),
+    ]))
+}
+
+
+pub fn remove_whitelisted_reward_asset(
+    deps: DepsMut,
+    info: MessageInfo,
+    asset: AssetInfo,
+) -> ContractResult<Response<TerraMsgWrapper>> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // can only be executed by owner
+    if info.sender != cfg.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let mut whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
+
+    match whitelist.iter().position(|item| item.eq(&asset)) {
+        Some(position) => {
+            whitelist.remove(position);
+        }
+        None => return Err(ContractError::RewardAssetNotWhitelisted{
+            asset: asset.to_string()
+        }),
+    }
+
+    WHITELISTED_ASSETS.save(deps.storage, &whitelist)?;
+
+    Ok(Response::new().add_attributes(vec![
+        attr("action", "remove_whitelisted_reward_asset"),
+        attr("removed_asset", asset.to_string()),
     ]))
 }
 
@@ -245,12 +236,12 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let cfg = CONFIG.load(deps.storage)?;
 
     Ok(ConfigResponse {
+        owner: cfg.owner.to_string(),
         vault: cfg.vault.to_string(),
-        gov: cfg.gov.to_string(),
+        collector: cfg.collector.to_string(),
         yasset_token: cfg.yasset_token.to_string(),
         yasset_staking: cfg.yasset_staking.to_string(),
         yasset_staking_x: cfg.yasset_staking_x.to_string(),
-        collector: cfg.collector.to_string(),
         protocol_fee: cfg.protocol_fee,
     })
 }
@@ -327,4 +318,40 @@ pub fn get_deposit_rewards_msgs(
             }),
         ]),
     }
+}
+
+
+fn update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    owner: Option<String>,
+    protocol_fee: Option<Decimal>,
+) -> ContractResult<Response<TerraMsgWrapper>> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+
+    // can only be exeucted by owner
+    if info.sender != cfg.owner {
+        return Err(ContractError::Unauthorized{});
+    }
+
+    if let Some(owner) = owner {
+        cfg.owner = deps.api.addr_validate(&owner)?;
+    }
+
+    if let Some(protocol_fee) = protocol_fee {
+        validate_protocol_fee(protocol_fee)?;
+        cfg.protocol_fee = protocol_fee;
+    }
+        
+    CONFIG.save(deps.storage, &cfg)?;
+
+    Ok(Response::new().add_attribute("action", "update_config"))
+}
+
+fn validate_protocol_fee(fee: Decimal) -> ContractResult<Decimal> {
+    if fee > Decimal::from_str(MAX_PROTOCOL_FEE)? {
+        return Err(ContractError::InvalidProtocolFee {});
+    }
+
+    Ok(fee)
 }

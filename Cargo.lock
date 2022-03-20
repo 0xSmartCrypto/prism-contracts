@@ -1062,6 +1062,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-delegator-rewards"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-asset",
+ "cw-storage-plus",
+ "cw2",
+ "cw20 0.8.1",
+ "prism-common",
+ "prism-protocol",
+ "prismswap",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
+ "thiserror",
+]
+
+[[package]]
 name = "prism-gov"
 version = "1.1.0"
 dependencies = [

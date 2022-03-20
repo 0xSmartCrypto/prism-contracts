@@ -8,7 +8,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::testing::{mock_env, mock_info};
-use cw_asset::AssetInfo;
 
 use crate::config::MAX_VALIDATORS;
 use crate::contract::{execute, instantiate, query, reply};
@@ -34,12 +33,13 @@ use crate::state::{
 use prism_common::testing::mock_querier::{mock_dependencies as dependencies, WasmMockQuerier};
 use prism_protocol::airdrop_registry::ExecuteMsg::FabricateClaim;
 use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
+use prism_protocol::delegator_rewards::ExecuteMsg as DelegatorRewardsExecuteMsg;
 use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUnbonded};
-use prism_protocol::yasset_staking::ExecuteMsg as StakingExecuteMsg;
 use std::borrow::BorrowMut;
 
 const OWNER: &str = "owner";
 const REWARD_DISTRIBUTION_CONTRACT: &str = "reward_distribution_contract";
+const DELEGATOR_REWARDS_CONTRACT: &str = "delegator_rewards_contract";
 const CLUNA_CONTRACT: &str = "cluna";
 const YLUNA_CONTRACT: &str = "yluna";
 const PLUNA_CONTRACT: &str = "pluna";
@@ -125,6 +125,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     let register_msg = ExecuteMsg::UpdateConfig {
         owner: None,
         reward_distribution_contract: Some(reward_distribution_contract.to_string()),
+        delegator_rewards_contract: Some(DELEGATOR_REWARDS_CONTRACT.to_string()),
         airdrop_registry_contract: Some("airdrop_registry".to_string()),
         manager: None,
     };
@@ -405,6 +406,7 @@ fn proper_initialization() {
     let expected_conf = ConfigResponse {
         owner: OWNER.to_string(),
         reward_distribution_contract: "".to_string(),
+        delegator_rewards_contract: "".to_string(),
         yluna_contract: "yluna".to_string(),
         pluna_contract: "pluna".to_string(),
         cluna_contract: "cluna".to_string(),
@@ -920,7 +922,12 @@ fn proper_split() {
     let addr1 = "addr1000".to_string();
     let bond_amount = Uint128::new(10000);
 
-    init(deps.borrow_mut(), OWNER, REWARD_DISTRIBUTION_CONTRACT, validator.address);
+    init(
+        deps.borrow_mut(), 
+        OWNER, 
+        REWARD_DISTRIBUTION_CONTRACT,         
+        validator.address
+    );
 
     let split_msg = ExecuteMsg::Split {
         amount: bond_amount,
@@ -1232,10 +1239,10 @@ pub fn proper_update_global_index() {
             msg,
             funds: _,
         }) => {
-            assert_eq!(contract_addr, REWARD_DISTRIBUTION_CONTRACT);
+            assert_eq!(contract_addr, DELEGATOR_REWARDS_CONTRACT);
             assert_eq!(
                 msg,
-                &to_binary(&StakingExecuteMsg::ProcessDelegatorRewards {}).unwrap()
+                &to_binary(&DelegatorRewardsExecuteMsg::ProcessDelegatorRewards {}).unwrap()
             )
         }
         _ => panic!("Unexpected message: {:?}", process_rewards),
@@ -3065,6 +3072,7 @@ pub fn proper_update_config() {
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
         reward_distribution_contract: None,
+        delegator_rewards_contract: None,
         airdrop_registry_contract: None,
         manager: None,
     };
@@ -3076,6 +3084,7 @@ pub fn proper_update_config() {
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
         reward_distribution_contract: None,
+        delegator_rewards_contract: None,
         airdrop_registry_contract: None,
         manager: None,
     };
@@ -3110,19 +3119,34 @@ pub fn proper_update_config() {
     let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_prams);
     assert_eq!(res.unwrap_err(), StdError::generic_err("unauthorized"));
 
+    // set reward distribution contract
     let update_config = UpdateConfig {
         owner: None,
         reward_distribution_contract: Some("new reward".to_string()),
+        delegator_rewards_contract: None,
+        airdrop_registry_contract: None,
+        manager: None,
+    };
+    let new_owner_info = mock_info(&new_owner, &[]);
+    let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_config).unwrap();
+    assert_eq!(res.messages.len(), 0);
+
+    // set delegator rewards contract
+    let update_config = UpdateConfig {
+        owner: None,
+        reward_distribution_contract: None,
+        delegator_rewards_contract: Some("new_delegator_rewards".to_string()),
         airdrop_registry_contract: None,
         manager: None,
     };
     let new_owner_info = mock_info(&new_owner, &[]);
     let res = execute(deps.as_mut(), mock_env(), new_owner_info, update_config).unwrap();
     assert_eq!(res.messages.len(), 1);
-
+    
+    
     let msg: SubMsg = SubMsg::new(CosmosMsg::Distribution(
         DistributionMsg::SetWithdrawAddress {
-            address: "new reward".to_string(),
+            address: "new_delegator_rewards".to_string(),
         },
     ));
     assert_eq!(msg, res.messages[0]);
@@ -3137,6 +3161,7 @@ pub fn proper_update_config() {
     let update_config = UpdateConfig {
         owner: None,
         reward_distribution_contract: None,
+        delegator_rewards_contract: None,
         airdrop_registry_contract: Some("new airdrop".to_string()),
         manager: None,
     };
@@ -3236,9 +3261,7 @@ fn proper_deposit_airdrop_reward() {
                 msg: to_binary(&Cw20ExecuteMsg::Send {
                     contract: REWARD_DISTRIBUTION_CONTRACT.to_string(),
                     amount: Uint128::from(1000u128),
-                    msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {
-                        asset_infos: vec![AssetInfo::Cw20(Addr::unchecked("airdrop_token"))],
-                    }).unwrap()
+                    msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {}).unwrap()
                 }).unwrap(),
                 funds: vec![],
             })),

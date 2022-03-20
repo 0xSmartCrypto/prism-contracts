@@ -46,7 +46,7 @@ This page contains a listing of the balances stored within each contract
 
 | Denom | Description |
 | - | - |
-| NONE | - |
+| native coins |  delegator rewards that have not yet been converted to pluna/yluna.  when we bond/unbond with any validator, delegator rewards are automatically pulled from that validator and sent to this contract.  These are not converted to pluna/yluna until ProcessDelegatorRewards is called |
 
 ## prism-vault
 | Denom | Description |

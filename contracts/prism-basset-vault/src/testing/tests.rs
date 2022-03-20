@@ -3,7 +3,6 @@ use cosmwasm_std::{
     Response, Storage, SubMsg, Uint128, WasmMsg,
 };
 
-use cw_asset::AssetInfo;
 use cosmwasm_std::testing::{mock_env, mock_info};
 
 use crate::contract::{execute, instantiate, query};
@@ -496,9 +495,7 @@ pub fn test_update_global_index() {
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: REWARD_DISTRIBUTION_CONTRACT.to_string(),
-                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {
-                    asset_infos: vec![AssetInfo::Native(BASSET_REWARD_DENOM.to_string())]
-                })
+                msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})
                 .unwrap(),
                 funds: vec![]
             })),

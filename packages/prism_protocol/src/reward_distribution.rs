@@ -4,14 +4,16 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_std::{Decimal};
 use cw_asset::AssetInfo;
 
+pub const MAX_PROTOCOL_FEE: &str = "0.5";
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    pub owner: String,
     pub vault: String,
-    pub gov: String,
+    pub collector: String,
     pub yasset_token: String,
     pub yasset_staking: String,
     pub yasset_staking_x: String,
-    pub collector: String,
     pub protocol_fee: Decimal,
     pub whitelisted_assets: Vec<AssetInfo> 
 }
@@ -19,21 +21,26 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    // Process delegator rewards, swap to reward denom
-    ProcessDelegatorRewards {},
-    
-    /// Distribute entire balance of asset_infos as rewards to yasset_staking, 
-    /// yasset_staking_x, and collector
-    DistributeRewards {
-        asset_infos: Vec<AssetInfo>,
-    },
+
+    /// Distribute rewards to yasset_staking, yasset_staking_x, and collector.
+    DistributeRewards {},
     
     ////////////////////////
-    /// Gov operations
+    /// Owner operations
     ////////////////////////
     WhitelistRewardAsset {
         asset: AssetInfo,
-    }
+    },
+
+    RemoveRewardAsset {
+        asset: AssetInfo,
+    },
+
+    UpdateConfig {
+        owner: Option<String>,
+        protocol_fee: Option<Decimal>
+    },
+
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -45,12 +52,12 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
+    pub owner: String,
     pub vault: String,
-    pub gov: String,
+    pub collector: String,
     pub yasset_token: String,
     pub yasset_staking: String,
     pub yasset_staking_x: String,
-    pub collector: String,
     pub protocol_fee: Decimal,
 }
 

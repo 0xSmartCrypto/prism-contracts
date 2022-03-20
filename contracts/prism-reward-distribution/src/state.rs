@@ -10,11 +10,11 @@ pub const WHITELISTED_ASSETS: Item<Vec<AssetInfo>> = Item::new("whitelisted_asse
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
+    pub owner: Addr,
     pub vault: Addr,
-    pub gov: Addr,
+    pub collector: Addr,
     pub yasset_token: Addr,
     pub yasset_staking: Addr,
     pub yasset_staking_x: Addr,
-    pub collector: Addr,
     pub protocol_fee: Decimal,
 }

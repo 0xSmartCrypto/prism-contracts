@@ -5,20 +5,16 @@ use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw20::Cw20ReceiveMsg;
 use cw_asset::{Asset, AssetInfo};
 
-pub const MAX_PROTOCOL_FEE: &str = "0.5";
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub owner: String,
-    pub vault: String,
     pub gov: String,
     pub collector: String,
-    pub protocol_fee: Decimal,
-    pub cluna_token: String,
-    pub yluna_token: String,
-    pub pluna_token: String,
+    pub yasset_token: String,
     pub prism_token: String,
     pub xprism_token: String,
+    pub reward_distribution: String,
+    pub claim_assets: Vec<AssetInfo> 
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -35,28 +31,13 @@ pub enum ExecuteMsg {
     /// Withdraw pending rewards
     ClaimRewards {},
 
-    /// Withdraw pending rewards and convert to a whitelisted asset info
+    /// Withdraw pending rewards and convert to the claim_asset 
     ConvertAndClaimRewards {
         claim_asset: AssetInfo,
     },
     MintXprismClaimHook {
         receiver: Addr,
         prev_balance: Uint128,
-    },
-
-    ////////////////////////
-    /// Internal operations
-    ////////////////////////
-    /// Process delegator rewards swaps to luna
-    /// and calls the internal hooks
-    /// 1) Swap delegator rewards to luna
-    /// 2) LunaToPyluna
-    /// 3) DepositMintedPylunaHook
-    ProcessDelegatorRewards {},
-    LunaToPylunaHook {},
-    DepositMintedPylunaHook {
-        prev_pluna_balance: Uint128,
-        prev_yluna_balance: Uint128,
     },
 
     /// Deposit rewards to yLuna stakers
@@ -69,15 +50,17 @@ pub enum ExecuteMsg {
     ////////////////////////
     UpdateConfig {
         owner: Option<String>,
-        collector: Option<String>,
-        protocol_fee: Option<Decimal>,
     },
-    WhitelistRewardAsset {
+
+    AddClaimAsset {
         asset: AssetInfo,
     },
-    RemoveRewardAsset {
+
+    RemoveClaimAsset {
         asset: AssetInfo,
     },
+
+
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -93,7 +76,6 @@ pub enum QueryMsg {
     Config {},
     PoolInfo { asset_token: String },
     RewardInfo { staker_addr: String },
-    RewardAssetWhitelist {},
     BondAmount {},
     // State currently only contains BondAmount, so could just use BondAmount 
     // query, but adding for consistency with vault and yasset-staking-x
@@ -103,15 +85,13 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub vault: String,
     pub gov: String,
     pub collector: String,
-    pub protocol_fee: Decimal,
-    pub cluna_token: String,
-    pub yluna_token: String,
-    pub pluna_token: String,
+    pub yasset_token: String,
     pub prism_token: String,
     pub xprism_token: String,
+    pub reward_distribution: String,
+    pub claim_assets: Vec<AssetInfo> 
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -125,11 +105,6 @@ pub struct RewardInfoResponse {
     pub staker_addr: String,
     pub staked_amount: Uint128,
     pub rewards: Vec<Asset>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct RewardAssetWhitelistResponse {
-    pub assets: Vec<AssetInfo>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

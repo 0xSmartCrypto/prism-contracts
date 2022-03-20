@@ -1,6 +1,6 @@
 pub mod contract;
-mod rewards;
-mod staking;
+
+mod error;
 mod state;
 
 #[cfg(test)]

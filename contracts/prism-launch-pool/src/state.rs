@@ -50,6 +50,7 @@ pub struct Config {
     // How long rewards take to vest, in seconds.
     pub vesting_period: u64,
     pub boost_contract: Addr,
+    pub reward_distribution_contract: Addr,
     pub distribution_schedule: (u64, u64, Uint128),
     pub base_pool_ratio: Decimal,
     /// An attempt to bond less than this amount will return an error. Useful
@@ -70,6 +71,7 @@ impl Config {
             yluna_token: self.yluna_token.to_string(),
             vesting_period: self.vesting_period,
             boost_contract: self.boost_contract.to_string(),
+            reward_distribution_contract: self.reward_distribution_contract.to_string(),
             distribution_schedule: self.distribution_schedule,
             base_pool_ratio: self.base_pool_ratio,
             min_bond_amount: self.min_bond_amount,

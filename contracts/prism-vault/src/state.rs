@@ -65,11 +65,15 @@ pub struct Config {
     // field doesn't match the caller's address).
     pub owner: Addr,
     // reward_distribution_contract is the address of the reward distribution contract.
-    // Delegation rewards are deposited directly there (via SetWithdrawAddress).
+    pub reward_distribution_contract: Addr,
+
+    // Delegation rewards are deposited directly to the delegator_rewards_contract
+    // (via SetWithdrawAddress).
     // Example: Alice calls Bond on the Vault with 1 Luna. The Vault delegates
     // that Luna to a validator. Rewards from that delegation go straight to the
     // reward distribution contract, bypassing the Vault completely.
-    pub reward_distribution_contract: Addr,
+    pub delegator_rewards_contract: Addr,
+
     // cluna_contract, yluna_contract and pluna_contract are the addresses of
     // the corresponding CW20 contracts. They are needed to mint, burn and
     // transfer these tokens.
@@ -93,6 +97,7 @@ impl Config {
         ConfigResponse {
             owner: self.owner.to_string(),
             reward_distribution_contract: self.reward_distribution_contract.to_string(),
+            delegator_rewards_contract: self.delegator_rewards_contract.to_string(),
             cluna_contract: self.cluna_contract.to_string(),
             yluna_contract: self.yluna_contract.to_string(),
             pluna_contract: self.pluna_contract.to_string(),

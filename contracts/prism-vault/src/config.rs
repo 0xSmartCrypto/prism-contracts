@@ -121,6 +121,7 @@ pub fn execute_update_config(
     info: MessageInfo,
     owner: Option<String>,
     reward_distribution_contract: Option<String>,
+    delegator_rewards_contract: Option<String>,
     airdrop_registry_contract: Option<String>,
     manager: Option<String>,
 ) -> StdResult<Response> {
@@ -138,11 +139,15 @@ pub fn execute_update_config(
 
     if let Some(reward_distribution_contract) = reward_distribution_contract {
         config.reward_distribution_contract = deps.api.addr_validate(&reward_distribution_contract)?;
+    }
+
+    if let Some(delegator_rewards_contract) = delegator_rewards_contract {
+        config.delegator_rewards_contract = deps.api.addr_validate(&delegator_rewards_contract)?;
 
         // register the reward contract for automated reward withdrawal.
         messages.push(SubMsg::new(CosmosMsg::Distribution(
             DistributionMsg::SetWithdrawAddress {
-                address: reward_distribution_contract,
+                address: delegator_rewards_contract,
             },
         )));
     }

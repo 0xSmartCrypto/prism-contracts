@@ -3,8 +3,8 @@ use cosmwasm_std::{
     WasmMsg,
 };
 
-use crate::rewards::compute_all_rewards;
-use crate::state::{BOND_AMOUNTS, CONFIG, TOTAL_BOND_AMOUNT, WHITELISTED_ASSETS};
+use crate::rewards::{compute_all_rewards, query_whitelist};
+use crate::state::{BOND_AMOUNTS, CONFIG, TOTAL_BOND_AMOUNT};
 use cw20::Cw20ExecuteMsg;
 use terra_cosmwasm::TerraMsgWrapper;
 
@@ -14,7 +14,7 @@ pub fn bond(
     amount: Uint128,     // amount of y-asset they are sending to be staked
 ) -> StdResult<Response<TerraMsgWrapper>> {
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
-    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let whitelisted_assets = query_whitelist(deps.storage, &deps.querier)?;
     let mut bond_info = BOND_AMOUNTS
         .load(deps.storage, staker_addr.as_bytes())
         .unwrap_or_default();
@@ -47,7 +47,7 @@ pub fn unbond(
     let staker_addr = info.sender.to_string();
     let cfg = CONFIG.load(deps.storage)?;
     let bond_total = TOTAL_BOND_AMOUNT.load(deps.storage)?;
-    let whitelisted_assets = WHITELISTED_ASSETS.load(deps.storage)?;
+    let whitelisted_assets = query_whitelist(deps.storage, &deps.querier)?;
     let mut bond_info = BOND_AMOUNTS
         .load(deps.storage, staker_addr.as_bytes())
         .map_err(|_| StdError::generic_err("no tokens bonded"))?;
@@ -88,7 +88,7 @@ pub fn unbond(
 
     Ok(Response::new()
         .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.yluna_token.to_string(),
+            contract_addr: cfg.yasset_token.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: staker_addr.to_string(),
                 amount: unbonded_amt,

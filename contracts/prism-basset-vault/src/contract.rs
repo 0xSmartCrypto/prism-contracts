@@ -18,7 +18,6 @@ use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecute
 
 use cw20::Cw20ReceiveMsg;
 
-use cw_asset::AssetInfo;
 use beth::reward::ExecuteMsg as BassetRewardExecuteMsg;
 
 const CONTRACT_NAME: &str = "prism-basset-vault";
@@ -359,9 +358,7 @@ pub fn execute_update_global(deps: DepsMut, env: Env) -> ContractResult<Response
         // instruct reward_distribution_contract to distribute rewards
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: config.reward_distribution_contract.unwrap(),
-            msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {
-                asset_infos: vec![AssetInfo::Native(config.asset_reward_denom)],
-            })
+            msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})
             .unwrap(),
             funds: vec![],
         })),
