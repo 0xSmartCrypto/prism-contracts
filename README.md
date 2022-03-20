@@ -6,14 +6,18 @@ This repository contains the source code for the first version of Prism Protocol
 
 | Contract                                                 | Reference | Description                                                                                 |
 | -------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| [`gov`](./contracts/prism-gov)                           | [doc]()   | Governance contract for Prism Protocol, manages xPRISM minting and rewards                  |
 | [`airdrop-registry`](./contracts/prism-airdrop-registry) | [doc]()   | Manages message fabricators for airdrop claims                                              |
+| [`basset-vault`](./contracts/basset-vault)               | [doc]()   | Vault for bonding bAssets |
 | [`collector`](./contracts/prism-collector)               | [doc]()   | Gathers protocol fees and distributes to xPRISM holders, manages reward swap logic          |
+| [`delegator-rewards`](./contracts/delegator-rewards)     | [doc]()   | Contract for processing delegator rewards |
+| [`gov`](./contracts/prism-gov)                           | [doc]()   | Governance contract for Prism Protocol, manages xPRISM minting and rewards                  |
 | [`launch-pool`](./contracts/prism-launch-pool)           | [doc]()   | yLuna staking pool event                                                                    |
 | [`lp-staking`](./contracts/prism-lp-staking)             | [doc]()   | Staking contract for PRISM LP tokens                                                        |
+| [`reward-distribution`](./contracts/prism-reward-distribution) | [doc]()   | Distribute rewards appropriately among collector, yasset-staking, and yasset-staking-x contracts |
 | [`vault`](./contracts/prism-vault)                       | [doc]()   | Manages luna delegations and yLuna/pLuna minting                                            |
-| [`yasset-staking`](./contracts/prism-yasset-staking)     | [doc]()   | Staking contract for yLuna tokens, stakers receiver all delegated luna rewards and airdrops |
 | [`xprism-boost`](./contracts/prism-xprism-boost)         | [doc]()   | Allows users to lock xPRISM to farm AMPS                                                    |
+| [`yasset-staking`](./contracts/prism-yasset-staking)     | [doc]()   | Staking contract for yAssets |
+| [`yasset-staking-x`](./contracts/prism-yasset-staking-x) | [doc]()   | Autocompounding staking contract for yAssets |
 
 ## Bug Bounty
 
