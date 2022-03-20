@@ -84,7 +84,6 @@ fn test_distribute_rewards_native() {
     let mut deps = mock_dependencies(&[]);
 
     init(&mut deps);
-    let info = mock_info("random_user", &[]);
 
     let reward_denom = "uluna";
     let reward_asset = Asset {
@@ -102,10 +101,6 @@ fn test_distribute_rewards_native() {
     )]);
 
     let msg = ExecuteMsg::DistributeRewards {};
-
-    // unauthorized error - only vault can distribute rewards
-    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
-    assert_eq!(res, ContractError::Unauthorized {});
 
     // empty vault err
     let info = mock_info(VAULT, &[]);

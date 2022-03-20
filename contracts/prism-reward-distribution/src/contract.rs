@@ -68,7 +68,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> ContractResult<Response<TerraMsgWrapper>> {
     match msg {
-        ExecuteMsg::DistributeRewards {} => distribute_rewards(deps, env, info),
+        ExecuteMsg::DistributeRewards {} => distribute_rewards(deps, env),
         ExecuteMsg::WhitelistRewardAsset { asset } => {
             asset.check(deps.api)?;
             whitelist_reward_asset(deps, info, asset)
@@ -84,15 +84,8 @@ pub fn execute(
     }
 }
 
-pub fn distribute_rewards(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-) -> ContractResult<Response<TerraMsgWrapper>> {
+pub fn distribute_rewards(deps: DepsMut, env: Env) -> ContractResult<Response<TerraMsgWrapper>> {
     let cfg = CONFIG.load(deps.storage)?;
-    if info.sender != cfg.vault && info.sender != env.contract.address {
-        return Err(ContractError::Unauthorized {});
-    }
 
     let vault_bond_amount = query_vault_bond_amount(&deps.querier, cfg.vault)?;
     let yasset_staking_bonded =

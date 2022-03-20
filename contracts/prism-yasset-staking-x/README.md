@@ -6,7 +6,6 @@ This contract provides auto-compounding functionality for staking y-assets.  Sta
   - **Bond** (Cw20 receive hook): Bond a y-asset in return for a newly minted xy-asset token, where the minted xy-asset amount is based on the current exchange rate. 
   - **Unbond** (Cw20 receive hook): Unbond a y-asset by passing in the corresponding xy-asset.  There is no unbonding period, y-assets are immediately transferred back to user at the current exchange rate.  
   - **DepositRewards**: Deposit assets, this method is called by the [reward-distribution](contracts/prism-reward-distribution) contract and all of the returns are immediately swapped to the coresponding y-asset.  Deposited assets must either be sent with this message (native assets) or caller must increase the token allowance for this contract (CW20 tokens).  Rewards are first swapped to PRISM via the [collector](contracts/prism-collector) contract's ConvertAndSend method, and then converted to y-assets via the PrismToYassetSwapHook method.
-  - **PrismToYassetSwapHook**: Called by DepositRewards, this converts our PRISM balance to y-assets on the amm.
   - **PostInitialize**: Set the reward distribution contract, must be called by owner.
 
 ## QueryMsg:
