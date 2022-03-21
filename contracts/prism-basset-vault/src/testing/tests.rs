@@ -207,13 +207,7 @@ fn test_initialization() {
     assert_eq!(expected_conf, query_conf);
 
     // unauthorized UpdateConfig, contract now owned by OWNER2
-    let res = execute(
-        deps.as_mut(),
-        mock_env(),
-        owner_info,
-        update_config_msg,
-    )
-    .unwrap_err();
+    let res = execute(deps.as_mut(), mock_env(), owner_info, update_config_msg).unwrap_err();
     assert_eq!(res, ContractError::Unauthorized {});
 }
 
