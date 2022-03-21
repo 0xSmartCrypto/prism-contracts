@@ -1,6 +1,6 @@
 # Prism Yasset Staking X
 
-This contract provides auto-compounding functionality for staking y-assets.  Stakers receive an xy-asset in return for their staked y-asset, where the amount of xy-assets minted is computed as the xy-asset supply divided by the y-asset balance in this contract.  Rewards from the [reward-distribution](contracts/prism-reward-distribution) contract are deposited into this contract.  These rewards are immediately converted to y-assets on the amm, which results in a continuous increase of our y-asset balance thereby appreciating the value of the xy-asset tokens. The corresponding xy-asset token contract is created during instantation of this contract.  
+This contract provides auto-compounding functionality for staking y-assets.  Stakers receive an xy-asset in return for their staked y-asset, where the amount of xy-assets minted is computed as the total bonded amount divided by the y-asset balance in this contract.  Rewards from the [reward-distribution](contracts/prism-reward-distribution) contract are deposited into this contract.  These rewards are immediately converted to y-assets on the amm, which results in a continuous increase of our y-asset balance thereby appreciating the value of the xy-asset tokens. The corresponding xy-asset token contract is created during instantation of this contract.  
 
 ## ExecuteMsg:
 | Message | Privileges | Description |

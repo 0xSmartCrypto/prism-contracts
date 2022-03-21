@@ -58,7 +58,12 @@ pub struct ConfigResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StateResponse {
+    /// total_bond_amount is same as xyasset supply
     pub total_bond_amount: Uint128,
-    pub xyasset_supply: Uint128,
+
+    /// current balance of yasset token
+    pub yasset_balance: Uint128,
+
+    /// exchange rate is yasset_balance / total_bond_amount (ie xyaset supply)
     pub exchange_rate: Decimal,
 }

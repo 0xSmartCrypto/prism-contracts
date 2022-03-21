@@ -154,16 +154,13 @@ pub fn bond(
     let state = _query_state(deps.as_ref(), env, &cfg)?;
 
     // can't use the exchange rate directly, we need to remove newly bonded amount
-    let total_bond_amount = state
-        .total_bond_amount
+    // from yasset balance
+    let yasset_balance = state
+        .yasset_balance
         .checked_sub(amount)
         .map_err(|x| -> StdError { x.into() })?;
-    let exchange_rate = if total_bond_amount.is_zero() {
-        Decimal::one()
-    } else {
-        Decimal::from_ratio(state.xyasset_supply, total_bond_amount)
-    };
-    let xyasset_mint_amount = amount * exchange_rate;
+    let exchange_rate = get_exchange_rate(yasset_balance, state.total_bond_amount);
+    let xyasset_mint_amount = exchange_rate.inv().unwrap() * amount;
 
     Ok(Response::new()
         .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -190,7 +187,7 @@ pub fn unbond(
 ) -> ContractResult<Response> {
     let cfg = CONFIG.load(deps.storage)?;
     let state = _query_state(deps.as_ref(), env, &cfg)?;
-    let yasset_redeem_amount = state.exchange_rate.inv().unwrap() * amount;
+    let yasset_redeem_amount = state.exchange_rate * amount;
     Ok(Response::new()
         .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.xyasset_token.to_string(),
@@ -304,17 +301,21 @@ pub fn _query_state(deps: Deps, env: Env, cfg: &Config) -> StdResult<StateRespon
     let yasset_balance =
         query_token_balance(&deps.querier, &cfg.yasset_token, &env.contract.address)?;
     let xyasset_supply = query_supply(&deps.querier, &cfg.xyasset_token)?;
-    let exchange_rate = if yasset_balance.is_zero() {
-        Decimal::one()
-    } else {
-        Decimal::from_ratio(xyasset_supply, yasset_balance)
-    };
+    let exchange_rate = get_exchange_rate(yasset_balance, xyasset_supply);
 
     Ok(StateResponse {
-        total_bond_amount: yasset_balance,
-        xyasset_supply,
+        total_bond_amount: xyasset_supply,
+        yasset_balance,
         exchange_rate,
     })
+}
+
+pub fn get_exchange_rate(yasset_balance: Uint128, xyasset_supply: Uint128) -> Decimal {
+    if xyasset_supply.is_zero() {
+        Decimal::one()
+    } else {
+        Decimal::from_ratio(yasset_balance, xyasset_supply)
+    }
 }
 
 pub fn post_initialize(

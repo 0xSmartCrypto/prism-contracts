@@ -268,7 +268,7 @@ impl WasmMockQuerier {
                                     total_bond_amount: self
                                         .yasset_staking_x_state_querier
                                         .total_bond_amount,
-                                    xyasset_supply: Uint128::zero(),
+                                    yasset_balance: Uint128::zero(),
                                     exchange_rate: Decimal::zero(),
                                 })
                                 .unwrap(),

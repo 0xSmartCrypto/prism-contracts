@@ -134,7 +134,7 @@ fn test_init() {
         from_binary(&query(deps.as_ref(), mock_env(), state).unwrap()).unwrap();
     let expected_result = StateResponse {
         total_bond_amount: Uint128::zero(),
-        xyasset_supply: Uint128::zero(),
+        yasset_balance: Uint128::zero(),
         exchange_rate: Decimal::one(),
     };
     assert_eq!(state_response, expected_result);
@@ -190,7 +190,7 @@ fn test_bond() {
         res,
         StateResponse {
             total_bond_amount: Uint128::zero(),
-            xyasset_supply: Uint128::zero(),
+            yasset_balance: Uint128::zero(),
             exchange_rate: Decimal::one(),
         }
     );
@@ -258,7 +258,7 @@ fn test_bond() {
         res,
         StateResponse {
             total_bond_amount: bond_amount,
-            xyasset_supply: expected_mint_amount,
+            yasset_balance: expected_mint_amount,
             exchange_rate: Decimal::one(),
         }
     );
@@ -331,9 +331,9 @@ fn test_bond_exchange_rate() {
     assert_eq!(
         res,
         StateResponse {
-            total_bond_amount: yasset_balance_with_reward,
-            xyasset_supply: expected_mint_amount,
-            exchange_rate: Decimal::from_ratio(bond_amount, yasset_balance_with_reward),
+            total_bond_amount: bond_amount,
+            yasset_balance: yasset_balance_with_reward,
+            exchange_rate: Decimal::from_ratio(yasset_balance_with_reward, bond_amount),
         }
     );
 
