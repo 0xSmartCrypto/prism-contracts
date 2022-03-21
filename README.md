@@ -7,9 +7,9 @@ This repository contains the source code for the first version of Prism Protocol
 | Contract                                                 | Reference | Description                                                                                 |
 | -------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
 | [`airdrop-registry`](./contracts/prism-airdrop-registry) | [doc]()   | Manages message fabricators for airdrop claims                                              |
-| [`basset-vault`](./contracts/basset-vault)               | [doc]()   | Vault for bonding bAssets |
+| [`basset-vault`](./contracts/prism-basset-vault)               | [doc]()   | Vault for bonding bAssets |
 | [`collector`](./contracts/prism-collector)               | [doc]()   | Gathers protocol fees and distributes to xPRISM holders, manages reward swap logic          |
-| [`delegator-rewards`](./contracts/delegator-rewards)     | [doc]()   | Contract for processing delegator rewards |
+| [`delegator-rewards`](./contracts/prism-delegator-rewards)     | [doc]()   | Contract for processing delegator rewards |
 | [`gov`](./contracts/prism-gov)                           | [doc]()   | Governance contract for Prism Protocol, manages xPRISM minting and rewards                  |
 | [`launch-pool`](./contracts/prism-launch-pool)           | [doc]()   | yLuna staking pool event                                                                    |
 | [`lp-staking`](./contracts/prism-lp-staking)             | [doc]()   | Staking contract for PRISM LP tokens                                                        |
