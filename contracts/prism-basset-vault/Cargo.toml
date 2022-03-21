@@ -43,6 +43,7 @@ cw-asset = { version = "0.3.4", features = ["legacy"] }
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 snafu = { version = "0.6.3" }
 rand = "0.5.0"
+prismswap = { path = "../../packages/prismswap", version = "1.0.0"}
 prism-protocol = { path = "../../packages/prism_protocol", version = "1.1.0", features = ["internal"]}
 signed_integer = { path = "../../packages/signed_integers", default-features = false, version = "0.1.0"}
 thiserror = { version = "1.0.20" }

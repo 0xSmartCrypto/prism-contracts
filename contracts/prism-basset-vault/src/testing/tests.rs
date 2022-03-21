@@ -1,11 +1,12 @@
 use cosmwasm_std::{
-    coin, from_binary, to_binary, Api, CosmosMsg, DepsMut, Env, MessageInfo, OwnedDeps, Querier,
-    Response, Storage, SubMsg, Uint128, WasmMsg,
+    coin, from_binary, to_binary, Api, ContractResult, CosmosMsg, DepsMut, Env, MessageInfo,
+    OwnedDeps, Querier, Reply, Response, Storage, SubMsg, SubMsgExecutionResponse, Uint128,
+    WasmMsg,
 };
 
 use cosmwasm_std::testing::{mock_env, mock_info};
 
-use crate::contract::{execute, instantiate, query};
+use crate::contract::{execute, instantiate, query, reply};
 use crate::error::ContractError;
 use prism_protocol::basset_vault::{
     BondedAmountResponse, ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg,
@@ -18,36 +19,73 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use beth::reward::ExecuteMsg as BassetRewardExecuteMsg;
 use prism_common::testing::mock_querier::{mock_dependencies as dependencies, MOCK_CONTRACT_ADDR};
 
-const OWNER: &str = "owner";
-const OWNER2: &str = "owner2";
-const BASSET_CONTRACT: &str = "beth";
-const BASSET_REWARD_CONTRACT: &str = "beth_reward";
+const OWNER: &str = "owner0000";
+const OWNER2: &str = "owner20000";
+const BASSET_NAME: &str = "beth";
+const BASSET_CONTRACT: &str = "beth0000";
+const BASSET_REWARD_CONTRACT: &str = "beth_reward0000";
 const BASSET_REWARD_DENOM: &str = "uusd";
-const CASSET_CONTRACT: &str = "cbeth";
-const PASSET_CONTRACT: &str = "pbeth";
-const YASSET_CONTRACT: &str = "ybeth";
-const REWARD_DISTRIBUTION_CONTRACT: &str = "reward_distribution";
-const BOB_ADDR: &str = "bob";
+const CASSET_CONTRACT: &str = "cbeth0000";
+const PASSET_CONTRACT: &str = "pbeth0000";
+const YASSET_CONTRACT: &str = "ybeth0000";
+const REWARD_DISTRIBUTION_CONTRACT: &str = "reward_distribution0000";
+const BOB_ADDR: &str = "bob0000";
+const TOKEN_ADMIN: &str = "token_admin0000";
+const TOKEN_CODE_ID: u64 = 6u64;
 
 pub fn init<S: Storage, A: Api, Q: Querier>(deps: &mut OwnedDeps<S, A, Q>) {
     let msg = InstantiateMsg {
+        asset_name: BASSET_NAME.to_string(),
         asset_contract: BASSET_CONTRACT.to_string(),
         asset_reward_contract: BASSET_REWARD_CONTRACT.to_string(),
         asset_reward_denom: BASSET_REWARD_DENOM.to_string(),
+        token_admin: TOKEN_ADMIN.to_string(),
+        token_code_id: TOKEN_CODE_ID,
     };
 
     let owner_info = mock_info(OWNER, &[]);
-    instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
+    instantiate(deps.as_mut(), mock_env(), owner_info, msg).unwrap();
+    do_token_replies(deps);
 
     let register_msg = ExecuteMsg::UpdateConfig {
         owner: None,
-        casset_contract: Some(CASSET_CONTRACT.to_string()),
-        yasset_contract: Some(YASSET_CONTRACT.to_string()),
-        passet_contract: Some(PASSET_CONTRACT.to_string()),
         reward_distribution_contract: Some(REWARD_DISTRIBUTION_CONTRACT.to_string()),
     };
 
+    let owner_info = mock_info(OWNER, &[]);
     execute(deps.as_mut(), mock_env(), owner_info, register_msg).unwrap();
+}
+
+pub fn do_token_replies<S: Storage, A: Api, Q: Querier>(deps: &mut OwnedDeps<S, A, Q>) {
+    // cbeth0000
+    let reply_msg = Reply {
+        id: 0,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 9, 99, 98, 101, 116, 104, 48, 48, 48, 48].into()),
+        }),
+    };
+
+    // pbeth0000
+    reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+    let reply_msg = Reply {
+        id: 1,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 9, 112, 98, 101, 116, 104, 48, 48, 48, 48].into()),
+        }),
+    };
+
+    // ybeth0000
+    reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
+    let reply_msg = Reply {
+        id: 2,
+        result: ContractResult::Ok(SubMsgExecutionResponse {
+            events: vec![],
+            data: Some(vec![10, 9, 121, 98, 101, 116, 104, 48, 48, 48, 48].into()),
+        }),
+    };
+    reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
 }
 
 pub fn do_bond(
@@ -75,9 +113,12 @@ fn test_initialization() {
 
     // successful call
     let msg = InstantiateMsg {
+        asset_name: BASSET_NAME.to_string(),
         asset_contract: BASSET_CONTRACT.to_string(),
         asset_reward_contract: BASSET_REWARD_CONTRACT.to_string(),
         asset_reward_denom: BASSET_REWARD_DENOM.to_string(),
+        token_admin: TOKEN_ADMIN.to_string(),
+        token_code_id: TOKEN_CODE_ID,
     };
 
     // not payable error
@@ -88,6 +129,7 @@ fn test_initialization() {
     // successful initialization
     let owner_info = mock_info(OWNER, &[]);
     instantiate(deps.as_mut(), mock_env(), owner_info.clone(), msg).unwrap();
+    do_token_replies(&mut deps);
 
     // state storage must be initialized
     let state = QueryMsg::State {};
@@ -105,21 +147,22 @@ fn test_initialization() {
         from_binary(&query(deps.as_ref(), mock_env(), conf).unwrap()).unwrap();
     let expected_conf = ConfigResponse {
         owner: OWNER.to_string(),
+        asset_name: BASSET_NAME.to_string(),
         asset_contract: BASSET_CONTRACT.to_string(),
         asset_reward_contract: BASSET_REWARD_CONTRACT.to_string(),
         asset_reward_denom: BASSET_REWARD_DENOM.to_string(),
-        casset_contract: None,
-        yasset_contract: None,
-        passet_contract: None,
-        reward_distribution_contract: None,
+        casset_contract: CASSET_CONTRACT.to_string(),
+        yasset_contract: YASSET_CONTRACT.to_string(),
+        passet_contract: PASSET_CONTRACT.to_string(),
+        reward_distribution_contract: "".to_string(),
+        initialized: false,
+        token_admin: TOKEN_ADMIN.to_string(),
+        token_code_id: TOKEN_CODE_ID,
     };
     assert_eq!(expected_conf, query_conf);
 
     let update_config_msg = ExecuteMsg::UpdateConfig {
         owner: Some(OWNER2.to_string()),
-        casset_contract: Some(CASSET_CONTRACT.to_string()),
-        yasset_contract: Some(YASSET_CONTRACT.to_string()),
-        passet_contract: Some(PASSET_CONTRACT.to_string()),
         reward_distribution_contract: Some(REWARD_DISTRIBUTION_CONTRACT.to_string()),
     };
 
@@ -143,19 +186,23 @@ fn test_initialization() {
     )
     .unwrap();
 
-    // query config, verify all fields
+    // query config, verify all fields (excluding casset, yasset, passet)
     let conf = QueryMsg::Config {};
     let query_conf: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), conf).unwrap()).unwrap();
     let expected_conf = ConfigResponse {
         owner: OWNER2.to_string(),
+        asset_name: BASSET_NAME.to_string(),
         asset_contract: BASSET_CONTRACT.to_string(),
         asset_reward_contract: BASSET_REWARD_CONTRACT.to_string(),
         asset_reward_denom: BASSET_REWARD_DENOM.to_string(),
-        casset_contract: Some(CASSET_CONTRACT.to_string()),
-        yasset_contract: Some(YASSET_CONTRACT.to_string()),
-        passet_contract: Some(PASSET_CONTRACT.to_string()),
-        reward_distribution_contract: Some(REWARD_DISTRIBUTION_CONTRACT.to_string()),
+        casset_contract: CASSET_CONTRACT.to_string(),
+        yasset_contract: YASSET_CONTRACT.to_string(),
+        passet_contract: PASSET_CONTRACT.to_string(),
+        reward_distribution_contract: REWARD_DISTRIBUTION_CONTRACT.to_string(),
+        initialized: true,
+        token_admin: TOKEN_ADMIN.to_string(),
+        token_code_id: TOKEN_CODE_ID,
     };
     assert_eq!(expected_conf, query_conf);
 
@@ -164,15 +211,10 @@ fn test_initialization() {
         deps.as_mut(),
         mock_env(),
         owner_info,
-        update_config_msg.clone(),
+        update_config_msg,
     )
     .unwrap_err();
     assert_eq!(res, ContractError::Unauthorized {});
-
-    // duplicate update config
-    let owner_info = mock_info(OWNER2, &[]);
-    let res = execute(deps.as_mut(), mock_env(), owner_info, update_config_msg).unwrap_err();
-    assert_eq!(res, ContractError::DuplicateUpdateConfig {});
 }
 
 #[test]

@@ -1,22 +1,24 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    attr, from_binary, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, SubMsg, Uint128, WasmMsg,
+    attr, from_binary, to_binary, Addr, Attribute, Binary, CosmosMsg, Deps, DepsMut, Env,
+    MessageInfo, Reply, ReplyOn, Response, StdResult, SubMsg, Uint128, WasmMsg,
 };
 
 use crate::error::{ContractError, ContractResult};
-use crate::state::{CONFIG, STATE};
+use crate::state::{Config, State, CONFIG, STATE};
 use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
 
 use prism_protocol::basset_vault::{
-    BondedAmountResponse, Config, ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg,
-    QueryMsg, State, StateResponse,
+    BondedAmountResponse, ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg,
+    StateResponse,
 };
+use prism_protocol::internal::parse_reply_instantiate_data;
 use prism_protocol::reward_distribution::ExecuteMsg as RewardDistributionExecuteMsg;
+use prismswap::token::InstantiateMsg as TokenInstantiateMsg;
 
-use cw20::Cw20ReceiveMsg;
+use cw20::{Cw20ReceiveMsg, MinterResponse};
 
 use beth::reward::ExecuteMsg as BassetRewardExecuteMsg;
 
@@ -36,18 +38,21 @@ pub fn instantiate(
         return Err(ContractError::NonPayable {});
     }
     // store config
-    // TODO -- auto create token contracts from token code id
-    let data = Config {
-        creator: info.sender.to_string(),
-        asset_contract: msg.asset_contract,
-        asset_reward_contract: msg.asset_reward_contract,
+    let config = Config {
+        owner: info.sender,
+        asset_name: msg.asset_name,
+        asset_contract: deps.api.addr_validate(&msg.asset_contract)?,
+        asset_reward_contract: deps.api.addr_validate(&msg.asset_reward_contract)?,
         asset_reward_denom: msg.asset_reward_denom,
-        casset_contract: None,
-        yasset_contract: None,
-        passet_contract: None,
-        reward_distribution_contract: None,
+        casset_contract: Addr::unchecked(""),
+        yasset_contract: Addr::unchecked(""),
+        passet_contract: Addr::unchecked(""),
+        reward_distribution_contract: Addr::unchecked(""),
+        initialized: false,
+        token_admin: deps.api.addr_validate(&msg.token_admin)?,
+        token_code_id: msg.token_code_id,
     };
-    CONFIG.save(deps.storage, &data)?;
+    CONFIG.save(deps.storage, &config)?;
 
     // store state
     let state = State {
@@ -56,7 +61,37 @@ pub fn instantiate(
     };
     STATE.save(deps.storage, &state)?;
 
-    Ok(Response::new())
+    // start initialization of 3 tokens, cAsset -> passet -> yAsset
+    let message = SubMsg {
+        msg: WasmMsg::Instantiate {
+            code_id: config.token_code_id,
+            msg: to_binary(&TokenInstantiateMsg {
+                name: format!("Prism c{} Token", config.asset_name),
+                symbol: format!("c{}", config.asset_name),
+                decimals: 6,
+                initial_balances: vec![],
+                mint: Some(MinterResponse {
+                    minter: env.contract.address.to_string(),
+                    cap: None,
+                }),
+            })?,
+            funds: vec![],
+            admin: Some(config.token_admin.to_string()),
+            label: "".to_string(),
+        }
+        .into(),
+        id: 0u64,
+        gas_limit: None,
+        reply_on: ReplyOn::Success,
+    };
+
+    Ok(Response::new().add_submessage(message))
+}
+
+/// Replies received after token instantiation
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> ContractResult<Response> {
+    set_token_address(deps, env, msg)
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -73,19 +108,8 @@ pub fn execute(
         ExecuteMsg::UpdateGlobalIndex {} => execute_update_global(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,
-            casset_contract,
-            yasset_contract,
-            passet_contract,
             reward_distribution_contract,
-        } => execute_update_config(
-            deps,
-            info,
-            owner,
-            casset_contract,
-            yasset_contract,
-            passet_contract,
-            reward_distribution_contract,
-        ),
+        } => execute_update_config(deps, info, owner, reward_distribution_contract),
     }
 }
 
@@ -112,13 +136,13 @@ pub fn execute_bond(
     amount: Uint128,
     sender: String,
 ) -> ContractResult<Response> {
-    let conf = CONFIG.load(deps.storage)?;
+    let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
     if info.sender != conf.asset_contract {
         return Err(ContractError::Unauthorized {});
     }
 
     let message = SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: conf.casset_contract.unwrap(),
+        contract_addr: conf.casset_contract.to_string(),
         msg: to_binary(&Cw20ExecuteMsg::Mint {
             recipient: sender,
             amount,
@@ -145,7 +169,7 @@ pub fn execute_bond_split(
     amount: Uint128,
     sender: String,
 ) -> ContractResult<Response> {
-    let conf = CONFIG.load(deps.storage)?;
+    let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
     if info.sender != conf.asset_contract {
         return Err(ContractError::Unauthorized {});
     }
@@ -153,7 +177,7 @@ pub fn execute_bond_split(
     let messages = vec![
         // mint casset for contract
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: conf.casset_contract.unwrap(),
+            contract_addr: conf.casset_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: env.contract.address.to_string(), // mint and lock
                 amount,
@@ -162,7 +186,7 @@ pub fn execute_bond_split(
         })),
         // mint yasset for sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: conf.yasset_contract.unwrap(),
+            contract_addr: conf.yasset_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: sender.to_string(),
                 amount,
@@ -171,7 +195,7 @@ pub fn execute_bond_split(
         })),
         // mint passet for sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: conf.passet_contract.unwrap(),
+            contract_addr: conf.passet_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: sender,
                 amount,
@@ -200,8 +224,8 @@ pub fn execute_unbond(
     amount: Uint128,
     sender: String,
 ) -> ContractResult<Response> {
-    let conf = CONFIG.load(deps.storage)?;
-    let casset_addr = conf.casset_contract.unwrap();
+    let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
+    let casset_addr = conf.casset_contract.to_string();
     if info.sender != casset_addr {
         return Err(ContractError::Unauthorized {});
     }
@@ -215,7 +239,7 @@ pub fn execute_unbond(
         })),
         // transfer basset to sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: conf.asset_contract,
+            contract_addr: conf.asset_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: sender.clone(),
                 amount,
@@ -248,12 +272,12 @@ pub fn execute_split(
     info: MessageInfo,
     amount: Uint128,
 ) -> ContractResult<Response> {
-    let config = CONFIG.load(deps.storage)?;
+    let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
 
     let messages = vec![
         // transfer casset from sender to contract
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.casset_contract.unwrap(),
+            contract_addr: conf.casset_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
                 owner: info.sender.to_string(),
                 recipient: env.contract.address.to_string(),
@@ -263,7 +287,7 @@ pub fn execute_split(
         })),
         // mint yasset for sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.yasset_contract.unwrap(),
+            contract_addr: conf.yasset_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: info.sender.to_string(),
                 amount,
@@ -272,7 +296,7 @@ pub fn execute_split(
         })),
         // mint passet for sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.passet_contract.unwrap(),
+            contract_addr: conf.passet_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Mint {
                 recipient: info.sender.to_string(),
                 amount,
@@ -295,11 +319,11 @@ pub fn execute_merge(
     info: MessageInfo,
     amount: Uint128,
 ) -> ContractResult<Response> {
-    let config = CONFIG.load(deps.storage)?;
+    let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
     let messages = vec![
         // transfer casset from contract to sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.casset_contract.unwrap(),
+            contract_addr: conf.casset_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Transfer {
                 recipient: info.sender.to_string(),
                 amount,
@@ -308,7 +332,7 @@ pub fn execute_merge(
         })),
         // burn yasset from sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.yasset_contract.unwrap(),
+            contract_addr: conf.yasset_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
                 owner: info.sender.to_string(),
                 amount,
@@ -317,7 +341,7 @@ pub fn execute_merge(
         })),
         // burn passet from sender
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.passet_contract.unwrap(),
+            contract_addr: conf.passet_contract.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::BurnFrom {
                 owner: info.sender.to_string(),
                 amount,
@@ -336,21 +360,21 @@ pub fn execute_merge(
 }
 
 pub fn execute_update_global(deps: DepsMut, env: Env) -> ContractResult<Response> {
-    let config = CONFIG.load(deps.storage)?;
+    let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
     let messages = vec![
         // claims rewards from basset reward contract using
         // reward_distribution_contract as the recipient
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.asset_reward_contract,
+            contract_addr: conf.asset_reward_contract.to_string(),
             msg: to_binary(&BassetRewardExecuteMsg::ClaimRewards {
-                recipient: config.reward_distribution_contract.clone(),
+                recipient: Some(conf.reward_distribution_contract.to_string()),
             })
             .unwrap(),
             funds: vec![],
         })),
         // instruct reward_distribution_contract to distribute rewards
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.reward_distribution_contract.unwrap(),
+            contract_addr: conf.reward_distribution_contract.to_string(),
             msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {}).unwrap(),
             funds: vec![],
         })),
@@ -371,60 +395,29 @@ pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
-    casset_contract: Option<String>,
-    yasset_contract: Option<String>,
-    passet_contract: Option<String>,
     reward_distribution_contract: Option<String>,
 ) -> ContractResult<Response> {
     // only owner must be able to send this message.
-    let conf = CONFIG.load(deps.storage)?;
+    let mut conf = CONFIG.load(deps.storage)?;
 
-    if info.sender.as_str() != conf.creator {
+    if info.sender.as_str() != conf.owner {
         return Err(ContractError::Unauthorized {});
     }
 
     if let Some(o) = owner {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.creator = o;
-            Ok(last_config)
-        })?;
+        conf.owner = deps.api.addr_validate(&o)?;
     }
 
-    if (casset_contract.is_some() && conf.casset_contract.is_some())
-        || (yasset_contract.is_some() && conf.yasset_contract.is_some())
-        || (passet_contract.is_some() && conf.passet_contract.is_some())
-        || (reward_distribution_contract.is_some() && conf.reward_distribution_contract.is_some())
-    {
-        return Err(ContractError::DuplicateUpdateConfig {});
+    if let Some(token) = reward_distribution_contract {
+        conf.reward_distribution_contract = deps.api.addr_validate(&token)?;
     }
 
-    if let Some(token) = casset_contract {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.casset_contract = Some(token);
-            Ok(last_config)
-        })?;
+    let placeholder_addr = Addr::unchecked("");
+    if !conf.initialized && conf.reward_distribution_contract.ne(&placeholder_addr) {
+        conf.initialized = true;
     }
 
-    if let Some(token) = yasset_contract {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.yasset_contract = Some(token);
-            Ok(last_config)
-        })?;
-    }
-
-    if let Some(token) = passet_contract {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.passet_contract = Some(token);
-            Ok(last_config)
-        })?;
-    }
-
-    if let Some(reward_distribution) = reward_distribution_contract {
-        CONFIG.update(deps.storage, |mut last_config| -> StdResult<Config> {
-            last_config.reward_distribution_contract = Some(reward_distribution.clone());
-            Ok(last_config)
-        })?;
-    }
+    CONFIG.save(deps.storage, &conf)?;
 
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }
@@ -440,24 +433,14 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config = CONFIG.load(deps.storage)?;
-    Ok(ConfigResponse {
-        owner: config.creator,
-        asset_contract: config.asset_contract,
-        asset_reward_contract: config.asset_reward_contract,
-        asset_reward_denom: config.asset_reward_denom,
-        casset_contract: config.casset_contract,
-        yasset_contract: config.yasset_contract,
-        passet_contract: config.passet_contract,
-        reward_distribution_contract: config.reward_distribution_contract,
-    })
+
+    Ok(config.as_res())
 }
 
 fn query_state(deps: Deps) -> StdResult<StateResponse> {
     let state = STATE.load(deps.storage)?;
-    Ok(StateResponse {
-        total_bond_amount: state.total_bond_amount,
-        last_index_modification: state.last_index_modification,
-    })
+
+    Ok(state.as_res())
 }
 
 fn query_bonded_amount(deps: Deps) -> StdResult<BondedAmountResponse> {
@@ -465,4 +448,77 @@ fn query_bonded_amount(deps: Deps) -> StdResult<BondedAmountResponse> {
     Ok(BondedAmountResponse {
         total_bond_amount: state.total_bond_amount,
     })
+}
+
+pub fn set_token_address(deps: DepsMut, env: Env, msg: Reply) -> ContractResult<Response> {
+    let mut config = CONFIG.load(deps.storage)?;
+
+    let res =
+        parse_reply_instantiate_data(msg.clone()).map_err(|_| ContractError::ParseReplyError {})?;
+    let token_addr = deps.api.addr_validate(&res.contract_address)?;
+
+    let mut attributes: Vec<Attribute> = vec![];
+    let (next_reply_id, next_token_name, next_token_symbol) = match msg.id {
+        0 => {
+            attributes.push(attr("casset_address", token_addr.as_str()));
+            config.casset_contract = token_addr;
+            let next_token_symbol = format!("p{}", config.asset_name);
+
+            (
+                1u64,
+                format!("Prism {} Token", next_token_symbol),
+                next_token_symbol,
+            )
+        }
+        1 => {
+            attributes.push(attr("passet_address", token_addr.as_str()));
+            config.passet_contract = token_addr;
+
+            let next_token_symbol = format!("y{}", config.asset_name);
+            (
+                2u64,
+                format!("Prism {} Token", next_token_symbol),
+                next_token_symbol,
+            )
+        }
+        2 => {
+            attributes.push(attr("yasset_address", token_addr.as_str()));
+            config.yasset_contract = token_addr;
+
+            (3u64, "".to_string(), "".to_string())
+        }
+        _ => return Err(ContractError::InvalidReplayId {}),
+    };
+
+    CONFIG.save(deps.storage, &config)?;
+
+    let mut messages: Vec<SubMsg> = vec![];
+    if next_reply_id <= 2 {
+        messages.push(SubMsg {
+            msg: WasmMsg::Instantiate {
+                code_id: config.token_code_id,
+                msg: to_binary(&TokenInstantiateMsg {
+                    name: next_token_name,
+                    symbol: next_token_symbol,
+                    decimals: 6,
+                    initial_balances: vec![],
+                    mint: Some(MinterResponse {
+                        minter: env.contract.address.to_string(),
+                        cap: None,
+                    }),
+                })?,
+                funds: vec![],
+                admin: Some(config.token_admin.to_string()),
+                label: "".to_string(),
+            }
+            .into(),
+            id: next_reply_id,
+            gas_limit: None,
+            reply_on: ReplyOn::Success,
+        })
+    }
+
+    Ok(Response::new()
+        .add_submessages(messages)
+        .add_attributes(attributes))
 }

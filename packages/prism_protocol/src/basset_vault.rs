@@ -8,27 +8,12 @@ pub type UnbondRequest = Vec<(u64, Uint128)>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    pub asset_name: String,
     pub asset_contract: String,
     pub asset_reward_contract: String,
     pub asset_reward_denom: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct State {
-    pub total_bond_amount: Uint128,
-    pub last_index_modification: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Config {
-    pub creator: String,
-    pub asset_contract: String, // todo: change to basset_contract?
-    pub asset_reward_contract: String,
-    pub asset_reward_denom: String,
-    pub casset_contract: Option<String>,
-    pub yasset_contract: Option<String>,
-    pub passet_contract: Option<String>,
-    pub reward_distribution_contract: Option<String>,
+    pub token_admin: String,
+    pub token_code_id: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -41,9 +26,6 @@ pub enum ExecuteMsg {
     /// Set the owener
     UpdateConfig {
         owner: Option<String>,
-        casset_contract: Option<String>,
-        yasset_contract: Option<String>,
-        passet_contract: Option<String>,
         reward_distribution_contract: Option<String>,
     },
 
@@ -83,13 +65,17 @@ pub enum Cw20HookMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
+    pub asset_name: String,
     pub asset_contract: String,
     pub asset_reward_contract: String,
     pub asset_reward_denom: String,
-    pub casset_contract: Option<String>,
-    pub passet_contract: Option<String>,
-    pub yasset_contract: Option<String>,
-    pub reward_distribution_contract: Option<String>,
+    pub casset_contract: String,
+    pub passet_contract: String,
+    pub yasset_contract: String,
+    pub reward_distribution_contract: String,
+    pub initialized: bool,
+    pub token_admin: String,
+    pub token_code_id: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

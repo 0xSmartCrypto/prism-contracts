@@ -15,8 +15,17 @@ pub enum ContractError {
     #[error("This message does not accept funds")]
     NonPayable {},
 
+    #[error("Contract is not fully initialized")]
+    NotInitialized {},
+
     #[error("Duplicate update config")]
     DuplicateUpdateConfig {},
+
+    #[error("Invalid reply id")]
+    InvalidReplayId {},
+
+    #[error("Parse reply erro")]
+    ParseReplyError {},
 }
 
 pub type ContractResult<T> = core::result::Result<T, ContractError>;
