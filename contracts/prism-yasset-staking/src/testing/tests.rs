@@ -14,7 +14,7 @@ use prism_protocol::collector::ExecuteMsg as CollectorExecuteMsg;
 use prism_protocol::gov::Cw20HookMsg as GovCw20HookMsg;
 use prism_protocol::yasset_staking::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, PoolInfoResponse, QueryMsg,
-    RewardInfoResponse,
+    RewardInfoResponse, StateResponse,
 };
 
 const OWNER: &str = "owner0000";
@@ -87,7 +87,7 @@ fn test_bond() {
 
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: "alice0000".to_string(),
-        amount: Uint128::from(1000000u128),
+        amount: Uint128::from(1_000_000u128),
         msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
     });
 
@@ -124,8 +124,23 @@ fn test_bond() {
         res.clone(),
         RewardInfoResponse {
             staker_addr: "alice0000".to_string(),
-            staked_amount: Uint128::from(1000000u128),
+            staked_amount: Uint128::from(1_000_000u128),
             ..res
+        }
+    );
+
+    // query bond amount
+    let bond_amount: Uint128 =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::BondAmount {}).unwrap()).unwrap();
+    assert_eq!(bond_amount, Uint128::from(1_000_000u128));
+
+    // query state
+    let state: StateResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::State {}).unwrap()).unwrap();
+    assert_eq!(
+        state,
+        StateResponse {
+            total_bond_amount: Uint128::from(1_000_000u128)
         }
     );
 }
@@ -215,7 +230,6 @@ fn test_deposit_rewards() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
 
-    let info = mock_info(REWARD_DISTRIBUTION, &[]);
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![
             Asset {
@@ -228,6 +242,13 @@ fn test_deposit_rewards() {
             },
         ],
     };
+
+    // unauthorized
+    let info = mock_info("not_reward_distribution0000", &[]);
+    let err = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap_err();
+    assert_eq!(err, StdError::generic_err("unauthorized"));
+
+    let info = mock_info(REWARD_DISTRIBUTION, &[]);
 
     // bonded amount is zero
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
@@ -550,6 +571,7 @@ fn test_convert_and_claim_rewards_yluna() {
         AssetInfo::Cw20(Addr::unchecked(PLUNA_TOKEN)),
         AssetInfo::Cw20(Addr::unchecked(YLUNA_TOKEN)),
         AssetInfo::Cw20(Addr::unchecked("anc0000")),
+        AssetInfo::Native("uusd".to_string()),
     ]);
 
     // bond some yluna
@@ -561,7 +583,7 @@ fn test_convert_and_claim_rewards_yluna() {
     let yluna_info = mock_info("yluna0000", &[]);
     execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
 
-    // deposit rewards - 100 yluna, 500 pLuna, 750 anc
+    // deposit rewards - 100 yluna, 500 pLuna, 750 anc, 2000 uusd
     let msg = ExecuteMsg::DepositRewards {
         assets: vec![
             Asset {
@@ -576,9 +598,19 @@ fn test_convert_and_claim_rewards_yluna() {
                 amount: Uint128::from(750u128),
                 info: AssetInfo::Cw20(Addr::unchecked("anc0000")),
             },
+            Asset {
+                amount: Uint128::from(2000u128),
+                info: AssetInfo::Native("uusd".to_string()),
+            },
         ],
     };
-    let info = mock_info(REWARD_DISTRIBUTION, &[]);
+    let info = mock_info(
+        REWARD_DISTRIBUTION,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(2000u128),
+        }],
+    );
     execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     let res: RewardInfoResponse = from_binary(
@@ -609,6 +641,10 @@ fn test_convert_and_claim_rewards_yluna() {
                 Asset {
                     info: AssetInfo::Cw20(Addr::unchecked("anc0000")),
                     amount: Uint128::from(750u128)
+                },
+                Asset {
+                    info: AssetInfo::Native("uusd".to_string()),
+                    amount: Uint128::from(2000u128)
                 }
             ]
         }
@@ -631,6 +667,7 @@ fn test_convert_and_claim_rewards_yluna() {
             attr("claimed_asset", "cw20:pluna0000:500"),
             attr("claimed_asset", "cw20:yluna0000:100"),
             attr("claimed_asset", "cw20:anc0000:750"),
+            attr("claimed_asset", "native:uusd:2000"),
         ]
     );
     assert_eq!(
@@ -685,12 +722,19 @@ fn test_convert_and_claim_rewards_yluna() {
                         info: AssetInfo::Cw20(Addr::unchecked("anc0000")),
                         amount: Uint128::from(750u128),
                     },
+                    Asset {
+                        info: AssetInfo::Native("uusd".to_string()),
+                        amount: Uint128::from(2000u128),
+                    },
                 ],
                 receiver: Some(info.sender.to_string()),
                 dest_asset_info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
             })
             .unwrap(),
-            funds: vec![],
+            funds: vec![Coin {
+                denom: "uusd".to_string(),
+                amount: Uint128::from(2000u128)
+            }],
         })),
     );
 }
@@ -1056,6 +1100,179 @@ fn test_convert_and_claim_rewards_invalid_claim() {
 }
 
 #[test]
+fn test_convert_and_claim_rewards_uusd() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    deps.querier.with_vault_state(&Uint128::from(1000000u128));
+    deps.querier.with_reward_assets(vec![
+        AssetInfo::Cw20(Addr::unchecked(PLUNA_TOKEN)),
+        AssetInfo::Cw20(Addr::unchecked(YLUNA_TOKEN)),
+        AssetInfo::Native("uusd".to_string()),
+    ]);
+
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: "alice0000".to_string(),
+        amount: Uint128::from(1000000u128),
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let yluna_info = mock_info("yluna0000", &[]);
+    execute(deps.as_mut(), mock_env(), yluna_info, msg).unwrap();
+
+    // deposit rewards - 100 yluna, 500 pLuna, 1000 uusd
+    let msg = ExecuteMsg::DepositRewards {
+        assets: vec![
+            Asset {
+                amount: Uint128::from(500u128),
+                info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+            },
+            Asset {
+                amount: Uint128::from(100u128),
+                info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+            },
+            Asset {
+                amount: Uint128::from(1000u128),
+                info: AssetInfo::Native("uusd".to_string()),
+            },
+        ],
+    };
+    let info = mock_info(
+        REWARD_DISTRIBUTION,
+        &[Coin {
+            denom: "uusd".to_string(),
+            amount: Uint128::from(1000u128),
+        }],
+    );
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    let res: RewardInfoResponse = from_binary(
+        &query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::RewardInfo {
+                staker_addr: "alice0000".to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: "alice0000".to_string(),
+            staked_amount: Uint128::from(1000000u128),
+            rewards: vec![
+                Asset {
+                    info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+                    amount: Uint128::from(500u128)
+                },
+                Asset {
+                    info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+                    amount: Uint128::from(100u128)
+                },
+                Asset {
+                    info: AssetInfo::Native("uusd".to_string()),
+                    amount: Uint128::from(1000u128)
+                },
+            ]
+        }
+    );
+
+    // add uusd as a claim asset
+    let msg = ExecuteMsg::AddClaimAsset {
+        asset: AssetInfo::Native("uusd".to_string()),
+    };
+    let info = mock_info(OWNER, &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(res.messages.len(), 0);
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "add_claim_asset"),
+            attr("claim_asset", "native:uusd"),
+        ]
+    );
+
+    // claim rewards as uusd, should result in the following:
+    // 1 - transfer 900 uusd to sender
+    // 1 - increase allowance of 90 yluna0000 for collector
+    // 1 - increase allowance of 450 pluna0000 for collector
+    // 3 - call ConvertAndSend on collector with 90 yluna and 450 pluna
+    let msg = ExecuteMsg::ConvertAndClaimRewards {
+        claim_asset: AssetInfo::Native("uusd".to_string()),
+    };
+    let info = mock_info("alice0000", &[]);
+    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    assert_eq!(
+        res.attributes,
+        vec![
+            attr("action", "claim_rewards"),
+            attr("claimed_asset", "cw20:pluna0000:500"),
+            attr("claimed_asset", "cw20:yluna0000:100"),
+            attr("claimed_asset", "native:uusd:1000"),
+        ]
+    );
+    assert_eq!(
+        res.messages[0],
+        SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "pluna0000".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                spender: "collector0000".to_string(),
+                amount: Uint128::from(500u128),
+                expires: None,
+            })
+            .unwrap(),
+            funds: vec![],
+        })),
+    );
+    assert_eq!(
+        res.messages[1],
+        SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "yluna0000".to_string(),
+            msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                spender: "collector0000".to_string(),
+                amount: Uint128::from(100u128),
+                expires: None,
+            })
+            .unwrap(),
+            funds: vec![],
+        })),
+    );
+    assert_eq!(
+        res.messages[2],
+        SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+            to_address: info.sender.to_string(),
+            amount: vec![Coin {
+                denom: "uusd".to_string(),
+                amount: Uint128::from(1000u128),
+            }],
+        })),
+    );
+    assert_eq!(
+        res.messages[3],
+        SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: "collector0000".to_string(),
+            msg: to_binary(&CollectorExecuteMsg::ConvertAndSend {
+                assets: vec![
+                    Asset {
+                        info: AssetInfo::Cw20(Addr::unchecked("pluna0000")),
+                        amount: Uint128::from(500u128),
+                    },
+                    Asset {
+                        info: AssetInfo::Cw20(Addr::unchecked("yluna0000")),
+                        amount: Uint128::from(100u128),
+                    },
+                ],
+                receiver: Some(info.sender.to_string()),
+                dest_asset_info: AssetInfo::Native("uusd".to_string()),
+            })
+            .unwrap(),
+            funds: vec![],
+        })),
+    );
+}
+
+#[test]
 fn test_update_config() {
     let mut deps = mock_dependencies(&[]);
     init(&mut deps);
@@ -1103,4 +1320,130 @@ fn test_asset_serialization() {
 
     assert_eq!(asset_info.as_bytes(), asset_token_addr.as_bytes());
     assert_eq!(asset_info.as_bytes(), asset_token_string.as_bytes());
+}
+
+#[test]
+fn test_add_remove_claim_asset() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    // query starting config
+    let res: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+    assert_eq!(
+        res,
+        ConfigResponse {
+            owner: OWNER.to_string(),
+            gov: GOV.to_string(),
+            collector: COLLECTOR.to_string(),
+            yasset_token: YLUNA_TOKEN.to_string(),
+            prism_token: PRISM_TOKEN.to_string(),
+            xprism_token: XPRISM_TOKEN.to_string(),
+            reward_distribution: REWARD_DISTRIBUTION.to_string(),
+            claim_assets: vec![
+                AssetInfo::Cw20(Addr::unchecked(YLUNA_TOKEN)),
+                AssetInfo::Cw20(Addr::unchecked(CLUNA_TOKEN)),
+                AssetInfo::Cw20(Addr::unchecked(PLUNA_TOKEN)),
+                AssetInfo::Cw20(Addr::unchecked(PRISM_TOKEN)),
+                AssetInfo::Cw20(Addr::unchecked(XPRISM_TOKEN)),
+            ],
+        }
+    );
+
+    // error - unauthorized add claim asset
+    {
+        let msg = ExecuteMsg::AddClaimAsset {
+            asset: AssetInfo::Cw20(Addr::unchecked(PRISM_TOKEN)),
+        };
+        let info = mock_info("not_the_owner0000", &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert_eq!(err, StdError::generic_err("unauthorized"));
+    }
+
+    // error - duplicate claim asset
+    {
+        let msg = ExecuteMsg::AddClaimAsset {
+            asset: AssetInfo::Cw20(Addr::unchecked(PRISM_TOKEN)),
+        };
+        let info = mock_info(OWNER, &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert_eq!(err, StdError::generic_err("duplicate claim asset"));
+    }
+
+    // successful add claim asset
+    {
+        let msg = ExecuteMsg::AddClaimAsset {
+            asset: AssetInfo::Native("uusd".to_string()),
+        };
+        let info = mock_info(OWNER, &[]);
+        let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(
+            res.attributes,
+            vec![
+                attr("action", "add_claim_asset"),
+                attr("claim_asset", "native:uusd"),
+            ]
+        );
+    }
+
+    // error - unauthorized remove claim asset
+    {
+        let msg = ExecuteMsg::RemoveClaimAsset {
+            asset: AssetInfo::Cw20(Addr::unchecked(PRISM_TOKEN)),
+        };
+        let info = mock_info("not_the_owner0000", &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert_eq!(err, StdError::generic_err("unauthorized"));
+    }
+
+    // error - claim asset doesn't exist
+    {
+        let msg = ExecuteMsg::RemoveClaimAsset {
+            asset: AssetInfo::Cw20(Addr::unchecked("anc0000")),
+        };
+        let info = mock_info(OWNER, &[]);
+        let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert_eq!(err, StdError::generic_err("claim asset doesn't exist"));
+    }
+
+    // successful remove claim asset
+    {
+        let msg = ExecuteMsg::RemoveClaimAsset {
+            asset: AssetInfo::Cw20(Addr::unchecked(CLUNA_TOKEN)),
+        };
+        let info = mock_info(OWNER, &[]);
+        let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+        assert_eq!(res.messages.len(), 0);
+        assert_eq!(
+            res.attributes,
+            vec![
+                attr("action", "remove_claim_asset"),
+                attr("claim_asset", "cw20:cluna0000"),
+            ]
+        );
+    }
+
+    // query final config - added uusd, removed cluna0000
+    let res: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
+    assert_eq!(
+        res,
+        ConfigResponse {
+            owner: OWNER.to_string(),
+            gov: GOV.to_string(),
+            collector: COLLECTOR.to_string(),
+            yasset_token: YLUNA_TOKEN.to_string(),
+            prism_token: PRISM_TOKEN.to_string(),
+            xprism_token: XPRISM_TOKEN.to_string(),
+            reward_distribution: REWARD_DISTRIBUTION.to_string(),
+            claim_assets: vec![
+                AssetInfo::Cw20(Addr::unchecked(YLUNA_TOKEN)),
+                AssetInfo::Cw20(Addr::unchecked(PLUNA_TOKEN)),
+                AssetInfo::Cw20(Addr::unchecked(PRISM_TOKEN)),
+                AssetInfo::Cw20(Addr::unchecked(XPRISM_TOKEN)),
+                AssetInfo::Native("uusd".to_string()),
+            ],
+        }
+    );
 }

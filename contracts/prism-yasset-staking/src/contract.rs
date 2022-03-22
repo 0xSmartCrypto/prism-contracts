@@ -236,6 +236,6 @@ pub fn remove_claim_asset(
 
     Ok(Response::new().add_attributes(vec![
         attr("action", "remove_claim_asset"),
-        attr("removed_asset", asset.to_string()),
+        attr("claim_asset", asset.to_string()),
     ]))
 }
