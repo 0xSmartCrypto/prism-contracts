@@ -91,7 +91,7 @@ pub fn execute(
     }
 }
 
-/// Accept yluna from the user and bond it in this contract. The user starts
+/// Accept yAsset from the user and bond it in this contract. The user starts
 /// accruing rewards in return.
 pub fn receive_cw20(
     deps: DepsMut,
@@ -104,7 +104,7 @@ pub fn receive_cw20(
         Cw20HookMsg::Bond {} => {
             let cfg = CONFIG.load(deps.storage)?;
 
-            // only yluna token contract can execute this message
+            // only yAsset token contract can execute this message
             if cfg.yasset_token != info.sender {
                 return Err(StdError::generic_err("unauthorized"));
             }
