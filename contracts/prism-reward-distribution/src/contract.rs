@@ -24,7 +24,7 @@ use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
 use cw_asset::{Asset, AssetInfo};
 use prismswap::asset::PrismSwapAssetInfo;
-use terra_cosmwasm::{ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
+use terra_cosmwasm::TerraMsgWrapper;
 
 const CONTRACT_NAME: &str = "prism-reward-distribution";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -242,16 +242,6 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 pub fn query_whitelist(deps: Deps) -> StdResult<RewardAssetWhitelistResponse> {
     let whitelist = WHITELISTED_ASSETS.load(deps.storage)?;
     Ok(RewardAssetWhitelistResponse { assets: whitelist })
-}
-
-pub fn query_exchange_rates(
-    deps: &DepsMut,
-    base_denom: String,
-    quote_denoms: Vec<String>,
-) -> StdResult<ExchangeRatesResponse> {
-    let querier = TerraQuerier::new(&deps.querier);
-    let res: ExchangeRatesResponse = querier.query_exchange_rates(base_denom, quote_denoms)?;
-    Ok(res)
 }
 
 pub fn get_transfer_asset_msg(
