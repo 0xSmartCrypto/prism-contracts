@@ -1,6 +1,8 @@
+use std::str::FromStr;
+
 use cosmwasm_std::{
     attr, from_binary, to_binary, Addr, Api, BankMsg, Coin, CosmosMsg, Decimal, OwnedDeps, Querier,
-    Storage, SubMsg, Uint128, WasmMsg,
+    StdError, Storage, SubMsg, Uint128, WasmMsg,
 };
 
 use cosmwasm_std::testing::{mock_env, mock_info};
@@ -416,13 +418,23 @@ fn test_whitelist() {
 
     // valid attempt
     let info = mock_info(OWNER, &[]);
-    let res = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), mock_env(), info, msg.clone()).unwrap();
     assert_eq!(
         res.attributes,
         vec![
             attr("action", "whitelist_reward_asset"),
             attr("whitelisted_asset", "cw20:mir0000"),
         ]
+    );
+
+    // try again, same symbol, duplicate whitelist asset error
+    let info = mock_info(OWNER, &[]);
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::DuplicateWhitelistAsset {
+            asset: "cw20:mir0000".to_string()
+        }
     );
 
     let res: RewardAssetWhitelistResponse =
@@ -552,6 +564,89 @@ fn test_whitelist() {
         err,
         ContractError::RewardAssetNotWhitelisted {
             asset: "cw20:random0000".to_string()
+        }
+    );
+}
+
+#[test]
+fn test_update_config() {
+    let mut deps = mock_dependencies(&[]);
+    init(&mut deps);
+
+    // query config
+    let state = QueryMsg::Config {};
+    let res: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), state).unwrap()).unwrap();
+    assert_eq!(
+        res,
+        ConfigResponse {
+            owner: OWNER.to_string(),
+            vault: VAULT.to_string(),
+            collector: COLLECTOR.to_string(),
+            yasset_token: YASSET_TOKEN.to_string(),
+            yasset_staking: YASSET_STAKING.to_string(),
+            yasset_staking_x: YASSET_STAKING_X.to_string(),
+            protocol_fee: Decimal::from_ratio(1u128, 10u128),
+        }
+    );
+
+    // unauthorized
+    let info = mock_info("not_the_owner_0000", &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        protocol_fee: Some(Decimal::from_str("1.1").unwrap()),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::Unauthorized {});
+
+    // invalid protocol fee
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        protocol_fee: Some(Decimal::from_str("0.6").unwrap()),
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(err, ContractError::InvalidProtocolFee {});
+
+    // invalid owner addr
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: Some("ab".to_string()),
+        protocol_fee: None,
+    };
+    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+    assert_eq!(
+        err,
+        ContractError::Std(StdError::generic_err(
+            "Invalid input: human address too short".to_string()
+        ))
+    );
+
+    // success
+    // unauthorized
+    let info = mock_info(OWNER, &[]);
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: Some("new_owner_0000".to_string()),
+        protocol_fee: Some(Decimal::from_str("0.4").unwrap()),
+    };
+    let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+    assert_eq!(res.messages.len(), 0);
+    assert_eq!(res.attributes, vec![attr("action", "update_config")]);
+
+    // query config get verify changes
+    let state = QueryMsg::Config {};
+    let res: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), state).unwrap()).unwrap();
+    assert_eq!(
+        res,
+        ConfigResponse {
+            owner: "new_owner_0000".to_string(),
+            vault: VAULT.to_string(),
+            collector: COLLECTOR.to_string(),
+            yasset_token: YASSET_TOKEN.to_string(),
+            yasset_staking: YASSET_STAKING.to_string(),
+            yasset_staking_x: YASSET_STAKING_X.to_string(),
+            protocol_fee: Decimal::from_str("0.4").unwrap(),
         }
     );
 }
