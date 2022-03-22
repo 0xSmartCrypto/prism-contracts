@@ -161,6 +161,17 @@ fn test_initialization() {
     };
     assert_eq!(expected_conf, query_conf);
 
+    // try to bond prior to full initialization (reward distribution contract not set)
+    let bond_amount = Uint128::from(1000u128);
+    let bond_msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: BOB_ADDR.to_string(),
+        amount: bond_amount,
+        msg: to_binary(&Cw20HookMsg::Bond {}).unwrap(),
+    });
+    let info = mock_info(BASSET_CONTRACT, &[]);
+    let res = execute(deps.as_mut(), mock_env(), info, bond_msg).unwrap_err();
+    assert_eq!(res, ContractError::NotInitialized {});
+
     let update_config_msg = ExecuteMsg::UpdateConfig {
         owner: Some(OWNER2.to_string()),
         reward_distribution_contract: Some(REWARD_DISTRIBUTION_CONTRACT.to_string()),
