@@ -10,7 +10,7 @@ use crate::error::{ContractError, ContractResult};
 use crate::state::{Config, CONFIG};
 use cw2::set_contract_version;
 use cw20::Cw20ExecuteMsg;
-use cw_asset::{Asset, AssetInfo};
+use cw_asset::AssetInfo;
 use prismswap::querier::query_balance;
 use terra_cosmwasm::{create_swap_msg, ExchangeRatesResponse, TerraMsgWrapper, TerraQuerier};
 
@@ -153,16 +153,12 @@ pub fn distribute_minted_pyluna_hook(
     }
 
     let pluna_asset_info = AssetInfo::Cw20(cfg.pluna_token.clone());
-    let pluna_asset = Asset {
-        info: pluna_asset_info.clone(),
-        amount: pluna_asset_info.query_balance(&deps.querier, env.contract.address.clone())?,
-    };
+    let pluna_balance =
+        pluna_asset_info.query_balance(&deps.querier, env.contract.address.clone())?;
 
     let yluna_asset_info = AssetInfo::Cw20(cfg.yluna_token.clone());
-    let yluna_asset = Asset {
-        info: yluna_asset_info.clone(),
-        amount: yluna_asset_info.query_balance(&deps.querier, env.contract.address)?,
-    };
+    let yluna_balance =
+        yluna_asset_info.query_balance(&deps.querier, env.contract.address)?;
 
     Ok(Response::new()
         .add_messages(vec![
@@ -170,7 +166,7 @@ pub fn distribute_minted_pyluna_hook(
                 contract_addr: cfg.pluna_token.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: cfg.reward_distribution.to_string(),
-                    amount: pluna_asset.amount,
+                    amount: pluna_balance,
                 })?,
                 funds: vec![],
             }),
@@ -178,7 +174,7 @@ pub fn distribute_minted_pyluna_hook(
                 contract_addr: cfg.yluna_token.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: cfg.reward_distribution.to_string(),
-                    amount: yluna_asset.amount,
+                    amount: yluna_balance,
                 })?,
                 funds: vec![],
             }),
