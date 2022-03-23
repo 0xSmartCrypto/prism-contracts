@@ -31,15 +31,21 @@ pub fn init<S: Storage, A: Api, Q: Querier>(deps: &mut OwnedDeps<S, A, Q>) {
         owner: OWNER.to_string(),
         vault: VAULT.to_string(),
         yasset_token: YASSET_TOKEN.to_string(),
-        yasset_staking: YASSET_STAKING.to_string(),
-        yasset_staking_x: YASSET_STAKING_X.to_string(),
         collector: COLLECTOR.to_string(),
         protocol_fee: Decimal::from_ratio(1u128, 10u128),
         whitelisted_assets: vec![AssetInfo::Native(DELEGATOR_REWARD_DENOM.to_string())],
     };
 
-    let owner_info = mock_info(OWNER, &[]);
-    instantiate(deps.as_mut(), mock_env(), owner_info, msg).unwrap();
+    let info = mock_info(OWNER, &[]);
+    instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        yasset_staking: Some(YASSET_STAKING.to_string()),
+        yasset_staking_x: Some(YASSET_STAKING_X.to_string()),
+        protocol_fee: None,
+    };
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 }
 
 #[test]
@@ -52,18 +58,56 @@ fn test_initialization() {
         vault: VAULT.to_string(),
         collector: COLLECTOR.to_string(),
         yasset_token: YASSET_TOKEN.to_string(),
-        yasset_staking: YASSET_STAKING.to_string(),
-        yasset_staking_x: YASSET_STAKING_X.to_string(),
         protocol_fee: Decimal::from_ratio(11u128, 10u128),
         whitelisted_assets: vec![AssetInfo::Native(DELEGATOR_REWARD_DENOM.to_string())],
     };
 
-    let owner_info = mock_info(OWNER, &[]);
-    let res = instantiate(deps.as_mut(), mock_env(), owner_info, msg).unwrap_err();
+    let info = mock_info(OWNER, &[]);
+    let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
     assert_eq!(res, ContractError::InvalidProtocolFee {});
 
     // valid init
-    init(&mut deps);
+    let msg = InstantiateMsg {
+        owner: OWNER.to_string(),
+        vault: VAULT.to_string(),
+        yasset_token: YASSET_TOKEN.to_string(),
+        collector: COLLECTOR.to_string(),
+        protocol_fee: Decimal::from_ratio(1u128, 10u128),
+        whitelisted_assets: vec![AssetInfo::Native(DELEGATOR_REWARD_DENOM.to_string())],
+    };
+
+    let info = mock_info(OWNER, &[]);
+    instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+    // verify config storage
+    let state = QueryMsg::Config {};
+    let config_response: ConfigResponse =
+        from_binary(&query(deps.as_ref(), mock_env(), state).unwrap()).unwrap();
+    let expected_result = ConfigResponse {
+        owner: OWNER.to_string(),
+        vault: VAULT.to_string(),
+        collector: COLLECTOR.to_string(),
+        yasset_token: YASSET_TOKEN.to_string(),
+        yasset_staking: "".to_string(),
+        yasset_staking_x: "".to_string(),
+        protocol_fee: Decimal::from_ratio(1u128, 10u128),
+        initialized: false,
+    };
+    assert_eq!(config_response, expected_result);
+
+    // error - try to distribute rewards prior to initialization
+    let msg = ExecuteMsg::DistributeRewards {};
+    let err = execute(deps.as_mut(), mock_env(), info.clone(), msg).unwrap_err();
+    assert_eq!(err, ContractError::NotInitialized {});
+
+    //update config
+    let msg = ExecuteMsg::UpdateConfig {
+        owner: None,
+        yasset_staking: Some(YASSET_STAKING.to_string()),
+        yasset_staking_x: Some(YASSET_STAKING_X.to_string()),
+        protocol_fee: None,
+    };
+    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
     // verify config storage
     let state = QueryMsg::Config {};
@@ -77,6 +121,7 @@ fn test_initialization() {
         yasset_staking: YASSET_STAKING.to_string(),
         yasset_staking_x: YASSET_STAKING_X.to_string(),
         protocol_fee: Decimal::from_ratio(1u128, 10u128),
+        initialized: true,
     };
     assert_eq!(config_response, expected_result);
 }
@@ -587,6 +632,7 @@ fn test_update_config() {
             yasset_staking: YASSET_STAKING.to_string(),
             yasset_staking_x: YASSET_STAKING_X.to_string(),
             protocol_fee: Decimal::from_ratio(1u128, 10u128),
+            initialized: true,
         }
     );
 
@@ -594,6 +640,8 @@ fn test_update_config() {
     let info = mock_info("not_the_owner_0000", &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
+        yasset_staking: None,
+        yasset_staking_x: None,
         protocol_fee: Some(Decimal::from_str("1.1").unwrap()),
     };
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
@@ -603,6 +651,8 @@ fn test_update_config() {
     let info = mock_info(OWNER, &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: None,
+        yasset_staking: None,
+        yasset_staking_x: None,
         protocol_fee: Some(Decimal::from_str("0.6").unwrap()),
     };
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
@@ -612,6 +662,8 @@ fn test_update_config() {
     let info = mock_info(OWNER, &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("ab".to_string()),
+        yasset_staking: None,
+        yasset_staking_x: None,
         protocol_fee: None,
     };
     let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
@@ -627,6 +679,8 @@ fn test_update_config() {
     let info = mock_info(OWNER, &[]);
     let msg = ExecuteMsg::UpdateConfig {
         owner: Some("new_owner_0000".to_string()),
+        yasset_staking: None,
+        yasset_staking_x: None,
         protocol_fee: Some(Decimal::from_str("0.4").unwrap()),
     };
     let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -647,6 +701,7 @@ fn test_update_config() {
             yasset_staking: YASSET_STAKING.to_string(),
             yasset_staking_x: YASSET_STAKING_X.to_string(),
             protocol_fee: Decimal::from_str("0.4").unwrap(),
+            initialized: true,
         }
     );
 }

@@ -49,9 +49,10 @@ pub fn instantiate(
             vault: deps.api.addr_validate(&msg.vault)?,
             collector: deps.api.addr_validate(&msg.collector)?,
             yasset_token: deps.api.addr_validate(&msg.yasset_token)?,
-            yasset_staking: deps.api.addr_validate(&msg.yasset_staking)?,
-            yasset_staking_x: deps.api.addr_validate(&msg.yasset_staking_x)?,
+            yasset_staking: Addr::unchecked(""),
+            yasset_staking_x: Addr::unchecked(""),
             protocol_fee: msg.protocol_fee,
+            initialized: false,
         },
     )?;
 
@@ -79,13 +80,22 @@ pub fn execute(
         }
         ExecuteMsg::UpdateConfig {
             owner,
+            yasset_staking,
+            yasset_staking_x,
             protocol_fee,
-        } => update_config(deps, info, owner, protocol_fee),
+        } => update_config(
+            deps,
+            info,
+            owner,
+            yasset_staking,
+            yasset_staking_x,
+            protocol_fee,
+        ),
     }
 }
 
 pub fn distribute_rewards(deps: DepsMut, env: Env) -> ContractResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
+    let cfg = CONFIG.load(deps.storage)?.assert_initialized()?;
 
     let vault_bond_amount = query_vault_bond_amount(&deps.querier, cfg.vault)?;
     let yasset_staking_bonded =
@@ -161,7 +171,7 @@ pub fn whitelist_reward_asset(
     info: MessageInfo,
     asset: AssetInfo,
 ) -> ContractResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
+    let cfg = CONFIG.load(deps.storage)?.assert_initialized()?;
 
     // can only be exeucted by owner
     if info.sender != cfg.owner {
@@ -189,7 +199,7 @@ pub fn remove_whitelisted_reward_asset(
     info: MessageInfo,
     asset: AssetInfo,
 ) -> ContractResult<Response<TerraMsgWrapper>> {
-    let cfg = CONFIG.load(deps.storage)?;
+    let cfg = CONFIG.load(deps.storage)?.assert_initialized()?;
 
     // can only be executed by owner
     if info.sender != cfg.owner {
@@ -228,15 +238,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    Ok(ConfigResponse {
-        owner: cfg.owner.to_string(),
-        vault: cfg.vault.to_string(),
-        collector: cfg.collector.to_string(),
-        yasset_token: cfg.yasset_token.to_string(),
-        yasset_staking: cfg.yasset_staking.to_string(),
-        yasset_staking_x: cfg.yasset_staking_x.to_string(),
-        protocol_fee: cfg.protocol_fee,
-    })
+    Ok(cfg.as_res())
 }
 
 pub fn query_whitelist(deps: Deps) -> StdResult<RewardAssetWhitelistResponse> {
@@ -307,6 +309,8 @@ fn update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
+    yasset_staking: Option<String>,
+    yasset_staking_x: Option<String>,
     protocol_fee: Option<Decimal>,
 ) -> ContractResult<Response<TerraMsgWrapper>> {
     let mut cfg = CONFIG.load(deps.storage)?;
@@ -320,9 +324,25 @@ fn update_config(
         cfg.owner = deps.api.addr_validate(&owner)?;
     }
 
+    if let Some(yasset_staking) = yasset_staking {
+        cfg.yasset_staking = deps.api.addr_validate(&yasset_staking)?;
+    }
+
+    if let Some(yasset_staking_x) = yasset_staking_x {
+        cfg.yasset_staking_x = deps.api.addr_validate(&yasset_staking_x)?;
+    }
+
     if let Some(protocol_fee) = protocol_fee {
         validate_protocol_fee(protocol_fee)?;
         cfg.protocol_fee = protocol_fee;
+    }
+
+    let placeholder_addr = Addr::unchecked("");
+    if !cfg.initialized
+        && cfg.yasset_staking.ne(&placeholder_addr)
+        && cfg.yasset_staking_x.ne(&placeholder_addr)
+    {
+        cfg.initialized = true;
     }
 
     CONFIG.save(deps.storage, &cfg)?;

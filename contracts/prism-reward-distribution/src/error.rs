@@ -9,6 +9,9 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
+    #[error("Contract is not fully initialized")]
+    NotInitialized {},
+
     #[error("Reward asset not whitelisted: {asset}")]
     RewardAssetNotWhitelisted { asset: String },
 

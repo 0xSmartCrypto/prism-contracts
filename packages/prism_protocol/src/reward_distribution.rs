@@ -12,8 +12,6 @@ pub struct InstantiateMsg {
     pub vault: String,
     pub collector: String,
     pub yasset_token: String,
-    pub yasset_staking: String,
-    pub yasset_staking_x: String,
     pub protocol_fee: Decimal,
     pub whitelisted_assets: Vec<AssetInfo>,
 }
@@ -37,6 +35,8 @@ pub enum ExecuteMsg {
 
     UpdateConfig {
         owner: Option<String>,
+        yasset_staking: Option<String>,
+        yasset_staking_x: Option<String>,
         protocol_fee: Option<Decimal>,
     },
 }
@@ -57,6 +57,7 @@ pub struct ConfigResponse {
     pub yasset_staking: String,
     pub yasset_staking_x: String,
     pub protocol_fee: Decimal,
+    pub initialized: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
