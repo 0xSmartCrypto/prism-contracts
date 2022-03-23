@@ -26,7 +26,7 @@ pub enum ExecuteMsg {
     /// Update Vault global config.
     UpdateConfig {
         owner: Option<String>,
-        reward_distribution_contract: Option<String>,
+        reward_distribution: Option<String>,
         delegator_rewards_contract: Option<String>,
         airdrop_registry_contract: Option<String>,
         manager: Option<String>,
@@ -140,7 +140,7 @@ pub enum Cw20HookMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: String,
-    pub reward_distribution_contract: String,
+    pub reward_distribution: String,
     pub delegator_rewards_contract: String,
     pub cluna_contract: String,
     pub pluna_contract: String,

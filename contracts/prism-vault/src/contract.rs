@@ -57,13 +57,13 @@ pub fn instantiate(
     // set placeholder addresses
     let config = Config {
         owner: sender,
-        reward_distribution_contract: Addr::unchecked(""),
+        reward_distribution: Addr::unchecked(""),
         delegator_rewards_contract: Addr::unchecked(""),
         cluna_contract: Addr::unchecked(""),
         yluna_contract: Addr::unchecked(""),
         airdrop_registry_contract: Addr::unchecked(""),
         pluna_contract: Addr::unchecked(""),
-        // initialized will be set to true once reward_distribution_contract
+        // initialized will be set to true once reward_distribution
         // and airdrop registry addresses are set
         initialized: false,
         token_code_id: msg.token_code_id,
@@ -193,7 +193,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ),
         ExecuteMsg::UpdateConfig {
             owner,
-            reward_distribution_contract,
+            reward_distribution,
             delegator_rewards_contract,
             airdrop_registry_contract,
             manager,
@@ -201,7 +201,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             deps,
             info,
             owner,
-            reward_distribution_contract,
+            reward_distribution,
             delegator_rewards_contract,
             airdrop_registry_contract,
             manager,
@@ -411,7 +411,7 @@ pub fn deposit_airdrop_rewards(
         Response::new().add_message(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: airdrop_token_addr.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: conf.reward_distribution_contract.to_string(),
+                contract: conf.reward_distribution.to_string(),
                 amount,
                 msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {})?,
             })?,

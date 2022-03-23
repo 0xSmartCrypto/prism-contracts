@@ -20,7 +20,7 @@ pub struct InstantiateMsg {
     /// vesting period in seconds
     pub vesting_period: u64,
     pub boost_contract: String,
-    pub reward_distribution_contract: String,
+    pub reward_distribution: String,
     // start, end, amount of $PRISM to distribute
     // distribute linearly
     pub distribution_schedule: (u64, u64, Uint128),
@@ -143,7 +143,7 @@ pub struct ConfigResponse {
     pub yluna_token: String,
     pub vesting_period: u64,
     pub boost_contract: String,
-    pub reward_distribution_contract: String,
+    pub reward_distribution: String,
     pub distribution_schedule: (u64, u64, Uint128),
     pub base_pool_ratio: Decimal,
     pub min_bond_amount: Uint128,

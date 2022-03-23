@@ -11,6 +11,7 @@ pub struct InstantiateMsg {
     pub prism_token: String,
     pub prism_yasset_pair: String,
     pub collector: String,
+    pub reward_distribution: String,
     pub token_code_id: u64, // cw20 token code id for xyasset token creation
 }
 
@@ -24,11 +25,6 @@ pub enum ExecuteMsg {
     /// underlying yasset (thereby appreciating the xyasset)
     DepositRewards {
         assets: Vec<Asset>,
-    },
-
-    /// PostInitialize to set the reward distribution contract
-    PostInitialize {
-        reward_distribution_contract: String,
     },
 }
 
@@ -53,7 +49,7 @@ pub struct ConfigResponse {
     pub xyasset_token: String,
     pub prism_token: String,
     pub collector: String,
-    pub reward_distribution_contract: Option<String>,
+    pub reward_distribution: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

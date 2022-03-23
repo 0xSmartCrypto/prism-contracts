@@ -12,9 +12,6 @@ pub enum ContractError {
     #[error("InvalidNativeFunds")]
     InvalidNativeFunds {},
 
-    #[error("DuplicatePostInitialize")]
-    DuplicatePostInitialize {},
-
     #[error("InvalidReplyId")]
     InvalidReplyId {},
 

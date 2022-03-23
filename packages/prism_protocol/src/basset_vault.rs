@@ -26,7 +26,7 @@ pub enum ExecuteMsg {
     /// Set the owener
     UpdateConfig {
         owner: Option<String>,
-        reward_distribution_contract: Option<String>,
+        reward_distribution: Option<String>,
     },
 
     ////////////////////
@@ -72,7 +72,7 @@ pub struct ConfigResponse {
     pub casset_contract: String,
     pub passet_contract: String,
     pub yasset_contract: String,
-    pub reward_distribution_contract: String,
+    pub reward_distribution: String,
     pub initialized: bool,
     pub token_admin: String,
     pub token_code_id: u64,

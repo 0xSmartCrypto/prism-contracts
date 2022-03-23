@@ -38,7 +38,7 @@ use prism_protocol::vault::QueryMsg::{AllHistory, UnbondRequests, WithdrawableUn
 use std::borrow::BorrowMut;
 
 const OWNER: &str = "owner";
-const REWARD_DISTRIBUTION_CONTRACT: &str = "reward_distribution_contract";
+const REWARD_DISTRIBUTION_CONTRACT: &str = "reward_distribution";
 const DELEGATOR_REWARDS_CONTRACT: &str = "delegator_rewards_contract";
 const CLUNA_CONTRACT: &str = "cluna";
 const YLUNA_CONTRACT: &str = "yluna";
@@ -76,7 +76,7 @@ fn set_validator_mock(querier: &mut WasmMockQuerier) {
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut OwnedDeps<S, A, Q>,
     owner: &str,
-    reward_distribution_contract: &str,
+    reward_distribution: &str,
     validator: String,
 ) {
     let msg = InstantiateMsg {
@@ -124,7 +124,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 
     let register_msg = ExecuteMsg::UpdateConfig {
         owner: None,
-        reward_distribution_contract: Some(reward_distribution_contract.to_string()),
+        reward_distribution: Some(reward_distribution.to_string()),
         delegator_rewards_contract: Some(DELEGATOR_REWARDS_CONTRACT.to_string()),
         airdrop_registry_contract: Some("airdrop_registry".to_string()),
         manager: None,
@@ -405,7 +405,7 @@ fn proper_initialization() {
         from_binary(&query(deps.as_ref(), mock_env(), conf).unwrap()).unwrap();
     let expected_conf = ConfigResponse {
         owner: OWNER.to_string(),
-        reward_distribution_contract: "".to_string(),
+        reward_distribution: "".to_string(),
         delegator_rewards_contract: "".to_string(),
         yluna_contract: "yluna".to_string(),
         pluna_contract: "pluna".to_string(),
@@ -3081,7 +3081,7 @@ pub fn proper_update_config() {
     // only the owner can call this message
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
-        reward_distribution_contract: None,
+        reward_distribution: None,
         delegator_rewards_contract: None,
         airdrop_registry_contract: None,
         manager: None,
@@ -3093,7 +3093,7 @@ pub fn proper_update_config() {
     // change the owner
     let update_config = UpdateConfig {
         owner: Some(new_owner.clone()),
-        reward_distribution_contract: None,
+        reward_distribution: None,
         delegator_rewards_contract: None,
         airdrop_registry_contract: None,
         manager: None,
@@ -3132,7 +3132,7 @@ pub fn proper_update_config() {
     // set reward distribution contract
     let update_config = UpdateConfig {
         owner: None,
-        reward_distribution_contract: Some("new reward".to_string()),
+        reward_distribution: Some("new reward".to_string()),
         delegator_rewards_contract: None,
         airdrop_registry_contract: None,
         manager: None,
@@ -3144,7 +3144,7 @@ pub fn proper_update_config() {
     // set delegator rewards contract
     let update_config = UpdateConfig {
         owner: None,
-        reward_distribution_contract: None,
+        reward_distribution: None,
         delegator_rewards_contract: Some("new_delegator_rewards".to_string()),
         airdrop_registry_contract: None,
         manager: None,
@@ -3163,16 +3163,13 @@ pub fn proper_update_config() {
     let config = QueryMsg::Config {};
     let config_query: ConfigResponse =
         from_binary(&query(deps.as_ref(), mock_env(), config).unwrap()).unwrap();
-    assert_eq!(
-        config_query.reward_distribution_contract,
-        "new reward".to_string()
-    );
+    assert_eq!(config_query.reward_distribution, "new reward".to_string());
     // contract is not yet fully initialized
     assert!(!config_query.initialized);
 
     let update_config = UpdateConfig {
         owner: None,
-        reward_distribution_contract: None,
+        reward_distribution: None,
         delegator_rewards_contract: None,
         airdrop_registry_contract: Some("new airdrop".to_string()),
         manager: None,
@@ -3188,7 +3185,7 @@ pub fn proper_update_config() {
         config_query.airdrop_registry_contract,
         "new airdrop".to_string()
     );
-    // now the contract is initialized because reward_distribution_contract and airdrop contract has been set
+    // now the contract is initialized because reward_distribution and airdrop contract has been set
     assert!(config_query.initialized);
 }
 

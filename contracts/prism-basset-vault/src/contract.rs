@@ -47,7 +47,7 @@ pub fn instantiate(
         casset_contract: Addr::unchecked(""),
         yasset_contract: Addr::unchecked(""),
         passet_contract: Addr::unchecked(""),
-        reward_distribution_contract: Addr::unchecked(""),
+        reward_distribution: Addr::unchecked(""),
         initialized: false,
         token_admin: deps.api.addr_validate(&msg.token_admin)?,
         token_code_id: msg.token_code_id,
@@ -108,8 +108,8 @@ pub fn execute(
         ExecuteMsg::UpdateGlobalIndex {} => execute_update_global(deps, env),
         ExecuteMsg::UpdateConfig {
             owner,
-            reward_distribution_contract,
-        } => execute_update_config(deps, info, owner, reward_distribution_contract),
+            reward_distribution,
+        } => execute_update_config(deps, info, owner, reward_distribution),
     }
 }
 
@@ -363,18 +363,18 @@ pub fn execute_update_global(deps: DepsMut, env: Env) -> ContractResult<Response
     let conf = CONFIG.load(deps.storage)?.assert_initialized()?;
     let messages = vec![
         // claims rewards from basset reward contract using
-        // reward_distribution_contract as the recipient
+        // reward_distribution as the recipient
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: conf.asset_reward_contract.to_string(),
             msg: to_binary(&BassetRewardExecuteMsg::ClaimRewards {
-                recipient: Some(conf.reward_distribution_contract.to_string()),
+                recipient: Some(conf.reward_distribution.to_string()),
             })
             .unwrap(),
             funds: vec![],
         })),
-        // instruct reward_distribution_contract to distribute rewards
+        // instruct reward_distribution to distribute rewards
         SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: conf.reward_distribution_contract.to_string(),
+            contract_addr: conf.reward_distribution.to_string(),
             msg: to_binary(&RewardDistributionExecuteMsg::DistributeRewards {}).unwrap(),
             funds: vec![],
         })),
@@ -395,7 +395,7 @@ pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
-    reward_distribution_contract: Option<String>,
+    reward_distribution: Option<String>,
 ) -> ContractResult<Response> {
     // only owner must be able to send this message.
     let mut conf = CONFIG.load(deps.storage)?;
@@ -408,12 +408,12 @@ pub fn execute_update_config(
         conf.owner = deps.api.addr_validate(&o)?;
     }
 
-    if let Some(token) = reward_distribution_contract {
-        conf.reward_distribution_contract = deps.api.addr_validate(&token)?;
+    if let Some(token) = reward_distribution {
+        conf.reward_distribution = deps.api.addr_validate(&token)?;
     }
 
     let placeholder_addr = Addr::unchecked("");
-    if !conf.initialized && conf.reward_distribution_contract.ne(&placeholder_addr) {
+    if !conf.initialized && conf.reward_distribution.ne(&placeholder_addr) {
         conf.initialized = true;
     }
 

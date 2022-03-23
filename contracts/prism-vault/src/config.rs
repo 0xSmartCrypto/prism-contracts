@@ -120,7 +120,7 @@ pub fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
     owner: Option<String>,
-    reward_distribution_contract: Option<String>,
+    reward_distribution: Option<String>,
     delegator_rewards_contract: Option<String>,
     airdrop_registry_contract: Option<String>,
     manager: Option<String>,
@@ -137,9 +137,8 @@ pub fn execute_update_config(
         config.owner = deps.api.addr_validate(&owner)?;
     }
 
-    if let Some(reward_distribution_contract) = reward_distribution_contract {
-        config.reward_distribution_contract =
-            deps.api.addr_validate(&reward_distribution_contract)?;
+    if let Some(reward_distribution) = reward_distribution {
+        config.reward_distribution = deps.api.addr_validate(&reward_distribution)?;
     }
 
     if let Some(delegator_rewards_contract) = delegator_rewards_contract {
@@ -163,7 +162,7 @@ pub fn execute_update_config(
 
     let placeholder_addr = Addr::unchecked("");
     if !config.initialized
-        && config.reward_distribution_contract.ne(&placeholder_addr)
+        && config.reward_distribution.ne(&placeholder_addr)
         && config.airdrop_registry_contract.ne(&placeholder_addr)
     {
         config.initialized = true;

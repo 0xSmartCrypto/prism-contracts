@@ -13,5 +13,5 @@ pub struct Config {
     pub xyasset_token: Addr,
     pub prism_token: Addr,
     pub collector: Addr,
-    pub reward_distribution_contract: Option<Addr>,
+    pub reward_distribution: Addr,
 }

@@ -31,6 +31,7 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
         prism_token: PRISM_TOKEN.to_string(),
         prism_yasset_pair: PRISM_YASSET_PAIR.to_string(),
         collector: COLLECTOR.to_string(),
+        reward_distribution: REWARD_DISTRIBUTION.to_string(),
         token_code_id: 3,
     };
 
@@ -39,12 +40,6 @@ pub fn init(deps: &mut OwnedDeps<MemoryStorage, MockApi, WasmMockQuerier>) {
 
     let reply_msg = get_token_instantiate_reply_msg();
     reply(deps.as_mut(), mock_env(), reply_msg).unwrap();
-
-    let msg = ExecuteMsg::PostInitialize {
-        reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
-    };
-    let info = mock_info(OWNER, &[]);
-    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 }
 
 fn get_token_instantiate_reply_msg() -> Reply {
@@ -78,6 +73,7 @@ fn test_init() {
         prism_token: PRISM_TOKEN.to_string(),
         prism_yasset_pair: PRISM_YASSET_PAIR.to_string(),
         collector: COLLECTOR.to_string(),
+        reward_distribution: REWARD_DISTRIBUTION.to_string(),
         token_code_id: 3,
     };
 
@@ -124,7 +120,7 @@ fn test_init() {
         xyasset_token: XYASSET_TOKEN.to_string(),
         prism_token: PRISM_TOKEN.to_string(),
         collector: COLLECTOR.to_string(),
-        reward_distribution_contract: None,
+        reward_distribution: REWARD_DISTRIBUTION.to_string(),
     };
     assert_eq!(config_response, expected_result);
 
@@ -138,43 +134,6 @@ fn test_init() {
         exchange_rate: Decimal::one(),
     };
     assert_eq!(state_response, expected_result);
-
-    // Unauthorized - post-initialize as random user
-    let msg = ExecuteMsg::PostInitialize {
-        reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
-    };
-    let info = mock_info("alice0000", &[]);
-    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
-    assert_eq!(err, ContractError::Unauthorized {});
-
-    // successful post-initialize as owner
-    let msg = ExecuteMsg::PostInitialize {
-        reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
-    };
-    let info = mock_info(OWNER, &[]);
-    execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-    // query config after post-initialize
-    let res: ConfigResponse =
-        from_binary(&query(deps.as_ref(), mock_env(), QueryMsg::Config {}).unwrap()).unwrap();
-
-    let expected_result = ConfigResponse {
-        owner: OWNER.to_string(),
-        yasset_token: YASSET_TOKEN.to_string(),
-        xyasset_token: XYASSET_TOKEN.to_string(),
-        prism_token: PRISM_TOKEN.to_string(),
-        collector: COLLECTOR.to_string(),
-        reward_distribution_contract: Some(REWARD_DISTRIBUTION.to_string()),
-    };
-    assert_eq!(res, expected_result);
-
-    // DuplicatePostInitialize - retry post-initialize
-    let msg = ExecuteMsg::PostInitialize {
-        reward_distribution_contract: REWARD_DISTRIBUTION.to_string(),
-    };
-    let info = mock_info(OWNER, &[]);
-    let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
-    assert_eq!(err, ContractError::DuplicatePostInitialize {});
 }
 
 // bond once for 1000

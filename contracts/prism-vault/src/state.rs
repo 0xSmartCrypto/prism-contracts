@@ -64,8 +64,8 @@ pub struct Config {
     // authenticate owner-only endpoints (an error will be returned if this
     // field doesn't match the caller's address).
     pub owner: Addr,
-    // reward_distribution_contract is the address of the reward distribution contract.
-    pub reward_distribution_contract: Addr,
+    // reward_distribution is the address of the reward distribution contract.
+    pub reward_distribution: Addr,
 
     // Delegation rewards are deposited directly to the delegator_rewards_contract
     // (via SetWithdrawAddress).
@@ -96,7 +96,7 @@ impl Config {
     pub fn as_res(&self) -> ConfigResponse {
         ConfigResponse {
             owner: self.owner.to_string(),
-            reward_distribution_contract: self.reward_distribution_contract.to_string(),
+            reward_distribution: self.reward_distribution.to_string(),
             delegator_rewards_contract: self.delegator_rewards_contract.to_string(),
             cluna_contract: self.cluna_contract.to_string(),
             yluna_contract: self.yluna_contract.to_string(),

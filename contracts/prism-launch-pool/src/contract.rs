@@ -52,7 +52,7 @@ pub fn instantiate(
         yluna_token: deps.api.addr_validate(&msg.yluna_token)?,
         vesting_period: msg.vesting_period,
         boost_contract: deps.api.addr_validate(&msg.boost_contract)?,
-        reward_distribution_contract: deps.api.addr_validate(&msg.reward_distribution_contract)?,
+        reward_distribution: deps.api.addr_validate(&msg.reward_distribution)?,
         distribution_schedule: msg.distribution_schedule,
         base_pool_ratio: msg.base_pool_ratio,
         min_bond_amount: msg.min_bond_amount,
@@ -172,7 +172,7 @@ pub fn admin_withdraw_rewards(
 
     let whitelist_res: RewardAssetWhitelistResponse =
         deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: cfg.reward_distribution_contract.to_string(),
+            contract_addr: cfg.reward_distribution.to_string(),
             msg: to_binary(&RewardDistributionQueryMsg::RewardAssetWhitelist {})?,
         }))?;
 

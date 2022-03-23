@@ -45,7 +45,7 @@ pub fn instantiate(
             xyasset_token: Addr::unchecked(""),
             prism_token: deps.api.addr_validate(&msg.prism_token)?,
             collector: deps.api.addr_validate(&msg.collector)?,
-            reward_distribution_contract: None,
+            reward_distribution: deps.api.addr_validate(&msg.reward_distribution)?,
         },
     )?;
 
@@ -106,9 +106,6 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::DepositRewards { assets } => deposit_rewards(deps, env, info, assets),
-        ExecuteMsg::PostInitialize {
-            reward_distribution_contract,
-        } => post_initialize(deps, env, info, reward_distribution_contract),
     }
 }
 
@@ -217,7 +214,7 @@ pub fn deposit_rewards(
     assets: Vec<Asset>,
 ) -> ContractResult<Response> {
     let cfg = CONFIG.load(deps.storage)?;
-    if info.sender != cfg.reward_distribution_contract.clone().unwrap() {
+    if info.sender != cfg.reward_distribution {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -288,7 +285,7 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
         xyasset_token: cfg.xyasset_token.to_string(),
         prism_token: cfg.prism_token.to_string(),
         collector: cfg.collector.to_string(),
-        reward_distribution_contract: cfg.reward_distribution_contract.map(|x| x.to_string()),
+        reward_distribution: cfg.reward_distribution.to_string(),
     })
 }
 
@@ -316,24 +313,4 @@ pub fn get_exchange_rate(yasset_balance: Uint128, xyasset_supply: Uint128) -> De
     } else {
         Decimal::from_ratio(yasset_balance, xyasset_supply)
     }
-}
-
-pub fn post_initialize(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    reward_distribution_contract: String,
-) -> ContractResult<Response> {
-    let mut cfg = CONFIG.load(deps.storage)?;
-
-    if cfg.owner != info.sender {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    if cfg.reward_distribution_contract.is_some() {
-        return Err(ContractError::DuplicatePostInitialize {});
-    }
-    cfg.reward_distribution_contract = Some(deps.api.addr_validate(&reward_distribution_contract)?);
-    CONFIG.save(deps.storage, &cfg)?;
-    Ok(Response::default())
 }

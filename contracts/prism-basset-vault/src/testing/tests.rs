@@ -49,7 +49,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(deps: &mut OwnedDeps<S, A, Q>) {
 
     let register_msg = ExecuteMsg::UpdateConfig {
         owner: None,
-        reward_distribution_contract: Some(REWARD_DISTRIBUTION_CONTRACT.to_string()),
+        reward_distribution: Some(REWARD_DISTRIBUTION_CONTRACT.to_string()),
     };
 
     let owner_info = mock_info(OWNER, &[]);
@@ -154,7 +154,7 @@ fn test_initialization() {
         casset_contract: CASSET_CONTRACT.to_string(),
         yasset_contract: YASSET_CONTRACT.to_string(),
         passet_contract: PASSET_CONTRACT.to_string(),
-        reward_distribution_contract: "".to_string(),
+        reward_distribution: "".to_string(),
         initialized: false,
         token_admin: TOKEN_ADMIN.to_string(),
         token_code_id: TOKEN_CODE_ID,
@@ -174,7 +174,7 @@ fn test_initialization() {
 
     let update_config_msg = ExecuteMsg::UpdateConfig {
         owner: Some(OWNER2.to_string()),
-        reward_distribution_contract: Some(REWARD_DISTRIBUTION_CONTRACT.to_string()),
+        reward_distribution: Some(REWARD_DISTRIBUTION_CONTRACT.to_string()),
     };
 
     // unauthorized UpdateConfig
@@ -210,7 +210,7 @@ fn test_initialization() {
         casset_contract: CASSET_CONTRACT.to_string(),
         yasset_contract: YASSET_CONTRACT.to_string(),
         passet_contract: PASSET_CONTRACT.to_string(),
-        reward_distribution_contract: REWARD_DISTRIBUTION_CONTRACT.to_string(),
+        reward_distribution: REWARD_DISTRIBUTION_CONTRACT.to_string(),
         initialized: true,
         token_admin: TOKEN_ADMIN.to_string(),
         token_code_id: TOKEN_CODE_ID,
