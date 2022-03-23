@@ -157,8 +157,7 @@ pub fn distribute_minted_pyluna_hook(
         pluna_asset_info.query_balance(&deps.querier, env.contract.address.clone())?;
 
     let yluna_asset_info = AssetInfo::Cw20(cfg.yluna_token.clone());
-    let yluna_balance =
-        yluna_asset_info.query_balance(&deps.querier, env.contract.address)?;
+    let yluna_balance = yluna_asset_info.query_balance(&deps.querier, env.contract.address)?;
 
     Ok(Response::new()
         .add_messages(vec![
