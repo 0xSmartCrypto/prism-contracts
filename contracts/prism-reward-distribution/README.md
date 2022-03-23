@@ -5,13 +5,13 @@ This contract provides functionality for distributing rewards appropriately to t
 ## ExecuteMsg:
 | Message | Privileges | Description |
 | - | - | - |
-| **DistributeRewards** | | Distribute our current balance of the input reward asset appropriately to the [yasset-staking](/contracts/prism-yasset-staking), [yasset-staking-x](/contracts/prism-yasset-staking-x), and [collector](/contracts/prism-collector) contracts. |
+| **DistributeRewards** | | Distribute our current balance of all whitelisted reward assets appropriately to the [yasset-staking](/contracts/prism-yasset-staking), [yasset-staking-x](/contracts/prism-yasset-staking-x), and [collector](/contracts/prism-collector) contracts. |
 | **WhitelistRewardAsset** | owner | Add an asset to the list of supported reward assets. |
 | **RemoveRewardAsset** | owner | Remove a whitelisted reward asset. |   
-| **Updateconfig** | owner | Add an asset to the list of supported reward assets. |
+| **Updateconfig** | owner | Update contract configuation parameters. |
 
 ## QueryMsg:
 | Message | Description |
 | - | - |
-| **Config** | Retrieves contract configuration paraameters. |
+| **Config** | Retrieve contract configuration parameters. |
 | **RewardAssetWhitelist** | Query whitelisted reward assets. | 

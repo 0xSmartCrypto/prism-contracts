@@ -8,10 +8,11 @@ This contract provides functionality for converting delegator rewards from the l
 | **ProcessDelegatorRewards** | vault | Convert all native balances to luna via market swaps and then issue the LunaToPylunaHook operation. | 
 | **LunaToPylunaHook** | contract | Split our entire luna balance into pluna/yluna, and then issue the DistributeMintedPylunaHook operation. |
 | **DistributeMintedPylunaHook** | contract | Distribute our pLuna/yLuna balance to the  [reward-distribution][1] contracts. |  
+| **UpdateConfig** | owner | Update contract configuration parameters |
 
 ## QueryMsg:
 | Message | Description |
 | - | - |
-| **Config** | Retrieves contract configuration paraameters. |
+| **Config** | Retrieve contract configuration parameters. |
 
 [1]: /contracts/prism-reward-distribution
